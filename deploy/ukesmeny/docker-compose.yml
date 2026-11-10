@@ -1,0 +1,12 @@
+services:
+  ukesmeny:
+    build: .
+    container_name: ukesmeny
+    restart: unless-stopped
+    ports:
+      - "8099:8000"          # strona: http://IP_NUC:8099
+    env_file: .env
+    environment:
+      - TZ=Europe/Oslo
+    volumes:
+      - ./data:/data         # baza, preferencje, kopie, logowanie
