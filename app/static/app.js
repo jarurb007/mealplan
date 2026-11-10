@@ -34,7 +34,7 @@ async function api(path,method='POST',body,msg){
   finally{if(lastAct===me)lastAct=null}}
 // Akcja się nie udała, a ekran mógł już pokazywać coś, czego serwer nie zapisał (zaznaczone pole, wybrany dzień):
 // wracamy do stanu z serwera, a gdy serwer nie odpowiada, do ostatniego znanego.
-async function recover(){if(pending)return;if(!await refreshQuiet()&&S)render()}
+async function recover(){forceRender=true;if(pending)return;if(!await refreshQuiet()&&S)render()}
 // Stan z serwera. Jeśli w trakcie pobierania skończyła się jakaś akcja, odpowiedź może być sprzed niej: pobieramy jeszcze raz.
 async function fetchState(){for(;;){const seq=mutSeq;const r=await fetch('/api/state'+wq());if(!r.ok)throw new Error(r.statusText);
   const d=await r.json();if(seq===mutSeq)return d}}
@@ -141,15 +141,21 @@ function weekBar(){const bar=$('#weekbar');if(!S||!(S.weeks||[]).length){bar.sty
   if(key!==wbKey){wbKey=key;requestAnimationFrame(()=>{const c=bar.querySelector('.wk.cur');if(c)bar.scrollLeft=c.offsetLeft-bar.clientWidth/2+c.offsetWidth/2})}
   else bar.scrollLeft=prev}
 function pickWeek(id){if(S&&S.week&&id===S.week.id)return;goWeek(id===S.current_id?null:id)}
+let mainHtml=null,forceRender=false;
 function render(){
   const keep={};document.querySelectorAll('#main input[type=text],#main input:not([type])').forEach(e=>{if(e.id)keep[e.id]=e.value});
   const ae=document.activeElement,aid=ae&&ae.id,as=ae&&ae.selectionStart;
   $('#range').textContent=S.week?`${dm(S.week.start)} – ${dm(S.week.end)}${S.week.id!==S.current_id?' · '+(S.week.start>S.today?t('upcoming'):t('archBan')).replace(':',''):''}`:'';
   gearRender();weekBar();
   $('#n_shop').textContent=t('shop')+((S.shop_alert||0)>0?' ●':'');
-  $('#main').innerHTML=tab==='plan'?plan():tab==='shop'?shop():fridge();
-  for(const [id,v] of Object.entries(keep)){const e=document.getElementById(id);if(e&&!e.value)e.value=v}
-  if(aid){const e=document.getElementById(aid);if(e){e.focus();try{e.setSelectionRange(as,as)}catch(_){}}}
+  // Listę przebudowujemy tylko wtedy, gdy jej treść się zmieniła. Odświeżenie w tle, które nic nie zmienia, nie podmienia
+  // więc elementu pod palcem (dotknięcie trwające w chwili podmiany przepadało). forceRender wymusza przebudowę,
+  // gdy trzeba cofnąć coś, co zmieniło się tylko na ekranie (zaznaczone pole po nieudanym zapisie).
+  const html=tab==='plan'?plan():tab==='shop'?shop():fridge();
+  if(html!==mainHtml||forceRender){forceRender=false;mainHtml=html;
+    $('#main').innerHTML=html;
+    for(const [id,v] of Object.entries(keep)){const e=document.getElementById(id);if(e&&!e.value)e.value=v}
+    if(aid){const e=document.getElementById(aid);if(e){e.focus();try{e.setSelectionRange(as,as)}catch(_){}}}}
   if(tab==='plan'&&!scrolled){scrolled=true;const td=document.querySelector('.slot.today');if(td)setTimeout(()=>td.scrollIntoView({block:'start',behavior:'smooth'}),60)}
   if(tab==='fridge')wizSync();
   schedulePoll()}
@@ -390,7 +396,22 @@ async function commitP(){const r=await api('/api/pantry/commit','POST',{proposal
 async function addX(){const v=$('#xn').value;if(!v.trim())return;set(await api('/api/shop/extra','POST',W({name:v})))}
 async function delX(id){set(await api('/api/shop/extra/'+id,'DELETE'))}
 async function dismissG(k){set(await api('/api/shop/dismiss','POST',W({key:k})))}
-async function chk(k,c){await fetch('/api/shop/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(W({key:k,checked:c}))});load()}
+/* Odhaczanie zakupów: pole zmienia się od razu, zapis idzie kolejką w tle (jedno zapytanie na kliknięcie).
+   Gdy zapis się nie uda, pole wraca do stanu potwierdzonego przez serwer i pojawia się komunikat z nazwą produktu. */
+const chkWait=new Map();   // klucz produktu -> {base: stan potwierdzony przez serwer, n: ile zapisów tego produktu jest jeszcze w drodze}
+function shopItem(k){for(const g of Object.values((S&&S.shopping)||{})){const i=g.find(x=>x.key===k);if(i)return i}return null}
+async function chk(k,c){
+  const it=shopItem(k),w=chkWait.get(k)||{base:it?!!it.checked:!c,n:0};w.n++;chkWait.set(k,w);
+  if(it)it.checked=c;render();
+  try{const r=await send('/api/shop/check','POST',W({key:k,checked:c}));w.base=c;
+    if(r&&r.meals!==undefined)set(r);     // backend zwraca pełny stan, jak inne endpointy
+    else if(!pending)refreshQuiet()       // starszy backend: {"ok":true}, więc po ostatnim zapisie z serii odświeżamy stan po cichu
+  }catch(e){
+    const i=shopItem(k);if(i&&w.n===1)i.checked=w.base;   // cofamy dopiero, gdy żaden nowszy zapis tego produktu nie jest w drodze
+    forceRender=true;render();
+    toast(t('chkFail').replace('{x}',i?(i.extra_id?i.name:nm(i.name)):k));
+    if(!pending)refreshQuiet()
+  }finally{if(!--w.n)chkWait.delete(k)}}
 async function copyList(){const x=await (await fetch('/api/shop/text?lang='+lang+(viewWeek?'&week='+viewWeek:''))).text();
   try{await navigator.clipboard.writeText(x);toast(t('copied'))}catch(e){prompt('Copy:',x)}}
 /* --- drag meal card between day slots --- */
