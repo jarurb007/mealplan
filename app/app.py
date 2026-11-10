@@ -1576,9 +1576,9 @@ def dislike_meal(mid: int, req: DislikeReq):
         if c.execute("SELECT 1 FROM dislikes WHERE norm=?", (nn,)).fetchone():
             c.execute("DELETE FROM dislikes WHERE norm=?", (nn,))
         else:
+            # przepis o tej nazwie zostaje w książce: 👎 blokuje tylko propozycje modelu, a cofnięcie 👎
+            # nie miałoby jak przywrócić skasowanego przepisu. Z książki usuwa się wyłącznie świadomie (⭐ albo 🗑).
             c.execute("INSERT INTO dislikes(name, norm, reason) VALUES(?,?,?)", (name, nn, req.reason.strip()[:200]))
-            # ulubiony przepis o tej nazwie przestaje być ulubionym - nie może być naraz ⭐ i 👎
-            c.execute("DELETE FROM recipes WHERE lower(name)=?", (name.lower(),))
     return state(r["week_id"])
 
 
