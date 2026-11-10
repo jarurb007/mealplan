@@ -113,7 +113,7 @@ const ACT={
   goTab:d=>goTab(d.t),goWeek:d=>goWeek(numOrNull(d.id)),confirmPlan:()=>confirmPlan(),delWeek:byId(delWeek),confirmWeek:byId(confirmWeek),
   findAlts:d=>findAlts(+d.id,false),closeAlt:byId(closeAlt),toggleAIng:d=>toggleAIng(d.k),choose:d=>choose(+d.id,+d.i),
   togUses:d=>togUses(d.k),addX:()=>addX(),delX:byId(delX),dismissG:d=>dismissG(d.k),
-  addP:()=>addP(),delP:byId(delP),addC:()=>addC(),delC:byId(delC),delRec:byId(delRec),gen:()=>gen(),jbAdd:()=>jbAdd()},
+  copyList:()=>copyList(),addP:()=>addP(),delP:byId(delP),addC:()=>addC(),delC:byId(delC),delRec:byId(delRec),gen:()=>gen(),jbAdd:()=>jbAdd()},
  change:{
   done:(d,el)=>st(+d.id,el.checked?'done':'planned'),mv2:(d,el)=>mv2(+d.id,el.value),chk:(d,el)=>chk(d.k,el.checked),
   takeRec:(d,el)=>takeRec(+d.id,el.checked),setDay:(d,el)=>setDay(d.kind,+d.id,el.value),addImgs:(d,el)=>{addImgs(el.files);el.value=''}},
@@ -258,6 +258,7 @@ function shop(){
   const g=S.shopping||{};
   if(S.pending)h+=`<div class="warn">${t('shopWait')}</div>`;
   if(!Object.keys(g).length&&!S.pending)h+=`<div class="card">${t('empty')}</div>`;
+  if(Object.keys(g).length)h+=`<div class="row" style="margin:0 0 6px"><button class="b" data-click="copyList">📋 ${t('copy')}</button></div>`;
   for(const [a,items] of Object.entries(g)){h+=`<h3>${esc(t(a))}</h3>`;
     items.forEach(i=>h+=`<label class="${i.checked?'c':''}"><input type="checkbox" ${i.checked?'checked':''} data-change="chk" data-k="${esc(i.key)}"><div style="flex:1;min-width:0"><span>${i.topup?'<b>+ </b>':''}${esc(i.qty)} ${esc(i.unit)} ${esc(i.extra_id?i.name:nm(i.name))}</span>${headsTxt(i)}${i.topup?` <span class="tag" style="background:var(--badbg);color:var(--bad)">${t('buyMore')}</span>`:''}${usesHtml(i,i.key)}</div>${i.extra_id?`<a href="#" data-click="delX" data-id="${i.extra_id}" style="color:var(--del);text-decoration:none;padding:0 6px">✕</a>`:''}</label>`)}
   if((S.gone||[]).length)h+=`<h3 style="color:var(--orange)">${t('goneT')}</h3>`+S.gone.map(g=>`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span>✓ ${esc(g.label)}</span><button class="b" data-click="dismissG" data-k="${esc(g.key)}">${t('dismiss')}</button></div>`).join('');
