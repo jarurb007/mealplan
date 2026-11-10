@@ -1,0 +1,25 @@
+# dane i kopie baz (prywatne, nie do repozytorium)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.db.bak*
+app/backups/
+deploy/ukesmeny/data/
+tools/testdb/
+
+# stare ręczne kopie kodu
+*.bak
+*.bak[0-9]*
+
+# sekrety
+.env
+.env.*
+!.env.example
+
+# środowisko i artefakty
+.venv/
+__pycache__/
+*.pyc
+deploy/*.tar.gz
+.claude/worktrees/

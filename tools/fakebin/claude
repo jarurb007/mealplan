@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""Atrapa `claude -p` do testów: czeka FAKE_DELAY s i zwraca deterministyczny JSON.
+FAKE_LOG=plik -> dopisuje tam pełny prompt (do sprawdzania, co dostaje model)."""
+import json, os, sys, time
+p = sys.stdin.read()
+if os.environ.get("FAKE_LOG"):
+    with open(os.environ["FAKE_LOG"], "a") as f:
+        f.write(p + "\n=====\n")
+time.sleep(float(os.environ.get("FAKE_DELAY", "2")))
+ing = ["a", "b", "c", "d", "e", "f"]
+if '"options"' in p:
+    # pierwsza propozycja celowo = danie z listy 👎 (serwer ma ją odfiltrować)
+    out = {"options": [{"name": "Szkic 2", "description": "zablokowane?", "is_fish": False, "ingredients": ing}] +
+                      [{"name": f"Alt {i+1} testowy", "description": "opis testowy", "is_fish": False, "ingredients": ing} for i in range(3)]}
+elif '"meal": {' in p:
+    out = {"meal": {"name": "Test", "time_min": 30, "description": "d", "is_fish": False,
+                    "ingredients": [{"name": "gulrot", "qty": 2, "unit": "stk", "aisle": "Frukt og grønt", "from_pantry": False}],
+                    "steps": ["krok 1", "krok 2"]}}
+else:
+    # 9 propozycji (serwer prosi o 7+2), w tym "Szkic 2" - jeśli jest na liście 👎, ma wypaść
+    out = {"meals": [{"name": f"Szkic {i+1}", "description": "d", "is_fish": False, "ingredients": ing} for i in range(9)]}
+print(json.dumps(out))
