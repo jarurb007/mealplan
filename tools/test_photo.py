@@ -1,11 +1,10 @@
 """Własny przepis ze zdjęcia. Tryb 'real' - prawdziwy claude czyta wygenerowane zdjęcie; tryb 'ui' - atrapa modelu + interfejs."""
 import asyncio, base64, json, os, subprocess, sys, time, urllib.request
-sys.path.insert(0, "/home/jar/mealplan/tools")
 from test_two_users import Tab, api, ok
 import test_two_users as T
 
 MODE = sys.argv[1]
-IMG = "/home/jar/mealplan/tools/recipe_photo.png"
+IMG = os.path.join(T.HERE, "recipe_photo.png")
 
 
 def make_image():

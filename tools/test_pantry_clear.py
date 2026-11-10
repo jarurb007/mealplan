@@ -1,6 +1,5 @@
 """Lodówka ('Hva vil du bruke opp'): składnik znika z listy dopiero gdy jest użyty w zatwierdzonym planie."""
 import sqlite3, os, sys, time
-sys.path.insert(0, "/home/jar/mealplan/tools")
 from test_two_users import api, ok
 import test_two_users as T
 

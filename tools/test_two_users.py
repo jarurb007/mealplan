@@ -5,6 +5,10 @@ import websockets
 # port serwera i przesunięcie portów przeglądarki z otoczenia: kilka sesji może testować równolegle
 API = "http://127.0.0.1:" + os.getenv("UKES_PORT", "8088")
 CDP_OFFSET = int(os.getenv("UKES_CDP_OFFSET", "0"))
+# katalog tego pliku: testy działają tak samo w głównym katalogu i w worktree (bez ścieżek na sztywno)
+HERE = os.path.dirname(os.path.abspath(__file__))
+APP = os.path.join(os.path.dirname(HERE), "app")
+SHOTS = os.getenv("UKES_SHOTS", os.path.join(HERE, "shots"))
 bad = False
 
 

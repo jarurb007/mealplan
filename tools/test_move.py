@@ -1,10 +1,9 @@
 """Regresja: zamiana dni (lista + przeciąganie ⠿), usunięty dzień, oraz zgodność front<->backend."""
 import asyncio, json, re, sys, time
-sys.path.insert(0, "/home/jar/mealplan/tools")
 from test_two_users import Tab, api, ok
 import test_two_users as T
 
-APP = "/home/jar/mealplan/app"
+APP = T.APP
 
 
 def endpoints_match():
