@@ -51,6 +51,10 @@ def main():
         ok(r.returncode == 0, f"{n}: składnia JS poprawna {r.stderr.strip()[:200]}")
 
     js = read("app.js")
+    inline = sorted(set(re.findall(r"""[\s"'`](on[a-z]+)\s*=\s*\\?["']""", html + js)))
+    ok(not inline, f"brak handlerów on…= w HTML-u i szablonach (zdarzenia idą przez data-* i delegację) {inline}")
+    m = re.search(r"const esc=.*", js)
+    ok(bool(m) and "&#39;" in m.group(0), "esc() koduje apostrof")
 
     # słownik: jeden klucz w linii, pl/en mają wszystko, co no; każdy t('klucz') z app.js istnieje
     src = read("i18n.js")
