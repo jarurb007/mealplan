@@ -194,6 +194,8 @@ function mealCard(m){const v=mv(m),D=t('days');const isToday=m.date===S.today;
        ${sO?`<ol>${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>`:''}
        ${okUrl(m.source)?`<div class="desc"><a href="${esc(m.source)}" target="_blank" rel="noopener">${t('src')}</a></div>`:''}</div>`}
   }
+  // szkic bez przepisu w zatwierdzonym tygodniu, którego nikt nie pisze (np. przywrócony dzień, restart serwera w trakcie pisania)
+  const stuck=m.draft&&!m.filling&&!m.draft_error&&S.week.confirmed;
   const showAlt=m.open||(m.alts&&m.alts.length>=0&&m.alts!==null);
   return `<div class="meal ${m.status!=='planned'?'done':''}" data-id="${m.id}">
    <div class="mh"><input type="checkbox" class="chk" ${m.status==='done'?'checked':''} data-change="done" data-id="${m.id}" aria-label="done">
@@ -205,6 +207,7 @@ function mealCard(m){const v=mv(m),D=t('days');const isToday=m.date===S.today;
    <div class="row" style="flex-wrap:nowrap;justify-content:space-between">${chip}
     <button class="srv" data-click="toggleSrv" data-id="${m.id}">👥 ${m.servings_eff} ${t('por')} ✎</button></div>
    ${sOpen?`<div class="row"><span>👥 <button class="b" style="padding:5px 11px" data-click="srv" data-id="${m.id}" data-n="${m.servings_eff-1}">−</button> <b style="padding:0 6px">${m.servings_eff}</b> <button class="b" style="padding:5px 11px" data-click="srv" data-id="${m.id}" data-n="${m.servings_eff+1}">+</button>${m.servings?` <a href="#" data-click="srv" data-id="${m.id}" data-n="">↺</a>`:''}</span></div>`:''}
+   ${stuck?`<div class="row"><button class="b p" data-click="retryRec" data-id="${m.id}">✍ ${t('recWrite')}</button><span class="desc">${t('recNone')}</span></div>`:''}
    ${panel}
    <div class="row">
     ${m.status==='planned'?`<button class="b" data-click="openAlt" data-id="${m.id}">🔄 ${t('swapBtn')}</button>`:''}
@@ -229,7 +232,7 @@ function plan(){
   h+=`<div class="row" style="margin-top:18px"><button class="b" style="color:var(--bad);border-color:var(--badbd)" data-click="delWeek" data-id="${S.week.id}">${t('delWeek')}</button></div>`;
   return h}
 function altsHtml(m){const id=m.id;
-  if(m.loading||(m.alts&&m.alts.length===0))return `<div class="altwrap" id="aw${id}"><div class="finding"><div class="spinner"></div><div><div class="ft">🔄 ${t('bSwap')}</div><div class="fs">${t('findSub')}</div></div></div><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>`;
+  if(m.loading||(m.alts&&m.alts.length===0))return `<div class="altwrap" id="aw${id}"><div class="finding"><div class="spinner"></div><div><div class="ft">🔄 ${t('bSwap')}</div><div class="fs">${t('findSub')}</div></div></div><div class="row"><button class="b" data-click="closeAlt" data-id="${id}">${t('cancel')}</button></div><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>`;
   const ask=`<input id="hint${id}" placeholder="${esc(t('askPh'))}" style="margin-top:6px" value="${esc(m.hint||'')}" data-enter="findAlts" data-id="${id}">`;
   if(!m.alts)return `<div class="altwrap" id="aw${id}"><div class="alt"><b>${t('askQ')}</b>${ask}<div class="row"><button class="b p" data-click="findAlts" data-id="${id}">${t('find')}</button><button class="b" data-click="closeAlt" data-id="${id}">${t('cancel')}</button></div></div></div>`;
   return `<div class="altwrap ${m.justReady?'ready':''}" id="aw${id}">${m.justReady?`<div class="readyb">${t('readyT')} ↓</div>`:''}`+m.alts.map((o,i)=>{const k=id+':'+i,op=!!openAIng[k];return `<div class="alt"><b>${esc(o.name)}</b><div class="desc">${esc(o.description)}</div>
@@ -363,17 +366,26 @@ function toggleSrv(id){openSrv[id]=!openSrv[id];render()}
 async function setDef(n){if(n<1||n>12)return;set(await api('/api/settings','POST',{servings:n}))}
 async function srv(id,n){if(n!==null&&(n<1||n>12))return;set(await api(`/api/meal/${id}/servings`,'POST',{servings:n}))}
 function openAlt(id){const m=gm(id);m.open=true;m.alts=null;m.loading=false;m.closing=false;render()}
-async function closeAlt(id){const m=gm(id);if(!m)return;m.open=false;m.alts=null;m.hint='';m.closing=true;render();
-  try{await fetch(`/api/meal/${id}/alts/clear`,{method:'POST'})}catch(e){}
+const altReq={};let altSeq=0;   // numer trwającego szukania dla dania; „Anuluj” go kasuje, więc spóźniona odpowiedź nie otwiera propozycji z powrotem
+async function clearAlts(id){try{await fetch(`/api/meal/${id}/alts/clear`,{method:'POST'})}catch(e){}}
+async function closeAlt(id){const m=gm(id);if(!m)return;
+  const running=altReq[id]!=null;delete altReq[id];
+  m.open=false;m.alts=null;m.hint='';m.loading=false;m.closing=true;render();
+  await clearAlts(id);
+  if(running)return;   // serwer jeszcze szuka i na koniec zapisze propozycje: posprząta po nich findAlts, gdy wróci odpowiedź
   const mm=gm(id);if(mm)mm.closing=false}
 const gm=id=>S.meals.find(x=>x.id===id);
 async function findAlts(id,surprise){let m=gm(id);if(!m)return;
   const hint=(($('#hint'+id)||{}).value||'').trim();m.hint=hint;m.loading=true;m.justReady=false;m.alts=null;render();
   const lb=document.getElementById('aw'+id);if(lb)lb.scrollIntoView({behavior:'smooth',block:'nearest'});
-  let good=false,opts=null;
+  let good=false,opts=null;const tk=altReq[id]=++altSeq;
   try{const r=await fetch(`/api/meal/${id}/alternatives`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hint,count:3})});
     if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||r.statusText)}
-    opts=(await r.json()).options;good=true}catch(e){toast(t('err')+e.message)}
+    opts=(await r.json()).options;good=true}catch(e){if(altReq[id]===tk)toast(t('err')+e.message)}
+  if(altReq[id]!==tk){   // anulowane w trakcie szukania
+    if(altReq[id]==null){await clearAlts(id);const mm=gm(id);if(mm)mm.closing=false}
+    return}
+  delete altReq[id];
   m=gm(id);if(!m){return}
   m.loading=false;if(good){m.alts=opts;m.open=true;attention(id)}else{m.alts=null;render()}}
 async function choose(id,i){let m=gm(id);m.choosing=i;render();
