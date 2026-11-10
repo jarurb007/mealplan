@@ -192,13 +192,24 @@ Na co domownicy mają ochotę (uwzględnij w planie, ma pierwszeństwo): {cravin
 Zwróć WYŁĄCZNIE JSON: {{"meals": [ {schema()} ]}} z dokładnie {n} elementami w "meals"."""
 
 
-def plan_prompt(n: int, pantry: list, avoid: list, fixed: list, cravings: list) -> str:
+def memory_lines(recent: list | None, favs: list | None, fav_rule: str) -> str:
+    """Pamięć planera: co było jedzone w ostatnich tygodniach i co domownicy mają w książce przepisów."""
+    out = (f"Jedzone ostatnio (ostatnie {RECENT_WEEKS} tygodnie), NIE powtarzaj tych dań ani ich wersji pod inną nazwą, "
+           f"chyba że domownicy wprost o nie proszą: {recent or 'brak'}.")
+    if favs:
+        out += f"\nUlubione z książki przepisów (nie było ich w ostatnich {RECENT_WEEKS} tygodniach): {favs}. {fav_rule}"
+    return out
+
+
+def plan_prompt(n: int, pantry: list, avoid: list, fixed: list, cravings: list,
+                recent: list | None = None, favs: list | None = None) -> str:
     return f"""Jesteś planerem obiadów. Zasady użytkownika:
 {prefs()}
 
 Ułóż {n} różnych obiadów (kolacji) na kolejne dni. Średni wysiłek, 30-45 min.
 Te dania już są w tym tygodniu (NIE powtarzaj ich ani podobnych): {fixed or 'brak'}.
 Nie powtarzaj podobnych dań z rzędu. Ryba maks. 1 raz w tygodniu (już zaplanowane: {avoid or 'brak'}).
+{memory_lines(recent, favs, "Możesz wstawić najwyżej 1-2 z nich, jeśli pasują do reszty tygodnia; użyj wtedy dokładnie tej nazwy.")}
 Składniki z lodówki do wykorzystania (użyj, jeśli pasuje): {pantry or 'brak'}.
 {PANTRY_RULE}
 Na co domownicy mają ochotę (uwzględnij, ma pierwszeństwo): {cravings or 'brak'}.
@@ -207,12 +218,14 @@ W "uses_pantry" podaj składniki z lodówki użyte w tym daniu, dosłownie jak n
 Zwróć WYŁĄCZNIE JSON: {{"meals": [ {{"name": "...", "description": "1 zdanie", "is_fish": false, "ingredients": ["gulrot", "linser"], "uses_pantry": []}} ]}} z dokładnie {n} elementami."""
 
 
-def swap_prompt(current: dict, others: list, hint: str, pantry: list, count: int) -> str:
+def swap_prompt(current: dict, others: list, hint: str, pantry: list, count: int,
+                recent: list | None = None, favs: list | None = None) -> str:
     return f"""Zasady użytkownika:
 {prefs()}
 
 Obecne danie do zastąpienia: {current.get('name')}.
 Pozostałe dania w tygodniu (nie powtarzaj): {others}.
+{memory_lines(recent, favs, "Najwyżej 1 propozycja może być z tej listy, jeśli pasuje do życzenia; użyj wtedy dokładnie tej nazwy.")}
 Życzenie użytkownika: {hint or 'brak, zaproponuj coś innego'}.
 Składniki z lodówki: {pantry or 'brak'}.
 {PANTRY_RULE}
@@ -580,6 +593,42 @@ PREFETCH = os.getenv("PREFETCH", "0") == "1"
 ALT_LOCK = threading.Lock()
 POOL = ThreadPoolExecutor(max_workers=max(2, PARALLEL))
 PRE: dict = {}
+RECENT_WEEKS = 4  # tyle tygodni wstecz model widzi jako "jedzone ostatnio"
+RECENT_HARD = 2   # dań z tylu tygodni wstecz serwer nie przyjmuje w nowym planie (dopóki starcza innych propozycji)
+
+
+def recent_meals(c, start, weeks: int) -> list:
+    """Nazwy dań (bez usuniętych dni) z tygodni zaczynających się najwyżej `weeks` tygodni przed `start`, od najnowszych."""
+    start = date.fromisoformat(str(start))
+    out, seen = [], set()
+    for r in c.execute("""SELECT m.data FROM meals m JOIN weeks w ON w.id=m.week_id
+                          WHERE w.start>=? AND w.start<? AND COALESCE(m.status,'')!='removed'
+                          ORDER BY w.start DESC, m.day""", (str(start - timedelta(days=7 * weeks)), str(start))):
+        nm = str(json.loads(r["data"]).get("name") or "").strip()
+        if nm and norm_name(nm) not in seen:
+            seen.add(norm_name(nm))
+            out.append(nm)
+    return out
+
+
+def fav_names(c, skip: list) -> list:
+    """Nazwy z książki przepisów, które wolno podsunąć modelowi: bez jedzonych ostatnio i bez tych, które już są w tygodniu."""
+    no = {norm_name(x) for x in skip}
+    return [r["name"] for r in c.execute("SELECT name FROM recipes ORDER BY id DESC") if norm_name(r["name"]) not in no][:30]
+
+
+def pick_fresh(cands: list, recent: set, n: int, wishes: list) -> list:
+    """Z propozycji modelu zostaw n, omijając dania o nazwie identycznej z jedzonymi ostatnio. Gdy świeżych jest za mało,
+    dobiera powtórki, żeby zawsze wyszło n (kolejność od modelu zostaje). Danie, o które ktoś wprost prosi
+    (życzenie mieści się w nazwie albo nazwa w życzeniu), nie liczy się jako powtórka."""
+    wishes = [w for w in (norm_name(x) for x in wishes) if len(w) >= 3]
+
+    def fresh(o):
+        nn = norm_name(o["name"])
+        return nn not in recent or any(w in nn or nn in w for w in wishes)
+    keep = [i for i, o in enumerate(cands) if fresh(o)][:n]
+    keep += [i for i in range(len(cands)) if i not in keep][:n - len(keep)]
+    return [cands[i] for i in sorted(keep)]
 
 
 def gen_recipe(name, description, pantry):
@@ -623,12 +672,12 @@ def pantry_for(d, names):
     return [p for p in names if any(_same_item(canon(parse_pantry(p)[2]), n) for n in used)]
 
 
-def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoid, known):
+def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoid, known, recent=(), favs=(), hard=()):
     try:
         plan = []
         if n:
             job["stage"] = "plan"
-            res = llm.ask_json(plan_prompt(n + 2, pantry, avoid, known, cravings), big=True)
+            res = llm.ask_json(plan_prompt(n + 2, pantry, avoid, known, cravings, list(recent), list(favs)), big=True)
             bad, seen, plan = disliked_set() | {norm_name(k) for k in known}, set(), []
             for o in res.get("meals", []):
                 nm = str(o.get("name", "")).strip()
@@ -638,7 +687,7 @@ def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoi
                 plan.append({"name": nm, "description": o.get("description", ""),
                              "is_fish": bool(o.get("is_fish")), "ingredients": o.get("ingredients"),
                              "uses_pantry": o.get("uses_pantry")})
-            plan = plan[:n]
+            plan = pick_fresh(plan, set(hard), n, cravings)  # bez powtórek z ostatnich tygodni, ale zawsze n dań
             if len(plan) < n:
                 raise RuntimeError(f"model zwrócił {len(plan)} dań zamiast {n}")
         rows = ([(clean_meal({**m, "owned": True}), None) for _, m in carried]
@@ -761,8 +810,11 @@ def generate(req: GenReq):
             pantry = pantry_names(c)
             crav = [(r["id"], r["text"]) for r in c.execute(
                 "SELECT id, text FROM cravings WHERE used=0 AND recipe_id IS NULL")]
+            known = [m["name"] for _, m in carried] + [m["name"] for _, m, _ in fixed]
+            recent = recent_meals(c, start, RECENT_WEEKS)
+            hard = {norm_name(x) for x in recent_meals(c, start, RECENT_HARD)}
+            favs = fav_names(c, recent + known)
         avoid = ["ryba" for _, m in carried if m.get("is_fish")] + ["ryba" for _, m, _ in fixed if m.get("is_fish")]
-        known = [m["name"] for _, m in carried] + [m["name"] for _, m, _ in fixed]
         job = {"id": uuid.uuid4().hex[:8], "status": "running", "stage": "plan" if n else "recipes",
                "done": 0, "total": 7, "ready": [], "plan": [], "error": None, "week_id": None, "kind": "plan"}
         JOBS[job["id"]] = job
@@ -771,7 +823,7 @@ def generate(req: GenReq):
                 JOBS.pop(old, None)
         threading.Thread(target=run_generate, daemon=True,
                          args=(job, start, carried, fixed, [i for i, _ in crav], n, pantry,
-                               [t for _, t in crav], avoid, known)).start()
+                               [t for _, t in crav], avoid, known, recent, favs, hard)).start()
     return {"job": job["id"]}
 
 
@@ -888,14 +940,19 @@ def alternatives(mid: int, req: SwapReq):
         others = [json.loads(x["data"])["name"] for x in c.execute(
             "SELECT data FROM meals WHERE week_id=? AND id!=?", (r["week_id"], mid))]
         pantry = pantry_names(c, r["week_id"])
+        wk = c.execute("SELECT start FROM weeks WHERE id=?", (r["week_id"],)).fetchone()
+        recent = recent_meals(c, wk["start"], RECENT_WEEKS) if wk else []
+        hard = {norm_name(x) for x in recent_meals(c, wk["start"], RECENT_HARD)} if wk else set()
+        favs = fav_names(c, recent + others + [cur.get("name")])
         c.execute("UPDATE meals SET alts='[]' WHERE id=?", (mid,))  # znacznik 'szukam' - przetrwa wyjście ze strony
     try:
-        res = llm.ask_json(swap_prompt(cur, others, req.hint, pantry, req.count + 1))
+        res = llm.ask_json(swap_prompt(cur, others, req.hint, pantry, req.count + 1, recent, favs))
         bad = disliked_set() | {norm_name(cur.get("name"))}
         opts = [{"name": str(o.get("name", "")).strip(), "description": o.get("description", ""),
                  "is_fish": bool(o.get("is_fish")), "ingredients": _names(o.get("ingredients")),
                  "uses_pantry": _names(o.get("uses_pantry"))}
-                for o in res.get("options", []) if o.get("name") and norm_name(o.get("name")) not in bad][:req.count]
+                for o in res.get("options", []) if o.get("name") and norm_name(o.get("name")) not in bad]
+        opts = pick_fresh(opts, hard, req.count, [req.hint])
         if not opts:
             raise RuntimeError("brak propozycji")
     except Exception as e:
