@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s);
-let S=null,preview=null,tab='plan',viewWeek=null,scrolled=false,showArch=false,openSrv={},openRec={},openIng={},openStp={},openAIng={},pollT=null,
+let S=null,sheet=null,tab='plan',viewWeek=null,scrolled=false,showArch=false,openSrv={},openRec={},openIng={},openStp={},openAIng={},pollT=null,
   lang=localStorage.getItem('lang')||(/^(nb|no|nn)/i.test(navigator.language)?'no':/^pl/i.test(navigator.language)?'pl':(/^en/i.test(navigator.language)?'en':'no'));
 const t=k=>(L[lang][k]??L.no[k]??k);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -90,13 +90,7 @@ async function ensureTr(){
     if(r.ok){const d=await r.json();if(!pending&&seq===mutSeq&&!drag&&S.week&&S.week.id===d.week.id){adopt(d);render()}else if(S&&S.week&&S.week.id===d.week.id){S.trmap=d.trmap;S.meals.forEach(m=>{const n=d.meals.find(x=>x.id===m.id);if(n)m.tr=n.tr})}}}
   catch(e){}finally{tb.style.display='none'}}
 function setLang(l){lang=l;localStorage.setItem('lang',l);document.documentElement.lang=l;
-  document.querySelectorAll('.lang button').forEach(b=>b.classList.toggle('on',b.dataset.l===l));
-  $('#n_plan').textContent=t('tabP');$('#n_shop').textContent=t('shop');$('#n_fridge').textContent=t('tabW');
-  if(S){render();ensureTr()}}
-document.querySelectorAll('.lang button').forEach(b=>b.onclick=()=>setLang(b.dataset.l));
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>goTab(b.dataset.t));
-$('#gear').onclick=()=>{const g=$('#gearbox');g.style.display=g.style.display==='flex'?'none':'flex';gearRender()};
-$('#themeBtn').onclick=()=>toggleTheme();
+  if(S){render();ensureTr()}else{headRender();navRender()}}
 /* --- zdarzenia: jeden zestaw listenerów na dokumencie (delegacja). Element niesie nazwę akcji w data-click,
    data-change, data-enter albo data-input, a parametry w pozostałych data-*. Dane (nazwy dań, klucze produktów)
    są więc zawsze tekstem w atrybucie, nigdy fragmentem kodu JS sklejanym w atrybucie zdarzenia. */
@@ -105,7 +99,8 @@ const numOrNull=v=>v===''||v==null?null:+v;
 const ACT={
  click:{
   foldSec:d=>foldSec(d.k),toggleCust:()=>toggleCust(),sendCust:()=>sendCust(),custCancel:()=>{custOpen=false;render()},rmImg:d=>rmImg(+d.i),
-  setDef:d=>setDef(+d.n),undislike:byId(undislike),pickWeek:byId(pickWeek),
+  setDef:d=>setDef(+d.n),undislike:byId(undislike),weekStep:d=>weekStep(+d.d),
+  openMenu:()=>openSheet({kind:'menu'}),closeSheet:()=>closeSheet(),setLang:d=>setLang(d.l),setTheme:d=>setTheme(d.th),
   st:d=>st(+d.id,d.s),restoreSwap:d=>st(+d.id,'planned').then(()=>openAlt(+d.id)),
   retryRec:byId(retryRec),toggleIng:byId(toggleIng),toggleRec:byId(toggleRec),toggleSec:d=>toggleSec(d.w,+d.id),
   dislike:byId(dislike),fav:byId(fav),toggleSrv:byId(toggleSrv),srv:d=>srv(+d.id,numOrNull(d.n)),
@@ -128,26 +123,62 @@ document.addEventListener('click',e=>dispatch('click',e));
 document.addEventListener('change',e=>dispatch('change',e));
 document.addEventListener('input',e=>dispatch('input',e));
 document.addEventListener('keydown',e=>{if(e.key==='Enter')dispatch('enter',e)});
-function gearRender(){if(!S)return;const dl=S.dislikes||[];$('#gearbox').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;width:100%"><span>${t('pDef')}</span><span><button class="b" style="padding:3px 10px" data-click="setDef" data-n="${S.servings_default-1}">−</button> <b style="padding:0 8px">${S.servings_default}</b> <button class="b" style="padding:3px 10px" data-click="setDef" data-n="${S.servings_default+1}">+</button></span></div>
-  <div style="width:100%;margin-top:10px"><b>👎 ${t('dislikesT')}</b> <span style="opacity:.8">${t('dislikesSub')}</span>
-  ${dl.length?dl.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #ffffff33"><span>${esc(d.name)}${d.reason?` <i style="opacity:.75">– ${esc(d.reason)}</i>`:''}</span><button class="gear" aria-label="${esc(t('restore'))}" data-click="undislike" data-id="${d.id}">✕</button></div>`).join(''):`<div style="opacity:.75;padding:4px 0">${t('dislikesNone')}</div>`}</div>`}
-let wbKey='';
+/* --- arkusz od dołu: jeden kontener na menu, akcje dania, podgląd przepisu i potwierdzenia. sheet = {kind,…} albo null.
+   Otwarty arkusz dokłada wpis do historii, więc systemowe „wstecz” w telefonie zamyka arkusz, a nie aplikację. */
+function ovPush(){if(!(history.state&&history.state.ov))history.pushState({ov:1},'')}
+function ovPop(){if(history.state&&history.state.ov)history.back()}
+function openSheet(x){sheet=x;ovPush();render()}
+function closeSheet(){if(!sheet)return;sheet=null;render();ovPop()}
+window.addEventListener('popstate',()=>{if(sheet){sheet=null;if(S)render()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&sheet)closeSheet()});
+function sheetHead(title){return `<div class="phead"><h2>${title}</h2><button class="hb" data-click="closeSheet" aria-label="${esc(t('close'))}">✕</button></div>`}
+function sheetBody(){
+  if(sheet.kind==='menu')return menuHtml();
+  return ''}
+// Podmienia treść elementu tylko wtedy, gdy się zmieniła; wpisany tekst, kursor i przewinięcie zostają.
+function paint(el,html,force){
+  if(el._h===html&&!force)return;
+  const keep={};el.querySelectorAll('input[type=text],input:not([type])').forEach(e=>{if(e.id)keep[e.id]=e.value});
+  const ae=document.activeElement,aid=ae&&el.contains(ae)&&ae.id,as=aid&&ae.selectionStart,top=el.scrollTop;
+  el._h=html;el.innerHTML=html;
+  for(const [id,v] of Object.entries(keep)){const e=document.getElementById(id);if(e&&!e.value)e.value=v}
+  if(aid){const e=document.getElementById(aid);if(e){e.focus();try{e.setSelectionRange(as,as)}catch(_){}}}
+  el.scrollTop=top}
+function renderSheet(){const box=$('#sheet');
+  if(sheet&&!S)sheet=null;
+  box.classList.toggle('open',!!sheet);document.body.classList.toggle('modal',!!sheet);
+  paint($('#panel'),sheet?sheetBody():'')}
+function menuHtml(){const dl=S.dislikes||[],dark=document.documentElement.getAttribute('data-theme')==='dark';
+  return `${sheetHead(t('menuT'))}<div id="gearbox">
+  <div class="mrow"><span>${t('langT')}</span><span class="seg">${['no','pl','en'].map(l=>`<button class="${l===lang?'on':''}" data-click="setLang" data-l="${l}">${l.toUpperCase()}</button>`).join('')}</span></div>
+  <div class="mrow"><span>${t('themeT')}</span><span class="seg"><button class="${dark?'':'on'}" data-click="setTheme" data-th="light">☀️ ${t('thLight')}</button><button class="${dark?'on':''}" data-click="setTheme" data-th="dark">🌙 ${t('thDark')}</button></span></div>
+  <div class="mrow"><span>${t('pDef')}</span><span class="stp"><button class="b" data-click="setDef" data-n="${S.servings_default-1}" aria-label="−">−</button><b>${S.servings_default}</b><button class="b" data-click="setDef" data-n="${S.servings_default+1}" aria-label="+">+</button></span></div>
+  <div class="msec"><b>👎 ${t('dislikesT')}</b> <span class="desc">${t('dislikesSub')}</span>
+  ${dl.length?dl.map(d=>`<div class="mrow"><span>${esc(d.name)}${d.reason?` <i>– ${esc(d.reason)}</i>`:''}</span><button class="b" aria-label="${esc(t('restore'))}" data-click="undislike" data-id="${d.id}">✕</button></div>`).join(''):`<div class="desc">${t('dislikesNone')}</div>`}</div></div>`}
 function isoWk(ds){const x=new Date(ds+'T12:00:00');x.setDate(x.getDate()+2);const d=new Date(Date.UTC(x.getFullYear(),x.getMonth(),x.getDate()));const n=d.getUTCDay()||7;d.setUTCDate(d.getUTCDate()+4-n);const y=new Date(Date.UTC(d.getUTCFullYear(),0,1));return Math.ceil(((d-y)/864e5+1)/7)}
-function weekBar(){const bar=$('#weekbar');if(!S||!(S.weeks||[]).length){bar.style.display='none';return}
-  bar.style.display='flex';const prev=bar.scrollLeft;
-  const ws=[...S.weeks].sort((a,b)=>a.start<b.start?-1:1);
-  bar.innerHTML=ws.map(w=>`<button class="wk ${w.id===S.current_id?'cur':''} ${S.week&&w.id===S.week.id?'on':''}" data-id="${w.id}" data-click="pickWeek"><b>${t('wk')}${isoWk(w.start)}</b><span>${dm(w.start)}</span></button>`).join('');
-  const key=ws.map(w=>w.id).join(',')+'|'+S.current_id;
-  if(key!==wbKey){wbKey=key;requestAnimationFrame(()=>{const c=bar.querySelector('.wk.cur');if(c)bar.scrollLeft=c.offsetLeft-bar.clientWidth/2+c.offsetWidth/2})}
-  else bar.scrollLeft=prev}
-function pickWeek(id){if(S&&S.week&&id===S.week.id)return;goWeek(id===S.current_id?null:id)}
+/* --- nagłówek: jedna linia. Na zakładkach tygodnia i zakupów tydzień ze strzałkami ‹ ›, na pozostałych nazwa zakładki. */
+function weekNb(d){const ws=[...((S&&S.weeks)||[])].sort((a,b)=>a.start<b.start?-1:1),i=S&&S.week?ws.findIndex(w=>w.id===S.week.id):-1;return i<0?null:ws[i+d]||null}
+function weekStep(d){const w=weekNb(d);if(w)goWeek(w.id===S.current_id?null:w.id,true)}
+function headRender(){
+  const w=S&&S.week,wk=(tab==='plan'||tab==='shop')&&w;let h;
+  if(wk){const tag=w.id!==S.current_id?(w.start>S.today?t('upcoming'):t('archBan')).replace(':',''):'';
+    h=`<b>${t('week')} ${isoWk(w.start)} · ${dm(w.start)}–${dm(w.end)}</b>${tag?`<small>${tag}</small>`:''}`}
+  else h=`<b>${tab==='fridge'?t('tabW'):'Ukesmeny'}</b>`;
+  const r=$('#range');if(r._h!==h){r._h=h;r.innerHTML=h}
+  [['#wkPrev',-1,'prevWk'],['#wkNext',1,'nextWkA']].forEach(([q,d,k])=>{const b=$(q);b.hidden=!wk;b.disabled=!weekNb(d);b.setAttribute('aria-label',t(k))});
+  $('#gear').setAttribute('aria-label',t('menuA'))}
+/* --- dolny pasek zakładek; przy zakupach licznik pozycji, które zostały do kupienia */
+const TABS=[['plan','tabWk'],['shop','tabS'],['fridge','tabW']];
+function shopLeft(){let n=0;for(const g of Object.values((S&&S.shopping)||{}))for(const i of g)if(!i.checked)n++;return n}
+function navRender(){
+  TABS.forEach(([k,l])=>{const b=$('#n_'+k);b.querySelector('span').textContent=t(l);b.classList.toggle('on',tab===k);
+    if(tab===k)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+  const n=shopLeft(),c=$('#n_cnt');c.textContent=n||'';c.hidden=!n;c.classList.toggle('alert',!!(S&&S.shop_alert>0))}
 let mainHtml=null,forceRender=false;
 function render(){
   const keep={};document.querySelectorAll('#main input[type=text],#main input:not([type])').forEach(e=>{if(e.id)keep[e.id]=e.value});
   const ae=document.activeElement,aid=ae&&ae.id,as=ae&&ae.selectionStart;
-  $('#range').textContent=S.week?`${dm(S.week.start)} – ${dm(S.week.end)}${S.week.id!==S.current_id?' · '+(S.week.start>S.today?t('upcoming'):t('archBan')).replace(':',''):''}`:'';
-  gearRender();weekBar();
-  $('#n_shop').textContent=t('shop')+((S.shop_alert||0)>0?' ●':'');
+  headRender();navRender();renderSheet();
   // Listę przebudowujemy tylko wtedy, gdy jej treść się zmieniła. Odświeżenie w tle, które nic nie zmienia, nie podmienia
   // więc elementu pod palcem (dotknięcie trwające w chwili podmiany przepadało). forceRender wymusza przebudowę,
   // gdy trzeba cofnąć coś, co zmieniło się tylko na ekranie (zaznaczone pole po nieudanym zapisie).
@@ -280,7 +311,7 @@ function shouldOpenWizard(s){if(!s)return false;
   const future=(s.weeks||[]).some(w=>w.start>s.today);
   const days=Math.round((new Date(s.next_start+'T12:00:00')-new Date((s.today||s.next_start)+'T12:00:00'))/864e5);
   return !future&&days<=2}
-function goTab(k){tab=k;document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===k));scrolled=false;render();window.scrollTo(0,0)}
+function goTab(k){tab=k;scrolled=false;render();window.scrollTo(0,0)}
 function fridge(){
   const D=t('days');
   const lw=latestWeek();const draft=lw&&!lw.confirmed?wizDraft:null;
@@ -318,7 +349,7 @@ async function confirmWeek(wid){wizDraft=null;const r=await api('/api/week/confi
 async function takeRec(rid,on){const ex=S.cravings.find(c=>!c.used&&c.recipe_id===rid);
   if(on&&!ex)set(await api('/api/cravings','POST',{recipe_id:rid}));
   else if(!on&&ex)set(await api('/api/cravings/'+ex.id,'DELETE'))}
-async function goWeek(id){viewWeek=id;scrolled=false;tab='plan';await load()}
+async function goWeek(id,keepTab){viewWeek=id;scrolled=false;if(!keepTab)tab='plan';await load()}
 let jobTimer=null,jobId=null;
 let jbBuilt=false;
 function jobBar(j){const b=$('#jobbar');if(!j){b.style.display='none';jbBuilt=false;return}
@@ -451,9 +482,8 @@ document.addEventListener('pointerup',e=>endDrag(e,false));
 document.addEventListener('pointercancel',e=>endDrag(e,true));
 function applyTheme(){const s=localStorage.getItem('theme');const d=s?s==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
   if(d)document.documentElement.setAttribute('data-theme','dark');else document.documentElement.removeAttribute('data-theme');
-  const b=document.getElementById('themeBtn');if(b)b.textContent=d?'☀️':'🌙';
   const mt=document.querySelector('meta[name=theme-color]');if(mt)mt.content=d?'#1f4a31':'#2f7d4f'}
-function toggleTheme(){const d=document.documentElement.getAttribute('data-theme')==='dark';localStorage.setItem('theme',d?'light':'dark');applyTheme()}
+function setTheme(th){localStorage.setItem('theme',th);applyTheme();if(S)render()}
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{if(!localStorage.getItem('theme'))applyTheme()});
 applyTheme();
 setLang(lang);load();pollJob();

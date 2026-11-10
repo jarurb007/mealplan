@@ -1,19 +1,18 @@
 <!doctype html>
 <html lang="no"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ukesmeny</title>
 <meta name="theme-color" content="#2f7d4f">
 <script>(function(){var s=localStorage.getItem('theme');var d=s?s==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
 if(d)document.documentElement.setAttribute('data-theme','dark')})()</script>
 <!-- ?v= to skrót treści pliku. Po każdej zmianie css/js: python3 tools/test_static.py --fix (inaczej przeglądarki trzymają starą wersję) -->
-<link rel="stylesheet" href="/static/app.css?v=d64cb664">
+<link rel="stylesheet" href="/static/app.css?v=351c2d29">
 </head><body>
-<header><div class="top"><div><h1>🥘 Ukesmeny</h1><small id="range"></small></div>
-<div style="display:flex;gap:6px;align-items:center"><button class="gear" id="themeBtn" aria-label="theme">🌙</button><button class="gear" id="gear" aria-label="settings">⚙</button>
-<div class="lang"><button data-l="no">NO</button><button data-l="pl">PL</button><button data-l="en">EN</button></div></div></div>
-<div class="gearbox" id="gearbox"></div>
-<nav><button data-t="fridge" id="n_fridge"></button><button data-t="plan" class="on" id="n_plan"></button><button data-t="shop" id="n_shop"></button></nav><div id="weekbar"></div></header>
-<main id="main"></main><div id="toast"></div><div id="busybar"></div><div id="jobbar"></div><div id="trbar" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:19;background:var(--trbg);color:var(--trtx);padding:8px;text-align:center;font-size:13px"></div>
-<script src="/static/i18n.js?v=fd1f5304"></script>
-<script src="/static/app.js?v=a62ed1c6"></script>
+<header><button class="hb" id="wkPrev" data-click="weekStep" data-d="-1">‹</button><div id="range"></div><button class="hb" id="wkNext" data-click="weekStep" data-d="1">›</button><button class="hb" id="gear" data-click="openMenu">⋯</button></header>
+<main id="main"></main>
+<nav><button id="n_plan" data-click="goTab" data-t="plan" class="on"><i class="ni">🗓</i><span></span></button><button id="n_shop" data-click="goTab" data-t="shop"><i class="ni">🛒</i><span></span><i id="n_cnt" hidden></i></button><button id="n_fridge" data-click="goTab" data-t="fridge"><i class="ni">✨</i><span></span></button></nav>
+<div id="sheet"><div class="backdrop" data-click="closeSheet"></div><div class="panel" id="panel" role="dialog" aria-modal="true"></div></div>
+<div id="toast"></div><div id="busybar"></div><div id="jobbar"></div><div id="trbar"></div>
+<script src="/static/i18n.js?v=9512e5dc"></script>
+<script src="/static/app.js?v=6b063374"></script>
 </body></html>
