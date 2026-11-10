@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s);
-let S=null,preview=null,tab='plan',busy=false,busyMsg='',viewWeek=null,scrolled=false,showArch=false,openSrv={},openRec={},openIng={},openStp={},openAIng={},pollT=null,
+let S=null,preview=null,tab='plan',viewWeek=null,scrolled=false,showArch=false,openSrv={},openRec={},openIng={},openStp={},openAIng={},pollT=null,
   lang=localStorage.getItem('lang')||(/^(nb|no|nn)/i.test(navigator.language)?'no':/^pl/i.test(navigator.language)?'pl':(/^en/i.test(navigator.language)?'en':'no'));
 const t=k=>(L[lang][k]??L.no[k]??k);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -10,13 +10,34 @@ const dm=d=>d.slice(8)+'.'+d.slice(5,7);
 const wq=()=>viewWeek?`?week=${viewWeek}`:'';
 const W=o=>viewWeek?{...o,week:viewWeek}:o;
 function toast(x){const e=$('#toast');e.textContent=x;e.style.display='block';setTimeout(()=>e.style.display='none',3500)}
+/* --- zapis zmian: kolejka mutacji. Każda akcja czeka na poprzednią i żadna nie przepada (dawniej akcja kliknięta
+   w trakcie innej była po cichu pomijana). Ekran przygasa i pokazuje żółty pasek tylko przy długich operacjach
+   z modelem, czyli tych, które podają msg; krótkie akcje nie blokują interfejsu.
+   pending = akcje czekające lub w toku; mutSeq rośnie po każdej zakończonej (po tym poznajemy nieświeży stan z tła). */
+let queue=Promise.resolve(),pending=0,mutSeq=0,longOps=0,lastAct=null;
+function busyBar(msg){const bb=$('#busybar');document.body.classList.toggle('spin',!!msg);
+  if(msg)bb.textContent='⏳ '+msg;bb.style.display=msg?'block':'none'}
+function send(path,method='POST',body,msg){
+  pending++;if(msg){longOps++;busyBar(msg)}
+  const run=async()=>{
+    try{const r=await fetch(path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+      if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||r.statusText)}
+      return await r.json()}
+    finally{pending--;mutSeq++;if(msg&&!--longOps)busyBar('')}};
+  const p=queue.then(run);queue=p.catch(()=>{});return p}
 async function api(path,method='POST',body,msg){
-  if(busy)return;busy=true;document.body.classList.add('spin');
-  const bb=$('#busybar');bb.textContent='⏳ '+(msg||busyMsg||t('bWork'));bb.style.display='block';
-  try{const r=await fetch(path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
-    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||r.statusText)}
-    return await r.json()}
-  catch(e){toast(t('err')+e.message)}finally{busy=false;busyMsg='';document.body.classList.remove('spin');bb.style.display='none'}}
+  const me={key:method+' '+path+' '+JSON.stringify(body??null)};
+  if(lastAct&&lastAct.key===me.key)return;   // ta sama akcja kliknięta drugi raz, zanim pierwsza się wykonała: nie dublujemy
+  lastAct=me;
+  try{return await send(path,method,body,msg)}
+  catch(e){toast(t('err')+e.message);recover()}
+  finally{if(lastAct===me)lastAct=null}}
+// Akcja się nie udała, a ekran mógł już pokazywać coś, czego serwer nie zapisał (zaznaczone pole, wybrany dzień):
+// wracamy do stanu z serwera, a gdy serwer nie odpowiada, do ostatniego znanego.
+async function recover(){if(pending)return;if(!await refreshQuiet()&&S)render()}
+// Stan z serwera. Jeśli w trakcie pobierania skończyła się jakaś akcja, odpowiedź może być sprzed niej: pobieramy jeszcze raz.
+async function fetchState(){for(;;){const seq=mutSeq;const r=await fetch('/api/state'+wq());if(!r.ok)throw new Error(r.statusText);
+  const d=await r.json();if(seq===mutSeq)return d}}
 let custOpen=false,custText='',custImgs=[];
 let sec={};try{sec=JSON.parse(localStorage.getItem('sec')||'{}')}catch(e){}
 function foldSec(k){sec[k]=!sec[k];localStorage.setItem('sec',JSON.stringify(sec));render()}
@@ -42,13 +63,16 @@ async function sendCust(){if(!custText.trim()&&!custImgs.length){toast(t('custNe
   const r=await api('/api/recipes/custom','POST',{text:custText,images:custImgs},t('custReading'));
   if(r){custText='';custImgs=[];custOpen=false;set(r);toast('⭐ '+t('custSaved'))}}
 let initDone=false;
-async function load(){adopt(await (await fetch('/api/state'+wq())).json());if(!viewWeek)scrolled=false;
+async function load(){adopt(await fetchState());if(!viewWeek)scrolled=false;
   if(!initDone){initDone=true;if(shouldOpenWizard(S))goTab('fridge')}
   render();ensureTr()}
-function set(r){if(r&&r.meals!==undefined){
+function set(r){if(!r||r.meals===undefined)return;
+  mutSeq++;
+  if(pending)return;   // w kolejce czekają następne akcje: ekran odświeży odpowiedź ostatniej (stan pośredni tylko by mignął)
   const prevA=S?S.shop_alert||0:0;if((r.shop_alert||0)>prevA)setTimeout(()=>toast('🛒 '+t('shopChanged')),50);
-  if(viewWeek&&r.week&&r.week.id!==viewWeek){load();return}
-  adopt(r);render();ensureTr()}}
+  // odpowiedź dotyczy innego tygodnia niż oglądany (np. ktoś zdążył przejść dalej, zanim akcja wróciła): pokaż oglądany
+  if(r.week&&r.week.id!==(viewWeek||r.current_id)){load();return}
+  adopt(r);render();ensureTr()}
 const UIF=['open','hint','loading','choosing','justReady','closing'];
 function adopt(d){if(S&&S.meals&&d&&d.meals){const old=new Map(S.meals.map(m=>[m.id,m]));
   d.meals.forEach(n=>{const o=old.get(n.id);if(!o)return;UIF.forEach(k=>{if(o[k]!==undefined)n[k]=o[k]});
@@ -61,9 +85,9 @@ async function ensureTr(){
   if(!S.meals.some(m=>!(m.tr&&m.tr[lang])))return;
   const wk=S.week.id,lg=lang,key=lg+':'+S.meals.map(m=>m.id+'.'+m.steps.length+'.'+(m.draft?1:0)).join(',');
   if(trTried[key])return;trTried[key]=1;
-  const tb=$('#trbar');tb.textContent='🌐 '+t('bTr');tb.style.display='block';
+  const tb=$('#trbar');tb.textContent='🌐 '+t('bTr');tb.style.display='block';const seq=mutSeq;
   try{const r=await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lang:lg,week:wk})});
-    if(r.ok){const d=await r.json();if(!busy&&!drag&&S.week&&S.week.id===d.week.id){adopt(d);render()}else if(S&&S.week&&S.week.id===d.week.id){S.trmap=d.trmap;S.meals.forEach(m=>{const n=d.meals.find(x=>x.id===m.id);if(n)m.tr=n.tr})}}}
+    if(r.ok){const d=await r.json();if(!pending&&seq===mutSeq&&!drag&&S.week&&S.week.id===d.week.id){adopt(d);render()}else if(S&&S.week&&S.week.id===d.week.id){S.trmap=d.trmap;S.meals.forEach(m=>{const n=d.meals.find(x=>x.id===m.id);if(n)m.tr=n.tr})}}}
   catch(e){}finally{tb.style.display='none'}}
 function setLang(l){lang=l;localStorage.setItem('lang',l);document.documentElement.lang=l;
   document.querySelectorAll('.lang button').forEach(b=>b.classList.toggle('on',b.dataset.l===l));
@@ -130,8 +154,10 @@ function render(){
   if(tab==='fridge')wizSync();
   schedulePoll()}
 function needPoll(){return S&&S.meals&&S.meals.some(m=>m.filling||(m.alts&&m.alts.length===0&&!m.loading))}
-function schedulePoll(){if(pollT||!needPoll())return;pollT=setTimeout(async()=>{pollT=null;if(drag||busy){schedulePoll();return}
+function schedulePoll(){if(pollT||!needPoll())return;pollT=setTimeout(async()=>{pollT=null;if(drag||pending){schedulePoll();return}
+  const seq=mutSeq;
   try{const r=await fetch('/api/state'+wq());if(r.ok){const d=await r.json();
+    if(drag||pending||seq!==mutSeq){schedulePoll();return}   // w trakcie pobierania poszła akcja: ta odpowiedź może być sprzed niej
     const waiting=new Set(S.meals.filter(m=>m.alts&&m.alts.length===0).map(m=>m.id));
     adopt(d);const ready=d.meals.filter(m=>waiting.has(m.id)&&m.alts&&m.alts.length>0).map(m=>m.id);
     render();ready.forEach(attention);return}}catch(e){}render()},2500)}
@@ -295,7 +321,7 @@ function jobBar(j){const b=$('#jobbar');if(!j){b.style.display='none';jbBuilt=fa
   b.style.display='block'}
 async function jbAdd(){const i=$('#jb_i'),v=(i.value||'').trim();if(!v)return;i.value='';
   try{const r=await fetch('/api/shop/extra',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(W({name:v}))});
-    if(r.ok){const d=await r.json();if(S&&S.week&&d.week&&S.week.id===d.week.id){adopt(d);if(tab==='shop')render()}toast(t('addedT')+v)}}catch(e){}}
+    if(r.ok){const d=await r.json();mutSeq++;if(!pending&&S&&S.week&&d.week&&S.week.id===d.week.id){adopt(d);if(tab==='shop')render()}toast(t('addedT')+v)}}catch(e){}}
 async function pollJob(){
   try{const r=await fetch(jobId?`/api/job/${jobId}`:'/api/job');const d=await r.json();const j=jobId?d:d.job;
     if(!j){stopJob();return}
@@ -306,7 +332,7 @@ async function pollJob(){
     if(j.status==='error'){stopJob();toast(t('jErr')+(j.error||''));return}
   }catch(e){}
   jobTimer=setTimeout(pollJob,1500)}
-async function refreshQuiet(){try{const r=await fetch('/api/state'+wq());if(r.ok){adopt(await r.json());render();ensureTr()}}catch(e){}}
+async function refreshQuiet(){try{adopt(await fetchState());render();ensureTr();return true}catch(e){return false}}
 function stopJob(){clearTimeout(jobTimer);jobTimer=null;jobId=null;jbBuilt=false}
 async function gen(){const r=await fetch('/api/week/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
   if(!r.ok){const e=await r.json().catch(()=>({}));toast(t('err')+(e.detail||r.statusText));return}
@@ -399,10 +425,11 @@ applyTheme();
 setLang(lang);load();pollJob();
 /* --- współdzielenie: świeży stan co 15 s, gdy strona jest widoczna, i od razu po powrocie --- */
 function typing(){const a=document.activeElement;return !!(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT')&&a.type!=='checkbox')}
-function busyUI(){return busy||drag||typing()||(S&&S.meals&&S.meals.some(m=>m.loading||m.choosing!=null||m.closing))}
+function busyUI(){return pending||drag||typing()||(S&&S.meals&&S.meals.some(m=>m.loading||m.choosing!=null||m.closing))}
 async function sync(){if(document.hidden||busyUI()||!S)return;
+  const seq=mutSeq;
   try{const r=await fetch('/api/state'+wq());if(!r.ok)return;const d=await r.json();
-    if(busyUI())return;
+    if(busyUI()||seq!==mutSeq)return;
     if(viewWeek&&!(d.weeks||[]).some(w=>w.id===viewWeek)){viewWeek=null;return load()}
     const sig=x=>JSON.stringify([x.week&&x.week.id,x.week&&x.week.confirmed,(x.weeks||[]).map(w=>w.id+':'+w.confirmed),
       (x.meals||[]).map(m=>[m.id,m.day,m.status,m.name,m.steps.length,m.servings,m.disliked,m.filling,m.alts&&m.alts.length]),
