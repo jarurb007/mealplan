@@ -11,8 +11,9 @@ import time
 import uuid
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import asynccontextmanager
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -35,7 +36,18 @@ class WeekReq(BaseModel):
 
 
 MINE = "Moje produkty"
-app = FastAPI(title="Ukesmeny")
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    # kopia dzienna: od razu przy starcie, potem raz na dobę (wątek w tle)
+    stop = threading.Event()
+    threading.Thread(target=backup_loop, args=(stop,), daemon=True, name="kopia-dzienna").start()
+    yield
+    stop.set()
+
+
+app = FastAPI(title="Ukesmeny", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")  # css/js obok index.html
 
 
@@ -98,6 +110,36 @@ def backup_to(name: str) -> Path:
         src.close()
     os.replace(tmp, final)
     return final
+
+
+DAILY_KEEP = 14
+DAILY_RE = re.compile(r"data-daily-\d{4}-\d{2}-\d{2}\.db")
+
+
+def daily_backup(today: date | None = None) -> bool:
+    """Jedna kopia na dzień (data-daily-RRRR-MM-DD.db) i rotacja: zostaje DAILY_KEEP najnowszych.
+    Kopii 'before-delete' i 'before-migration' rotacja nie dotyka."""
+    name = f"data-daily-{today or date.today()}.db"
+    made = not (backup_dir() / name).exists()
+    if made:
+        backup_to(name)
+    daily = sorted(p for p in backup_dir().iterdir() if DAILY_RE.fullmatch(p.name))
+    for p in daily[:-DAILY_KEEP]:
+        p.unlink(missing_ok=True)
+    return made
+
+
+def backup_loop(stop: threading.Event):
+    while True:
+        try:
+            daily_backup()
+        except Exception as e:  # brak kopii nie może zatrzymać aplikacji
+            print(f"kopia dzienna nie powstała: {e}", flush=True)
+        now = datetime.now()
+        midnight = datetime.combine(now.date() + timedelta(days=1), datetime.min.time())
+        # budzimy się tuż po północy, ale nie rzadziej niż co godzinę (uśpiony komputer, zmiana czasu)
+        if stop.wait(min(3600, (midnight - now).total_seconds() + 60)):
+            return
 
 
 def migrate_checks():
