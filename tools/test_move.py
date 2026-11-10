@@ -5,11 +5,11 @@ from test_two_users import Tab, api, ok
 import test_two_users as T
 TOOLS = os.path.dirname(os.path.abspath(__file__))  # ścieżki od położenia pliku: działa też w worktree
 
-APP = os.path.join(os.path.dirname(TOOLS), "app")
+APP = T.APP
 
 
 def endpoints_match():
-    html = open(f"{APP}/static/index.html").read()
+    html = open(f"{APP}/static/app.js").read()
     py = open(f"{APP}/app.py").read()
     back = set()
     for m in re.finditer(r'@app\.(get|post|delete|put)\("([^"]+)"', py):

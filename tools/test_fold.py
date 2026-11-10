@@ -38,7 +38,7 @@ async def main():
     ok("3" in heads[2], "książka: licznik przepisów")
     h_folded = await A.ev("document.documentElement.scrollHeight")
     r = await A.cmd("Page.captureScreenshot", format="png")
-    open(f"{TOOLS}/shots/fold_closed.png", "wb").write(base64.b64decode(r["data"]))
+    open(f"{T.SHOTS}/fold_closed.png", "wb").write(base64.b64decode(r["data"]))
 
     # rozwiń lodówkę
     await A.ev("document.querySelectorAll('.sechead')[0].click()"); await asyncio.sleep(0.4)
@@ -83,7 +83,7 @@ async def main():
         await A.ev("localStorage.setItem('sec',JSON.stringify({pantry:1}));location.reload()"); await asyncio.sleep(2.5)
         await A.ev("goTab('fridge')"); await asyncio.sleep(0.6)
         r = await A.cmd("Page.captureScreenshot", format="png")
-        open(f"{TOOLS}/shots/fold_dark_open.png", "wb").write(base64.b64decode(r["data"]))
+        open(f"{T.SHOTS}/fold_dark_open.png", "wb").write(base64.b64decode(r["data"]))
     ok(not A.errors, f"brak błędów JS {A.errors}")
     await A.close()
     print("\nWYNIK:", "BŁĘDY" if T.bad else "OK")
