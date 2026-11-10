@@ -945,22 +945,30 @@ def alternatives(mid: int, req: SwapReq):
         hard = {norm_name(x) for x in recent_meals(c, wk["start"], RECENT_HARD)} if wk else set()
         favs = fav_names(c, recent + others + [cur.get("name")])
         c.execute("UPDATE meals SET alts='[]' WHERE id=?", (mid,))  # znacznik 'szukam' - przetrwa wyjście ze strony
+    saved = False
     try:
-        res = llm.ask_json(swap_prompt(cur, others, req.hint, pantry, req.count + 1, recent, favs))
-        bad = disliked_set() | {norm_name(cur.get("name"))}
-        opts = [{"name": str(o.get("name", "")).strip(), "description": o.get("description", ""),
-                 "is_fish": bool(o.get("is_fish")), "ingredients": _names(o.get("ingredients")),
-                 "uses_pantry": _names(o.get("uses_pantry"))}
-                for o in res.get("options", []) if o.get("name") and norm_name(o.get("name")) not in bad]
-        opts = pick_fresh(opts, hard, req.count, [req.hint])
-        if not opts:
-            raise RuntimeError("brak propozycji")
-    except Exception as e:
+        try:
+            res = llm.ask_json(swap_prompt(cur, others, req.hint, pantry, req.count + 1, recent, favs))
+            bad = disliked_set() | {norm_name(cur.get("name"))}
+            opts = [{"name": str(o.get("name", "")).strip(), "description": o.get("description", ""),
+                     "is_fish": bool(o.get("is_fish")), "ingredients": _names(o.get("ingredients")),
+                     "uses_pantry": _names(o.get("uses_pantry"))}
+                    for o in res.get("options", []) if o.get("name") and norm_name(o.get("name")) not in bad]
+            opts = pick_fresh(opts, hard, req.count, [req.hint])
+            if not opts:
+                raise RuntimeError("brak propozycji")
+        except Exception as e:
+            raise HTTPException(502, f"nie udało się znaleźć propozycji: {str(e)[:120]}")
         with db() as c:
-            c.execute("UPDATE meals SET alts=NULL WHERE id=? AND alts='[]'", (mid,))
-        raise HTTPException(502, f"nie udało się znaleźć propozycji: {str(e)[:120]}")
-    with db() as c:
-        c.execute("UPDATE meals SET alts=? WHERE id=?", (json.dumps(opts, ensure_ascii=False), mid))
+            c.execute("UPDATE meals SET alts=? WHERE id=?", (json.dumps(opts, ensure_ascii=False), mid))
+        saved = True
+    finally:
+        if not saved:  # znacznik nie może zostać po zapytaniu przerwanym w dowolny sposób (model, baza, zatrzymanie)
+            try:
+                with db() as c:
+                    c.execute("UPDATE meals SET alts=NULL WHERE id=? AND alts='[]'", (mid,))
+            except sqlite3.Error:
+                pass
     return {"options": opts}
 
 
