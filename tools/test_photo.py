@@ -5,7 +5,7 @@ import test_two_users as T
 TOOLS = os.path.dirname(os.path.abspath(__file__))  # ścieżki od położenia pliku: działa też w worktree
 
 MODE = sys.argv[1]
-IMG = f"{TOOLS}/recipe_photo.png"
+IMG = os.path.join(T.HERE, "recipe_photo.png")
 
 
 def make_image():

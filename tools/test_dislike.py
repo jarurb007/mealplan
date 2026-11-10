@@ -121,7 +121,7 @@ async def main():
         await asyncio.sleep(0.3)
         import base64
         r = await A.cmd("Page.captureScreenshot", format="png")
-        open(f"{TOOLS}/shots/dislike_{th}.png", "wb").write(base64.b64decode(r["data"]))
+        open(f"{T.SHOTS}/dislike_{th}.png", "wb").write(base64.b64decode(r["data"]))
     ok(not A.errors, f"brak błędów JS {A.errors}")
     await A.close()
     print("\nWYNIK:", "BŁĘDY" if T.bad else "OK")
