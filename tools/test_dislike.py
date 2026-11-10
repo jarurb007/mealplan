@@ -1,6 +1,5 @@
 """Test 👎: zapis, flaga, lista w ⚙, filtr w zamiennikach i w planie, prompt bez wykluczania kategorii, cofanie, ⭐<->👎, UI."""
 import asyncio, json, os, sys, time
-sys.path.insert(0, "/home/jar/mealplan/tools")
 from test_two_users import Tab, api, ok
 import test_two_users as T
 
@@ -117,7 +116,7 @@ async def main():
         await asyncio.sleep(0.3)
         import base64
         r = await A.cmd("Page.captureScreenshot", format="png")
-        open(f"/home/jar/mealplan/tools/shots/dislike_{th}.png", "wb").write(base64.b64decode(r["data"]))
+        open(f"{T.SHOTS}/dislike_{th}.png", "wb").write(base64.b64decode(r["data"]))
     ok(not A.errors, f"brak błędów JS {A.errors}")
     await A.close()
     print("\nWYNIK:", "BŁĘDY" if T.bad else "OK")
