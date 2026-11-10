@@ -15,6 +15,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import httpx
@@ -33,6 +34,7 @@ class WeekReq(BaseModel):
 
 MINE = "Moje produkty"
 app = FastAPI(title="Ukesmeny")
+app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")  # css/js obok index.html
 
 
 # ---------- DB ----------
