@@ -86,7 +86,7 @@ async def ui():
     ok(await A.ev("custImgs.length===0 && custOpen===false"), "formularz wyczyszczony i zamknięty")
     await A.ev("goTab('fridge')"); await asyncio.sleep(0.6)
     ok("Test" in await A.ev("document.getElementById('main').innerText"), "przepis widoczny na liście w książce")
-    prompt = open("/tmp/ukes-fake-prompts.log").read()
+    prompt = open(os.getenv("FAKE_LOG", "/tmp/ukes-fake-prompts.log")).read()
     ok("photo1.jpg" in prompt and "podawać z dżemem" in prompt and "Read" not in prompt.split("TEKST")[0][:0], "model dostał ścieżkę zdjęcia i tekst użytkownika")
     ok(not A.errors, f"brak błędów JS {A.errors}")
     await A.close()

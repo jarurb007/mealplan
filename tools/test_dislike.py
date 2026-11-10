@@ -4,7 +4,7 @@ sys.path.insert(0, "/home/jar/mealplan/tools")
 from test_two_users import Tab, api, ok
 import test_two_users as T
 
-LOG = "/tmp/ukes-fake-prompts.log"
+LOG = os.getenv("FAKE_LOG", "/tmp/ukes-fake-prompts.log")
 
 
 def wait_job(jid):

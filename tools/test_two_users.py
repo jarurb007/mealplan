@@ -2,7 +2,9 @@
 import asyncio, json, os, subprocess, time, urllib.request, urllib.error
 import websockets
 
-API = "http://127.0.0.1:8088"
+# port serwera i przesunięcie portów przeglądarki z otoczenia: kilka sesji może testować równolegle
+API = "http://127.0.0.1:" + os.getenv("UKES_PORT", "8088")
+CDP_OFFSET = int(os.getenv("UKES_CDP_OFFSET", "0"))
 bad = False
 
 
@@ -24,11 +26,12 @@ def api(path, method="POST", body=None):
 
 class Tab:
     def __init__(self, port, name):
+        port += CDP_OFFSET
         self.port, self.name, self.i, self.errors = port, name, 0, []
         self.dialogs, self.accept = [], True
         self.proc = subprocess.Popen(["chromium", "--headless=new", "--no-sandbox", "--disable-gpu",
                                       f"--remote-debugging-port={port}", "--window-size=390,844",
-                                      f"--user-data-dir=/tmp/ukes-two-{name}", "about:blank"],
+                                      f"--user-data-dir=/tmp/ukes-two-{name}-{port}", "about:blank"],
                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     async def open(self):

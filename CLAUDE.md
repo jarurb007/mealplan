@@ -27,4 +27,7 @@ DB_PATH=/tmp/moja-kopia.db BACKUP_DIR=/tmp/moje-kopie \
 - Testy w `tools/test_*.py` sterują Chromium przez CDP. Uruchamiaj je przez
   `/home/jar/.hermes/hermes-agent/venv/bin/python3` (ma `websockets`). Skrypty `tools/run_*.sh` mają wpisane na
   sztywno ścieżki głównego katalogu i port 8088. W worktree uruchamiaj serwer ręcznie jak wyżej, na własnym porcie.
+- Testy czytają z otoczenia: `UKES_PORT` (port serwera, domyślnie 8088), `UKES_CDP_OFFSET` (przesunięcie portów
+  debugowania Chromium, żeby równoległe sesje się nie zderzały) i `FAKE_LOG` (plik, do którego atrapa zapisuje prompty;
+  ta sama wartość musi być ustawiona dla serwera i dla testu).
 - Port 8099 jest zarezerwowany dla wersji podglądowej. Nie zajmuj go w testach.
