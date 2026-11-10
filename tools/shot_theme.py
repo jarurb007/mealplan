@@ -1,9 +1,9 @@
 """Zrzuty: jasny i ciemny motyw, 3 zakładki + usunięty dzień. Kopia bazy NUC, atrapa modelu."""
 import asyncio, base64, json, sys, time
-sys.path.insert(0, "/home/jar/mealplan/tools")
 from test_two_users import Tab, api
+TOOLS = os.path.dirname(os.path.abspath(__file__))  # ścieżki od położenia pliku: działa też w worktree
 
-OUT = "/home/jar/mealplan/tools/shots"
+OUT = f"{TOOLS}/shots"
 
 
 async def main():

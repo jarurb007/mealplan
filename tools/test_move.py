@@ -1,10 +1,11 @@
 """Regresja: zamiana dni (lista + przeciąganie ⠿), usunięty dzień, oraz zgodność front<->backend."""
 import asyncio, json, re, sys, time
-sys.path.insert(0, "/home/jar/mealplan/tools")
+import os
 from test_two_users import Tab, api, ok
 import test_two_users as T
+TOOLS = os.path.dirname(os.path.abspath(__file__))  # ścieżki od położenia pliku: działa też w worktree
 
-APP = "/home/jar/mealplan/app"
+APP = os.path.join(os.path.dirname(TOOLS), "app")
 
 
 def endpoints_match():

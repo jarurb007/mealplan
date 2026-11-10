@@ -1,8 +1,9 @@
 """Zwijane karty w Planlegg: domyślnie zwinięte, licznik + podgląd, rozwijanie, zapamiętanie, wysokość strony."""
 import asyncio, base64, json, sys, time
-sys.path.insert(0, "/home/jar/mealplan/tools")
+import os
 from test_two_users import Tab, api, ok
 import test_two_users as T
+TOOLS = os.path.dirname(os.path.abspath(__file__))  # ścieżki od położenia pliku: działa też w worktree
 
 
 async def main():
@@ -37,7 +38,7 @@ async def main():
     ok("3" in heads[2], "książka: licznik przepisów")
     h_folded = await A.ev("document.documentElement.scrollHeight")
     r = await A.cmd("Page.captureScreenshot", format="png")
-    open("/home/jar/mealplan/tools/shots/fold_closed.png", "wb").write(base64.b64decode(r["data"]))
+    open(f"{TOOLS}/shots/fold_closed.png", "wb").write(base64.b64decode(r["data"]))
 
     # rozwiń lodówkę
     await A.ev("document.querySelectorAll('.sechead')[0].click()"); await asyncio.sleep(0.4)
@@ -82,7 +83,7 @@ async def main():
         await A.ev("localStorage.setItem('sec',JSON.stringify({pantry:1}));location.reload()"); await asyncio.sleep(2.5)
         await A.ev("goTab('fridge')"); await asyncio.sleep(0.6)
         r = await A.cmd("Page.captureScreenshot", format="png")
-        open("/home/jar/mealplan/tools/shots/fold_dark_open.png", "wb").write(base64.b64decode(r["data"]))
+        open(f"{TOOLS}/shots/fold_dark_open.png", "wb").write(base64.b64decode(r["data"]))
     ok(not A.errors, f"brak błędów JS {A.errors}")
     await A.close()
     print("\nWYNIK:", "BŁĘDY" if T.bad else "OK")
