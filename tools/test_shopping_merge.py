@@ -1,5 +1,5 @@
 """Lista zakupów: jeden wiersz na produkt (bulion, ryż, czosnek, cebula...), migracja starych odhaczeń, dokup,
-'kupione, ale już nie w planie', tłumaczenia, lodówka, /api/shop/check z pełnym stanem.
+'kupione, ale już nie w planie', tłumaczenia, lodówka, /api/shop/check z pełnym stanem, gzip.
 
 Bez serwera i bez przeglądarki: moduł app jest importowany na tymczasowej bazie. Uruchamianie Pythonem aplikacji:
     /home/jar/mealplan/app/.venv/bin/python tools/test_shopping_merge.py
@@ -262,6 +262,11 @@ def api_part(wid, mids):
            f"lodówka: 'grønnsakskraft 1 l' zmniejsza wiersz bulionu ({text(rows(st)['grønnsaksbuljong'])}; mam: {have})")
         ok(have.get("ris") == "255 g ris" and text(rows(st)["ris"]) == "155 g ris", f"lodówka: '3 dl ris' pokrywa 255 g ryżu ({have.get('ris')})")
         ok(len(st["have"]) == len(have), "sekcja 'mam w domu': też jeden wiersz na produkt")
+
+        # ---- kompresja
+        res = cl.get(f"/api/state?week={wid}", headers={"Accept-Encoding": "gzip"})
+        ok(res.headers.get("content-encoding") == "gzip" and "shopping" in res.json(), "stan wysyłany z gzip")
+        ok(cl.get("/", headers={"Accept-Encoding": "gzip"}).headers.get("content-encoding") == "gzip", "strona główna wysyłana z gzip")
     app.shop_agg = agg
     ok("'grønnsaksbuljong'" in app.schema() and "buljongterning" in app.schema() and "@@P@@" not in app.schema(),
        "MEAL_SCHEMA: reguła jednej nazwy i jednostki dla bulionu")

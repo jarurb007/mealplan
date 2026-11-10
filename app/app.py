@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -48,6 +49,7 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Ukesmeny", lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # stan to kilkadziesiąt kB JSON-u, przez Wi-Fi w kuchni robi różnicę
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")  # css/js obok index.html
 
 
