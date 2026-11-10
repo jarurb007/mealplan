@@ -8,7 +8,7 @@ import shutil
 import socket
 import threading
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import heapq
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
@@ -68,7 +68,7 @@ def init_db():
                        ("meals", "liked INTEGER DEFAULT 0"), ("cravings", "recipe_id INTEGER"),
                        ("checks", "label TEXT"), ("checks", "qty REAL"),
                        ("cravings", "day INTEGER"), ("pantry", "day INTEGER"), ("pantry", "week_id INTEGER"),
-                       ("weeks", "confirmed INTEGER DEFAULT 1")):
+                       ("weeks", "confirmed INTEGER DEFAULT 1"), ("meals", "pre TEXT")):
         try:
             with db() as c:
                 c.execute(f"ALTER TABLE {table} ADD COLUMN {col}")
@@ -589,10 +589,8 @@ class GenReq(BaseModel):
 JOBS: dict = {}
 JOB_LOCK = threading.Lock()
 PARALLEL = int(os.getenv("LLM_PARALLEL", "4"))
-PREFETCH = os.getenv("PREFETCH", "0") == "1"
-ALT_LOCK = threading.Lock()
-POOL = ThreadPoolExecutor(max_workers=max(2, PARALLEL))
-PRE: dict = {}
+PREFETCH = os.getenv("PREFETCH", "1") != "0"  # przepisy piszą się na zapas, gdy tylko powstanie szkic tygodnia
+RECIPE_LOCK = threading.Lock()  # sprawdzenie i zapis przepisu/zapasu dania w jednym kroku (kolejka, zatwierdzenie, zamiana)
 RECENT_WEEKS = 4  # tyle tygodni wstecz model widzi jako "jedzone ostatnio"
 RECENT_HARD = 2   # dań z tylu tygodni wstecz serwer nie przyjmuje w nowym planie (dopóki starcza innych propozycji)
 
@@ -719,6 +717,11 @@ def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoi
                     if f"x{r['id']}" not in done and r["name"].lower() not in have:
                         c.execute("INSERT INTO extras(week_id, name) VALUES(?,?)", (wid, r["name"]))
                         have.add(r["name"].lower())
+            drafts = [r["id"] for r in c.execute("SELECT id, data FROM meals WHERE week_id=? ORDER BY day", (wid,))
+                      if json.loads(r["data"]).get("draft")]
+        if PREFETCH:
+            for mid in drafts:  # przepisy na zapas: zanim ktoś kliknie „Zatwierdź”, większość będzie gotowa
+                RECIPES.submit(mid, SPARE)
         job["week_id"] = wid
         job["done"] = job["total"]
         job["status"] = "done"
@@ -727,63 +730,241 @@ def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoi
         job["status"] = "error"
 
 
-def fill_meal(mid):
-    """Dopisz pełny przepis do dania-szkicu. Zwraca nazwę albo None."""
+def known_recipe(c, d, pantry, mid=None):
+    """Przepis, który już mamy na danie o tej samej nazwie: z książki przepisów albo z wcześniejszego dania.
+    Zwraca (dane, tr) albo None. Dzięki temu znane danie nie kosztuje pytania do modelu."""
+    nn = norm_name(d.get("name"))
+    if not nn:
+        return None
+
+    def sources():
+        for r in c.execute("SELECT name, data, tr FROM recipes ORDER BY id DESC"):
+            if norm_name(r["name"]) == nn:
+                yield json.loads(r["data"]), r["tr"]
+        for r in c.execute("SELECT data, tr FROM meals WHERE id!=? ORDER BY id DESC", (mid or 0,)):
+            x = json.loads(r["data"])
+            if not x.get("draft") and norm_name(x.get("name")) == nn:
+                yield x, r["tr"]
+    src = next(((x, tr) for x, tr in sources() if x.get("ingredients") and x.get("steps")), None)
+    if not src:
+        return None
+    x, tr = src
+    # składniki z lodówki przeznaczone na to danie muszą być w przepisie; inaczej model pisze wersję, która je zużyje
+    stock = [canon(parse_pantry(p)[2]) for p in pantry]
+    ings = [canon(i.get("name", "")) for i in x["ingredients"]]
+    if any(not any(_same_item(s, n) for n in ings) for s in stock):
+        return None
+    m = {k: v for k, v in x.items() if k not in ("draft", "draft_error", "ingredient_names", "uses_pantry")}
+    m.update({"name": d["name"], "owned": False, "is_fish": bool(d.get("is_fish")) or bool(x.get("is_fish")),
+              # tłumaczenie (tr) opisuje stary opis, więc zostają razem
+              "description": (x.get("description") if tr else d.get("description")) or x.get("description") or d.get("description", ""),
+              # ilości zostają na tyle porcji, na ile przepis był pisany (stare przepisy bez tej informacji: 3, jak w scale_factor)
+              "servings_base": x.get("servings_base") or 3,
+              "ingredients": [{**i, "from_pantry": any(_same_item(s, n) for s in stock)} for i, n in zip(x["ingredients"], ings)]})
+    return m, tr
+
+
+def ready_pre(raw, name, pantry):
+    """Przepis napisany na zapas, o ile nadal pasuje do dania (ta sama nazwa i te same składniki z lodówki)."""
     try:
-        with db() as c:
-            r = c.execute("SELECT * FROM meals WHERE id=?", (mid,)).fetchone()
-            if not r:
-                return None
-            d = json.loads(r["data"])
-            if not d.get("draft"):
-                return None
-            name, desc = d["name"], d.get("description", "")
-            pantry = pantry_for(d, pantry_names(c, r["week_id"]))
+        p = json.loads(raw) if raw else None
+    except ValueError:
+        return None
+    return p if p and p.get("name") == name and p.get("pantry") == pantry and p.get("meal") else None
+
+
+def put_recipe(c, mid, m, tr):
+    c.execute("UPDATE meals SET data=?, tr=?, pre=NULL WHERE id=?", (json.dumps(m, ensure_ascii=False), tr, mid))
+
+
+def week_confirmed(c, wid) -> bool:
+    wk = c.execute("SELECT confirmed FROM weeks WHERE id=?", (wid,)).fetchone()
+    return bool(wk and wk["confirmed"])
+
+
+def fill_meal(mid):
+    """Jedno podejście do przepisu dla dania-szkicu. W zatwierdzonym tygodniu przepis trafia do dania. W szkicu tygodnia
+    czeka w kolumnie pre: danie zostaje szkicem, a interfejs niczego nie widzi. Zwraca nazwę, jeśli danie ma pełny przepis."""
+    with RECIPE_LOCK, db() as c:
+        r = c.execute("SELECT * FROM meals WHERE id=?", (mid,)).fetchone()
+        if not r:
+            return None
+        d = json.loads(r["data"])
+        if not d.get("draft"):
+            return d.get("name")
+        name, desc = d["name"], d.get("description", "")
+        pantry = pantry_for(d, pantry_names(c, r["week_id"]))
+        pre = ready_pre(r["pre"], name, pantry)
+        if pre:
+            if not week_confirmed(c, r["week_id"]):
+                return None  # zapas już jest, czeka na zatwierdzenie
+            put_recipe(c, mid, pre["meal"], pre.get("tr"))
+            attach_used(c, r["week_id"])
+            return name
+        known = known_recipe(c, d, pantry, mid)
+    if known:
+        m, tr = known
+    else:
         try:
-            m = gen_recipe(name, desc, pantry)
+            m, tr = gen_recipe(name, desc, pantry), None
             m["name"], m["description"] = name, desc or m.get("description", "")
             m["is_fish"] = bool(d.get("is_fish")) or m.get("is_fish", False)
-            ok = True
         except Exception:
-            ok = False
-        with db() as c:
-            r = c.execute("SELECT data, week_id FROM meals WHERE id=?", (mid,)).fetchone()
-            cur = json.loads(r["data"]) if r else {}
-            if cur.get("draft") and cur.get("name") == name:  # dania nie zmieniono w międzyczasie
-                if ok:
-                    c.execute("UPDATE meals SET data=?, tr=NULL WHERE id=?", (json.dumps(m, ensure_ascii=False), mid))
-                    wk = c.execute("SELECT confirmed FROM weeks WHERE id=?", (r["week_id"],)).fetchone()
-                    if wk and wk["confirmed"]:
-                        attach_used(c, r["week_id"])
-                else:
-                    cur["draft_error"] = True
-                    c.execute("UPDATE meals SET data=? WHERE id=?", (json.dumps(cur, ensure_ascii=False), mid))
-        return name if ok else None
-    finally:
-        FILLING.discard(mid)
+            m = None
+    with RECIPE_LOCK, db() as c:
+        r = c.execute("SELECT data, week_id FROM meals WHERE id=?", (mid,)).fetchone()
+        cur = json.loads(r["data"]) if r else {}
+        if not (cur.get("draft") and cur.get("name") == name):
+            return None  # danie zmieniono w międzyczasie; kto je zmienił, zamówił już nowe podejście
+        confirmed = week_confirmed(c, r["week_id"])
+        if m is None:
+            if confirmed:  # w szkicu tygodnia porażka jest cicha: po zatwierdzeniu przepis pisze się normalnie
+                cur["draft_error"] = True
+                c.execute("UPDATE meals SET data=? WHERE id=?", (json.dumps(cur, ensure_ascii=False), mid))
+            return None
+        if confirmed:
+            put_recipe(c, mid, m, tr)
+            attach_used(c, r["week_id"])
+            return name
+        c.execute("UPDATE meals SET pre=? WHERE id=?",
+                  (json.dumps({"name": name, "pantry": pantry, "meal": m, "tr": tr}, ensure_ascii=False), mid))
+        return None
+
+
+FRONT, SPARE = 0, 1  # priorytet: ktoś czeka na przepis / przepis pisany na zapas
+
+
+class RecipeQueue:
+    """Jedna kolejka pisania przepisów dla całej aplikacji: najwyżej `workers` zapytań do modelu naraz.
+    Dania, na które ktoś czeka (FRONT), idą przed pisanymi na zapas (SPARE). Jedno danie to jedno zadanie:
+    ponowne zgłoszenie dołącza do istniejącego (i podnosi mu priorytet), zamiast pytać model drugi raz.
+    Zamiany dań (alternatives) nie przechodzą przez kolejkę, więc nigdy nie czekają za przepisami."""
+
+    def __init__(self, workers: int):
+        self.cv = threading.Condition()
+        self.workers = workers
+        self.threads = 0
+        self.tasks: dict = {}  # mid -> {"prio", "running", "again", "cbs"}
+        self.heap: list = []   # (prio, nr, mid); wpisy nieaktualne odpadają przy zdejmowaniu
+        self.nr = 0
+
+    def _push(self, mid, prio):
+        self.nr += 1
+        heapq.heappush(self.heap, (prio, self.nr, mid))
+
+    def _pop(self):
+        while self.heap:
+            prio, _, mid = heapq.heappop(self.heap)
+            t = self.tasks.get(mid)
+            if t and not t["running"] and t["prio"] == prio:
+                return mid, t
+        return None
+
+    def submit(self, mid, prio=FRONT, cb=None):
+        """cb(mid, nazwa|None) zostanie wywołane, gdy zadanie dla tego dania się skończy."""
+        with self.cv:
+            t = self.tasks.get(mid)
+            if t is None:
+                t = self.tasks[mid] = {"prio": prio, "running": False, "again": False, "cbs": []}
+                self._push(mid, prio)
+            elif t["running"]:
+                t["again"] = True  # danie mogło się zmienić w trakcie pisania: po zakończeniu sprawdź jeszcze raz
+                t["prio"] = min(t["prio"], prio)
+            elif prio < t["prio"]:
+                t["prio"] = prio
+                self._push(mid, prio)
+            if prio == FRONT:
+                FILLING.add(mid)
+            if cb:
+                t["cbs"].append(cb)
+            while self.threads < self.workers and self.threads < len(self.tasks):
+                self.threads += 1
+                threading.Thread(target=self._work, daemon=True, name=f"przepisy-{self.threads}").start()
+            self.cv.notify()
+
+    def _work(self):
+        while True:
+            with self.cv:
+                while (got := self._pop()) is None:
+                    self.cv.wait()
+                mid, t = got
+                t["running"] = True
+            try:
+                name = fill_meal(mid)
+            except Exception:
+                name = None
+            with self.cv:
+                t["running"] = False
+                if t["again"]:
+                    t["again"] = False
+                    self._push(mid, t["prio"])
+                    self.cv.notify()
+                    continue
+                del self.tasks[mid]
+                FILLING.discard(mid)
+            for cb in t["cbs"]:
+                try:
+                    cb(mid, name)
+                except Exception:
+                    pass
+
+
+RECIPES = RecipeQueue(max(1, PARALLEL))
 
 
 def start_fill(mid):
-    FILLING.add(mid)
-    POOL.submit(fill_meal, mid)
+    RECIPES.submit(mid, FRONT)
 
 
-def run_fill_job(job, mids):
-    try:
-        with ThreadPoolExecutor(max_workers=max(1, min(PARALLEL, len(mids)))) as ex:
-            futs = [ex.submit(fill_meal, mid) for mid in mids]
-            for f in as_completed(futs):
-                name = f.result()
-                job["done"] += 1
-                if name:
-                    job["ready"].append(name)
-        failed = job["total"] - len(job["ready"])
-        if failed:
-            job["error"] = f"{failed} przepis(ów) się nie udało – użyj przycisku przy daniu"
-        job["status"] = "done"
-    except Exception as e:
-        job["error"] = str(e)[:300]
-        job["status"] = "error"
+def add_job(job):
+    JOBS[job["id"]] = job
+    for old in list(JOBS)[:-5]:
+        if JOBS[old]["status"] != "running":
+            JOBS.pop(old, None)
+
+
+def start_fill_job(wid, mids):
+    """Zadanie z paskiem postępu: przepisy dla podanych dań-szkiców tygodnia."""
+    job = {"id": uuid.uuid4().hex[:8], "status": "running", "stage": "recipes", "done": 0,
+           "total": len(mids), "ready": [], "plan": [], "error": None, "week_id": wid, "kind": "fill"}
+
+    def step(mid, name):
+        with JOB_LOCK:
+            job["done"] += 1
+            if name:
+                job["ready"].append(name)
+            if job["done"] >= job["total"]:
+                failed = job["total"] - len(job["ready"])
+                if failed:
+                    job["error"] = f"{failed} przepis(ów) się nie udało – użyj przycisku przy daniu"
+                job["status"] = "done"
+    add_job(job)
+    for mid in mids:
+        RECIPES.submit(mid, FRONT, step)
+    return job
+
+
+@app.on_event("startup")
+def resume_recipes():
+    """Kolejka i zadania żyją tylko w pamięci. Po restarcie w trakcie pisania przepisów szkice z zatwierdzonych tygodni
+    wracają do kolejki, szkice z niezatwierdzonych znów piszą się na zapas, a znaczniki „szukam” (alts='[]') znikają,
+    bo zapytania, które je postawiły, już nie istnieją."""
+    with db() as c:
+        c.execute("UPDATE meals SET alts=NULL WHERE alts='[]'")
+        rows = c.execute("""SELECT m.id, m.week_id, m.data, m.pre, w.confirmed FROM meals m JOIN weeks w ON w.id=m.week_id
+                            WHERE COALESCE(m.status,'')!='removed' ORDER BY w.start, m.day""").fetchall()
+    fill, spare = {}, []
+    for r in rows:
+        if not json.loads(r["data"]).get("draft"):
+            continue
+        if r["confirmed"]:
+            fill.setdefault(r["week_id"], []).append(r["id"])
+        elif PREFETCH and not r["pre"]:
+            spare.append(r["id"])
+    for wid, mids in fill.items():
+        start_fill_job(wid, mids)
+    for mid in spare:
+        RECIPES.submit(mid, SPARE)
 
 
 @app.post("/api/week/generate")
@@ -817,10 +998,7 @@ def generate(req: GenReq):
         avoid = ["ryba" for _, m in carried if m.get("is_fish")] + ["ryba" for _, m, _ in fixed if m.get("is_fish")]
         job = {"id": uuid.uuid4().hex[:8], "status": "running", "stage": "plan" if n else "recipes",
                "done": 0, "total": 7, "ready": [], "plan": [], "error": None, "week_id": None, "kind": "plan"}
-        JOBS[job["id"]] = job
-        for old in list(JOBS)[:-5]:
-            if JOBS[old]["status"] != "running":
-                JOBS.pop(old, None)
+        add_job(job)
         threading.Thread(target=run_generate, daemon=True,
                          args=(job, start, carried, fixed, [i for i, _ in crav], n, pantry,
                                [t for _, t in crav], avoid, known, recent, favs, hard)).start()
@@ -871,21 +1049,24 @@ class ConfirmReq(BaseModel):
 
 @app.post("/api/week/confirm")
 def confirm_week(req: ConfirmReq):
-    with db() as c:
+    with RECIPE_LOCK, db() as c:
         w = current_week(c, req.week)
         if not w:
             raise HTTPException(400, "brak planu")
         c.execute("UPDATE weeks SET confirmed=1 WHERE id=?", (w["id"],))
+        names, mids = pantry_names(c, w["id"]), []
+        for r in c.execute("SELECT * FROM meals WHERE week_id=? ORDER BY day", (w["id"],)).fetchall():
+            d = json.loads(r["data"])
+            if not d.get("draft"):
+                continue
+            pre = ready_pre(r["pre"], d.get("name"), pantry_for(d, names))
+            if pre:  # przepis napisany na zapas: podstawiamy od razu, bez pytania modelu
+                put_recipe(c, r["id"], pre["meal"], pre.get("tr"))
+            elif r["status"] != "removed" and r["id"] not in FILLING:
+                mids.append(r["id"])
         attach_used(c, w["id"])
-        mids = [r["id"] for r in c.execute("SELECT id, data, status FROM meals WHERE week_id=?", (w["id"],))
-                if json.loads(r["data"]).get("draft") and r["status"] != "removed" and r["id"] not in FILLING]
-    job = None
-    if mids:
-        job = {"id": uuid.uuid4().hex[:8], "status": "running", "stage": "recipes", "done": 0,
-               "total": len(mids), "ready": [], "plan": [], "error": None, "week_id": w["id"], "kind": "fill"}
-        JOBS[job["id"]] = job
-        FILLING.update(mids)
-        threading.Thread(target=run_fill_job, args=(job, mids), daemon=True).start()
+    # reszta idzie zwykłym zadaniem; przepis, który właśnie pisze się na zapas, nie jest zamawiany drugi raz
+    job = start_fill_job(w["id"], mids) if mids else None
     st = state(w["id"])
     st["job"] = job["id"] if job else None
     return st
@@ -987,18 +1168,21 @@ class ChooseReq(BaseModel):
 
 @app.post("/api/meal/{mid}/choose")
 def choose(mid: int, req: ChooseReq):
-    with db() as c:
+    with RECIPE_LOCK, db() as c:
         r = get_meal(c, mid)
         alts = json.loads(r["alts"] or "[]")
         if not (0 <= req.index < len(alts)):
             raise HTTPException(409, "propozycje się zmieniły – odśwież i wybierz jeszcze raz")
         if req.name is not None and alts[req.index].get("name") != req.name:
             raise HTTPException(409, "propozycje się zmieniły – odśwież i wybierz jeszcze raz")
-        wk = c.execute("SELECT confirmed FROM weeks WHERE id=?", (r["week_id"],)).fetchone()
-        c.execute("UPDATE meals SET data=?, alts=NULL, tr=NULL, status='planned', liked=0, servings=NULL WHERE id=?",
-                  (json.dumps(draft_meal(alts[req.index]), ensure_ascii=False), mid))
-    if wk and wk["confirmed"]:
+        confirmed = week_confirmed(c, r["week_id"])
+        # pre=NULL: przepis napisany na zapas dotyczył starego dania
+        c.execute("""UPDATE meals SET data=?, alts=NULL, tr=NULL, pre=NULL, status='planned', liked=0, servings=NULL
+                     WHERE id=?""", (json.dumps(draft_meal(alts[req.index]), ensure_ascii=False), mid))
+    if confirmed:
         start_fill(mid)
+    elif PREFETCH:
+        RECIPES.submit(mid, SPARE)  # szkic tygodnia: nowe danie od razu dostaje przepis na zapas
     return state(r["week_id"])
 
 
