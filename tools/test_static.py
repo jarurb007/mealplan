@@ -53,6 +53,13 @@ def main():
     js = read("app.js")
     inline = sorted(set(re.findall(r"""[\s"'`](on[a-z]+)\s*=\s*\\?["']""", html + js)))
     ok(not inline, f"brak handlerów on…= w HTML-u i szablonach (zdarzenia idą przez data-* i delegację) {inline}")
+    # każda akcja użyta w szablonach (data-click="…" itd.) musi mieć wpis w tabeli ACT, inaczej kliknięcie po cichu nic nie robi
+    act = js[js.index("const ACT={"):js.index("\nfunction dispatch")] if "const ACT={" in js else ""
+    for kind in ("click", "change", "enter", "input"):
+        sec = re.search(r"\n %s:\{(.*?)\}(?=,\n [a-z]+:\{|\};)" % kind, act, re.S)
+        defined = set(re.findall(r"(?:^|[,\n ])(\w+):(?=byId\(|\(|d=>)", sec.group(1))) if sec else set()
+        used = set(re.findall(r'data-%s="(\w+)"' % kind, js + html))
+        ok(bool(used) and used <= defined, f"data-{kind}: {len(used)} akcji z szablonów ma wpis w ACT (brakuje: {sorted(used - defined)})")
     m = re.search(r"const esc=.*", js)
     ok(bool(m) and "&#39;" in m.group(0), "esc() koduje apostrof")
 
