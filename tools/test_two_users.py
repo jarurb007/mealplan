@@ -1,6 +1,7 @@
 """Test: usuwanie dni + dwie osoby naraz (dwie przeglądarki) + bezpieczne Velg. Kopia bazy NUC, atrapa modelu."""
 import asyncio, json, os, subprocess, time, urllib.request, urllib.error
 import websockets
+TOOLS = os.path.dirname(os.path.abspath(__file__))  # ścieżki od położenia pliku: działa też w worktree
 
 # port serwera i przesunięcie portów przeglądarki z otoczenia: kilka sesji może testować równolegle
 API = "http://127.0.0.1:" + os.getenv("UKES_PORT", "8088")
@@ -162,7 +163,7 @@ async def main():
     a_names = await A.ev(f"S.meals.find(m=>m.id==={mid}).alts.map(o=>o.name)")
     # serwer ma teraz propozycje B (nowsze) – podmieniamy je na inne, jak gdyby B dostała inne dania
     import sqlite3
-    db = sqlite3.connect(os.environ.get("TEST_DB", "/home/jar/mealplan/tools/testdb/t10.db"))
+    db = sqlite3.connect(os.environ.get("TEST_DB", f"{TOOLS}/testdb/t10.db"))
     db.execute("UPDATE meals SET alts=? WHERE id=?", (json.dumps([{"name": f"Inne B{i}", "description": "", "is_fish": False, "ingredients": []} for i in range(3)]), mid))
     db.commit(); db.close()
     await A.ev(f"choose({mid},0)")

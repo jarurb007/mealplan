@@ -1,8 +1,9 @@
-"""Test 👎: zapis, flaga, lista w ⚙, filtr w zamiennikach i w planie, prompt bez wykluczania kategorii, cofanie, ⭐<->👎, UI."""
+"""Test 👎: zapis, flaga, lista w ⚙, filtr w zamiennikach i w planie, prompt bez wykluczania kategorii, cofanie,
+👎 nie kasuje przepisu z książki, ⭐ zdejmuje 👎, UI."""
 import asyncio, json, os, sys, time
-sys.path.insert(0, "/home/jar/mealplan/tools")
 from test_two_users import Tab, api, ok
 import test_two_users as T
+TOOLS = os.path.dirname(os.path.abspath(__file__))  # ścieżki od położenia pliku: działa też w worktree
 
 LOG = os.getenv("FAKE_LOG", "/tmp/ukes-fake-prompts.log")
 
@@ -28,14 +29,14 @@ async def main():
     m2 = next(m for m in st["meals"] if m["name"] == "Szkic 2")
     ok(not m2["disliked"] and st["dislikes"] == [], "start: brak 👎")
 
-    # ⭐ najpierw, potem 👎 -> zdejmuje ⭐
+    # ⭐ najpierw, potem 👎 -> przepis zostaje w książce (👎 niczego po cichu nie kasuje)
     api(f"/api/meal/{m2['id']}/favorite")
     ok(any(r["name"] == "Szkic 2" for r in api(f"/api/state?week={wid}", "GET")["recipes"]), "⭐ zapisane")
     st = api(f"/api/meal/{m2['id']}/dislike", body={"reason": "za ostre"})
     m2s = next(m for m in st["meals"] if m["id"] == m2["id"])
     ok(m2s["disliked"] and [d["name"] for d in st["dislikes"]] == ["Szkic 2"] and st["dislikes"][0]["reason"] == "za ostre",
        "👎 zapisane z powodem, flaga na daniu")
-    ok(not any(r["name"] == "Szkic 2" for r in st["recipes"]), "👎 zdejmuje ⭐ z tego samego dania")
+    ok(any(r["name"] == "Szkic 2" for r in st["recipes"]) and m2s["fav"], "👎 nie usuwa przepisu z książki (danie nadal ⭐)")
 
     # zamienniki: atrapa zwraca 'Szkic 2' jako pierwszą propozycję -> ma wypaść
     open(LOG, "w").close()
@@ -63,7 +64,10 @@ async def main():
     api(f"/api/meal/{m2['id']}/dislike", body={"reason": ""})
     st = api(f"/api/meal/{m2['id']}/dislike", body={"reason": ""})
     ok(st["dislikes"] == [], "drugie kliknięcie 👎 cofa")
-    # ⭐ zdejmuje 👎
+    ok(any(r["name"] == "Szkic 2" for r in st["recipes"]), "po 👎 i cofnięciu przepis nadal jest w książce")
+    # ⭐ zdejmuje 👎 (danie spoza książki: najpierw świadomie zdejmujemy ⭐)
+    st = api(f"/api/meal/{m2['id']}/favorite")
+    ok(not any(r["name"] == "Szkic 2" for r in st["recipes"]), "⭐ kliknięte drugi raz usuwa przepis z książki (świadomie)")
     api(f"/api/meal/{m2['id']}/dislike", body={"reason": ""})
     st = api(f"/api/meal/{m2['id']}/favorite")
     ok(st["dislikes"] == [] and any(r["name"] == "Szkic 2" for r in st["recipes"]), "⭐ zdejmuje 👎 (nie może być naraz)")
@@ -117,7 +121,7 @@ async def main():
         await asyncio.sleep(0.3)
         import base64
         r = await A.cmd("Page.captureScreenshot", format="png")
-        open(f"/home/jar/mealplan/tools/shots/dislike_{th}.png", "wb").write(base64.b64decode(r["data"]))
+        open(f"{TOOLS}/shots/dislike_{th}.png", "wb").write(base64.b64decode(r["data"]))
     ok(not A.errors, f"brak błędów JS {A.errors}")
     await A.close()
     print("\nWYNIK:", "BŁĘDY" if T.bad else "OK")
