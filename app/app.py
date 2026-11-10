@@ -7,7 +7,9 @@ import re
 import shutil
 import socket
 import threading
+import time
 import uuid
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import sqlite3
 from datetime import date, timedelta
@@ -76,18 +78,60 @@ def init_db():
             pass
     with db() as c:
         c.execute("UPDATE meals SET locked=0")  # funkcja blokady usunięta
-        # czosnek w ząbkach, kolendra w pęczkach: odhaczone pozycje przechodzą na nowe klucze
-        for old, new, unit, name in (("hvitløk|stk", "hvitløk|fedd", "fedd", "hvitløk"),
-                                     ("koriander|stk", "koriander|bunt", "bunt", "koriander")):
-            for r in c.execute("SELECT * FROM checks WHERE key=?", (old,)).fetchall():
-                ex = c.execute("SELECT qty FROM checks WHERE week_id=? AND key=?", (r["week_id"], new)).fetchone()
-                qty = (r["qty"] or 0) + ((ex["qty"] or 0) if ex else 0)
-                c.execute("DELETE FROM checks WHERE week_id=? AND key=?", (r["week_id"], old))
-                c.execute("INSERT OR REPLACE INTO checks(week_id, key, label, qty) VALUES(?,?,?,?)",
-                          (r["week_id"], new, f"{qty:g} {unit} {name}", qty))
+    migrate_checks()
 
 
-init_db()
+def backup_dir() -> Path:
+    return Path(os.getenv("BACKUP_DIR", str(BASE / "backups")))
+
+
+def backup_to(name: str) -> Path:
+    """Spójna kopia całej bazy (API backup SQLite) w BACKUP_DIR. Najpierw plik tymczasowy, żeby nie zostawić połówki."""
+    bdir = backup_dir()
+    bdir.mkdir(parents=True, exist_ok=True)
+    final, tmp = bdir / name, bdir / (name + ".part")
+    src, dst = db(), sqlite3.connect(str(tmp))
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+    os.replace(tmp, final)
+    return final
+
+
+def migrate_checks():
+    """Odhaczone pozycje przechodzą na aktualne klucze listy zakupów ('canon|rodzina'): po każdej zmianie w canon()
+    albo w przeliczeniach jednostek stare klucze (np. 'grønnsakskraft|ml', 'ris|ml', 'hvitløk|stk') są przepisywane
+    tą samą logiką, której używa lista. Ilości się przeliczają, a dwie stare pozycje tego samego produktu sumują."""
+    with db() as c:
+        rows = c.execute("SELECT week_id, key, label, qty FROM checks").fetchall()
+    moves = []
+    for r in rows:
+        name, sep, unit = r["key"].rpartition("|")
+        if not sep or not name:
+            continue  # własne produkty (x12) i wpisy bez rodziny jednostki
+        cn = canon(name, unit)
+        q, fam = shop_qty(cn, r["qty"], unit)
+        if f"{cn}|{fam}" != r["key"]:
+            moves.append((r, cn, fam, q))
+    if not moves:
+        return
+    backup_to(f"data-before-migration-{int(time.time())}.db")
+    with db() as c:
+        for r, cn, fam, q in moves:
+            new = f"{cn}|{fam}"
+            ex = c.execute("SELECT label, qty FROM checks WHERE week_id=? AND key=?", (r["week_id"], new)).fetchone()
+            label = r["label"]
+            if ex:  # ten produkt był już odhaczony pod nowym kluczem: ilości się sumują
+                label = label or ex["label"]
+                known = [x for x in (q, ex["qty"]) if x is not None]
+                q = sum(known) if known else None  # wpis bez ilości (sprzed kolumny qty) nie dodaje nic
+            if q is not None:
+                label = " ".join(x for x in (*show_qty(q, fam), shop_name(cn)) if x)
+            c.execute("DELETE FROM checks WHERE week_id=? AND key=?", (r["week_id"], r["key"]))
+            c.execute("INSERT OR REPLACE INTO checks(week_id, key, label, qty) VALUES(?,?,?,?)",
+                      (r["week_id"], new, label, q))
 
 
 def default_servings() -> int:
@@ -169,7 +213,15 @@ MEAL_SCHEMA = """{"name": "...", "time_min": 30, "description": "1 setning", "is
 Reguły pól: name po norwesku, ingredients/steps po norwesku, metryczne jednostki (g, dl, ml, stk, ss, ts),
 qty liczba lub null. Nazwy składników: naturalny norweski bokmål, tak jak w sklepie w Norwegii, bez dosłownych kalk z innych języków i bez zbędnych przymiotników.
 Warzywa na sztuki w liczbie pojedynczej ('gulrot', 'potet', 'tomat'), ale strączkowe w mnogiej ('kidneybønner', 'kikerter', 'røde linser').
-Czosnek zawsze w ząbkach: name 'hvitløk', unit 'fedd'. Świeże zioła: unit 'bunt'. aisle dokładnie jedna z: """ + ", ".join(AISLES) + """.
+Czosnek zawsze w ząbkach: name 'hvitløk', unit 'fedd'. Świeże zioła: unit 'bunt'.
+Jeden produkt = zawsze ta sama nazwa i jednostka, bo z tych pól powstaje lista zakupów:
+- bulion: name 'grønnsaksbuljong' (albo 'kyllingbuljong', 'fiskebuljong'), unit 'dl', qty = ilość gotowego bulionu;
+  nigdy 'kraft', 'fond', 'buljongterning' ani inne nazwy (kostka to 5 dl bulionu);
+- 'løk' (nie 'gul løk'), 'potet', 'hakkede tomater' (pomidory z puszki, w g: puszka = 400 g; nie 'hermetiske tomater'),
+  'tomatpuré', 'ingefær', 'spisskummen', 'tortillalefser'; przyprawa to 'paprikapulver' / 'chilipulver', a 'paprika' i 'chili' to świeże warzywa;
+- ryż, makaron, kasze, soczewica, ser, masło i warzywa krojone na wagę: unit 'g'; płyny (bulion, śmietana, mleko kokosowe): 'dl' lub 'ml';
+  warzywa i owoce na sztuki: 'stk'; sypkie przyprawy: 'ts' lub 'ss'. Nie używaj 'boks', 'pakke', 'neve', 'klype'.
+aisle dokładnie jedna z: """ + ", ".join(AISLES) + """.
 from_pantry = true tylko dla składnika z listy lodówki podanej w zadaniu, nawet jeśli nazwa jest w innym języku.
 Soli, pieprzu i oleju nie dawaj do ingredients. Ilości w ingredients podaj na @@P@@ porcji.
 Składniki z lodówki mogą być podane po polsku: w nazwach dań i składników zawsze używaj poprawnego norweskiego (bakłażan = aubergine)."""
@@ -254,14 +306,15 @@ Jeśli któreś danie już je wykorzystuje, nie zmieniaj go. Zwróć WYŁĄCZNIE
 
 
 # ---------- helpers ----------
-def meal_row(r):
+def meal_row(r, bad=None):
+    """bad: znormalizowane nazwy dań z 👎; bez niego funkcja pyta bazę sama (wołający z pętli powinni podać)."""
     d = json.loads(r["data"])
     return {"id": r["id"], "day": r["day"], "status": r["status"], "locked": bool(r["locked"]),
             "alts": ([{**{k: v for k, v in o.items() if k != "recipe"}, "ready": "recipe" in o}
                       for o in json.loads(r["alts"])] if r["alts"] else None),
             "tr": json.loads(r["tr"]) if r["tr"] else {}, "servings": r["servings"],
             "liked": bool(r["liked"]), **d, "ingredients": [tidy_ing(i) for i in d.get("ingredients", [])],
-            "disliked": norm_name(d.get("name")) in disliked_set()}
+            "disliked": norm_name(d.get("name")) in (disliked_set() if bad is None else bad)}
 
 
 def scale_factor(m, default):
@@ -269,14 +322,22 @@ def scale_factor(m, default):
 
 
 def build_trmap(meals):
-    out = {}
+    """{język: {nazwa składnika: tłumaczenie}}. Wiersz listy zakupów nosi nazwę produktu (shop_name), a tej w żadnym
+    przepisie może nie być ('grønnsaksbuljong' z samych kostek), więc dostaje tłumaczenie jednego ze swoich wariantów:
+    najchętniej takiego, którego ilości nie trzeba było przeliczać."""
+    out, rows = {}, {}
     for m in meals:
         for lang, t in m.get("tr", {}).items():
             names = t.get("ingredients", [])
             for i, ing in enumerate(m["ingredients"]):
                 if i < len(names):
                     out.setdefault(lang, {})[ing["name"].lower()] = names[i]
-    return out
+                    cn = canon(ing["name"], ing.get("unit"), ing.get("aisle"))
+                    same_unit = shop_qty(cn, 1, ing.get("unit"))[1] == to_base(1, ing.get("unit"))[1]
+                    row = rows.setdefault(lang, {})
+                    if shop_name(cn) not in row or (same_unit and not row[shop_name(cn)][0]):
+                        row[shop_name(cn)] = (same_unit, names[i])
+    return {lang: {**{n: v for n, (_, v) in rows[lang].items()}, **d} for lang, d in out.items()}
 
 
 def clean_meal(m: dict) -> dict:
@@ -345,6 +406,8 @@ def attach_used(c, week_id):
             c.execute("UPDATE pantry SET week_id=?, day=NULL WHERE id=?", (week_id, p["id"]))
 
 
+# ---------- lista zakupów: jeden produkt = jedna nazwa ----------
+# Różne zapisy tego samego produktu (liczba, przymiotnik, literówka, kalka z polskiego) -> jeden klucz listy.
 SING = {"gulrøtter": "gulrot", "gulrøtt": "gulrot", "poteter": "potet", "tomater": "tomat", "løker": "løk",
         "gul løk": "løk", "gule løk": "løk", "paprikaer": "paprika", "agurker": "agurk", "avokadoer": "avokado",
         "sitroner": "sitron", "hvitløksfedd": "hvitløk", "fedd hvitløk": "hvitløk", "sjampinjonger": "sjampinjong",
@@ -352,52 +415,148 @@ SING = {"gulrøtter": "gulrot", "gulrøtt": "gulrot", "poteter": "potet", "tomat
         "kidneybønner": "kidneybønne", "kikerter": "kikert", "røde linser": "rødlinse", "rødlinser": "rødlinse",
         "hakkede tomater": "hakket tomat", "cherrytomater": "kirsebærtomat", "cherrytomat": "kirsebærtomat",
         "kirsebærtomater": "kirsebærtomat", "hvitløkfedd": "hvitløk", "spaghetti": "spagetti", "karri": "karripulver",
-        "balsamicoeddik": "balsamico", "fersk koriander": "koriander"}
+        "balsamicoeddik": "balsamico", "fersk koriander": "koriander",
+        # grupy znalezione w prawdziwych tygodniach (kopie bazy)
+        "kepaløk": "løk", "limer": "lime",
+        "hermetiske tomater": "hakket tomat", "hermetisk tomat": "hakket tomat", "hermetiske hakkede tomater": "hakket tomat",
+        "hakkede tomater på boks": "hakket tomat", "tomater på boks": "hakket tomat", "boks hakkede tomater": "hakket tomat",
+        "fast potet": "potet", "faste poteter": "potet", "fastkokende potet": "potet", "fastkokende poteter": "potet",
+        "fersk ingefær": "ingefær", "revet ingefær": "ingefær", "imbir": "ingefær",
+        "cumina": "spisskummen", "cumin": "spisskummen", "kumin": "spisskummen", "kummin": "spisskummen",
+        "kummel": "spisskummen", "malt spisskummen": "spisskummen",
+        "paprikakrydder": "paprikapulver", "malt paprika": "paprikapulver", "rød paprika": "paprika", "røde paprika": "paprika",
+        "brune linser": "brun linse", "linser": "linse", "bønner": "bønne", "hvit bønne": "hvite bønner",
+        "svart bønne": "svarte bønner", "mandler": "mandel", "oliva": "oliven", "svarte oliven": "svart oliven",
+        "risotoris": "risottoris", "arborioris": "risottoris", "tomatpasta": "tomatpuré", "tomatpure": "tomatpuré",
+        "tortillalefser": "tortillalefse", "tacolefse": "tortillalefse", "tacolefser": "tortillalefse",
+        "tørket timian": "timian", "tørket oregano": "oregano", "vegetabiljon": "grønnsaksbuljong",
+        "fersk persille": "persille", "bladpersille": "persille", "fersk basilikum": "basilikum", "fersk dill": "dill",
+        "fersk gressløk": "gressløk", "fersk mynte": "mynte"}
 # klucz listy zostaje przy formie z SING, a pokazujemy nazwę ze sklepu
 SHOP_NAME = {"kidneybønne": "kidneybønner", "kikert": "kikerter", "rødlinse": "røde linser", "hakket tomat": "hakkede tomater",
              "kirsebærtomat": "cherrytomater", "spagetti": "spaghetti", "karripulver": "karri", "balsamico": "balsamicoeddik",
-             "koriander": "fersk koriander", "hvitløk": "hvitløk"}
+             "koriander": "fersk koriander", "hvitløk": "hvitløk",
+             "ingefær": "ingefær", "spisskummen": "spisskummen", "paprikapulver": "paprikapulver", "chilipulver": "chilipulver",
+             "brun linse": "brune linser", "linse": "linser", "bønne": "bønner", "mandel": "mandler", "oliven": "oliven",
+             "svart oliven": "svarte oliven", "risottoris": "risottoris", "tomatpuré": "tomatpuré",
+             "tortillalefse": "tortillalefser"}
+# Bulion: 'kraft', kostka i proszek to na liście ten sam produkt co gotowy bulion ('grønnsakskraft', 'grønnsaksbuljongterning').
+BULJONG_RE = re.compile(r"(.*?)[ -]?(?:buljong|kraft)(?:[ -]?(?:terning(?:er)?|pulver))?")
+BULJONG_BASE = {"grønnsak": "grønnsaks", "vegetar": "grønnsaks", "vegetabil": "grønnsaks", "vegetabilsk": "grønnsaks",
+                "vegansk": "grønnsaks", "høns": "kylling", "hønse": "kylling"}
+BULJONG_ML = 500  # 1 kostka = 5 dl gotowego bulionu (tak na opakowaniach w Norwegii)
+# ta sama nazwa, inny produkt: w łyżeczkach to przyprawa, na sztuki warzywo
+POWDER = {"paprika": "paprikapulver", "chili": "chilipulver"}
+CANNED = "Tørrvarer og hermetikk"
+
+UNIT_ALIAS = {"stykk": "stk", "stykker": "stk", "st": "stk", "spiseskje": "ss", "spiseskjeer": "ss", "teskje": "ts",
+              "teskjeer": "ts", "gram": "g", "liter": "l", "bunter": "bunt", "bokser": "boks", "bx": "boks",
+              "terninger": "terning", "hoder": "hode", "båter": "båt"}
+GARLIC = {"": 1, "stk": 1, "fedd": 1, "båt": 1, "hode": 10}  # ile ząbków
+HERBS = {"koriander", "persille", "dill", "basilikum", "gressløk", "mynte"}
+# Uczciwe przeliczenia zależne od produktu: {rodzina: (mnożnik, rodzina docelowa)}. Reszta zostaje w swojej jednostce.
+_GRAIN = {"ml": (0.85, "g")}   # 1 dl suchego ryżu / kaszy to ok. 85 g
+_CREAM = {"g": (1, "ml")}      # gęsty nabiał: 100 g to ok. 1 dl
+CONV = {"ris": _GRAIN, "jasminris": _GRAIN, "basmatiris": _GRAIN, "risottoris": _GRAIN, "fullkornsris": _GRAIN,
+        "couscous": _GRAIN, "bulgur": {"ml": (0.8, "g")}, "quinoa": {"ml": (0.75, "g")},
+        "salsa": {"ml": (1, "g")}, "rømme": _CREAM, "lettrømme": _CREAM, "crème fraîche": _CREAM, "yoghurt": _CREAM,
+        "smør": {"ts": (5, "g")},  # 1 ss masła = 15 g
+        "hakket tomat": {"boks": (400, "g"), "stk": (400, "g")},
+        "kokosmelk": {"boks": (400, "ml"), "stk": (400, "ml"), "g": (1, "ml")}}
+FAM_ORDER = ["g", "ml", "stk", "boks", "fedd", "bunt", "ts"]
 
 
-def canon(name):
+def unit_key(unit) -> str:
+    u = str(unit or "").lower().strip().rstrip(".")
+    return UNIT_ALIAS.get(u, u)
+
+
+def canon(name, unit=None, aisle=None):
+    """Klucz produktu na liście zakupów. Jednostka i dział rozstrzygają tylko tam, gdzie sama nazwa jest dwuznaczna."""
     n = re.sub(r"\(.*?\)", "", str(name).lower())
-    n = re.sub(r"\s+", " ", n).strip()
-    return SING.get(n, n)
+    n = re.sub(r"\s+", " ", n).strip(" ,.")
+    n = SING.get(n, n)
+    m = BULJONG_RE.fullmatch(n)
+    if m:
+        n = BULJONG_BASE.get(m[1], m[1]) + "buljong"
+    if n in POWDER and unit_key(unit) in ("ts", "ss"):
+        n = POWDER[n]
+    if n == "tomat" and aisle == CANNED:
+        n = "hakket tomat"  # 'tomat' z działu konserw to pomidory z puszki
+    return n
+
+
+def shop_name(cn: str) -> str:
+    return SHOP_NAME.get(cn, cn)
 
 
 def tidy_ing(i: dict) -> dict:
-    """Jedna nazwa i jednostka dla tego samego produktu: czosnek w ząbkach, zioła w pęczkach, nazwy jak w sklepie."""
-    cn = canon(i.get("name", ""))
+    """Składnik w przepisie: nazwa jak w sklepie, czosnek w ząbkach, zioła w pęczkach. Ilości zostają takie, jak
+    w przepisie (kostka bulionu, dl ryżu) - na wspólną jednostkę przelicza dopiero lista zakupów (shop_qty)."""
+    u = unit_key(i.get("unit"))
+    cn = canon(i.get("name", ""), u, i.get("aisle"))
     out = {**i, "name": SHOP_NAME.get(cn, i.get("name", ""))}
-    u = str(i.get("unit") or "").lower().strip()
-    if cn == "hvitløk":
-        if u in ("hode", "hoder") and isinstance(i.get("qty"), (int, float)):
-            out["qty"] = i["qty"] * 10
+    if cn == "hvitløk" and u in GARLIC:
+        if GARLIC[u] != 1 and isinstance(i.get("qty"), (int, float)):
+            out["qty"] = i["qty"] * GARLIC[u]
         out["unit"] = "fedd"
-    elif cn == "koriander" and u in ("", "stk"):
+    elif cn in HERBS and u in ("", "stk"):
         out["unit"] = "bunt"
     return out
 
 
 def to_base(q, unit):
-    u = (unit or "").lower().strip()
-    f = {"kg": (1000, "g"), "g": (1, "g"), "l": (1000, "ml"), "dl": (100, "ml"), "cl": (10, "ml"), "ml": (1, "ml")}
-    if u in f:
-        k, fam = f[u]
-        return q * k, fam
-    return q, u
+    u = unit_key(unit)
+    f = {"kg": (1000, "g"), "g": (1, "g"), "l": (1000, "ml"), "dl": (100, "ml"), "cl": (10, "ml"), "ml": (1, "ml"),
+         "ss": (3, "ts"), "ts": (1, "ts")}  # łyżka = 3 łyżeczki
+    k, fam = f.get(u, (1, u))
+    return (q * k if isinstance(q, (int, float)) else q), fam
 
 
-def show_qty(q, fam, unit):
+def shop_qty(cn, q, unit):
+    """Ilość i rodzina jednostki na liście zakupów. Jak to_base, plus przeliczenia dla konkretnego produktu:
+    kostka bulionu -> ml bulionu, dl ryżu -> g, główka czosnku -> ząbki, łyżka masła -> g."""
+    u = unit_key(unit)
+    if cn == "hvitløk" and u in GARLIC:
+        k, fam = GARLIC[u], "fedd"
+    elif cn in HERBS and u in ("", "stk"):
+        k, fam = 1, "bunt"
+    elif cn.endswith("buljong") and u in ("stk", "terning"):
+        k, fam = BULJONG_ML, "ml"
+    else:
+        q, fam = to_base(q, u)
+        k, fam = CONV.get(cn, {}).get(fam, (1, fam))
+        if isinstance(q, (int, float)) and k != int(k):
+            return round(q * k / 5) * 5, fam  # przeliczenie z objętości jest przybliżone: do 5 g
+    return (q * k if isinstance(q, (int, float)) else q), fam
+
+
+def show_qty(q, fam, unit=None):
     if fam == "g":
-        return (fmt_qty(round(q / 1000, 2)), "kg") if q >= 1000 else (fmt_qty(q), "g")
+        return (fmt_qty(round(q / 1000, 2)), "kg") if q >= 1000 else (fmt_qty(round(q) if q >= 10 else q), "g")
     if fam == "ml":
         if q >= 1000:
             return fmt_qty(round(q / 1000, 2)), "l"
         if q >= 100:
             return fmt_qty(round(q / 100, 1)), "dl"
-        return fmt_qty(q), "ml"
-    return fmt_qty(q), unit
+        return fmt_qty(round(q) if q >= 10 else q), "ml"
+    if fam == "ts":
+        ss = q / 3
+        if q < 3:
+            return fmt_qty(q), "ts"
+        if abs(ss * 2 - round(ss * 2)) < 1e-6:
+            return fmt_qty(round(ss * 2) / 2), "ss"
+        return f"{int(q // 3)} ss + {fmt_qty(round(q - 3 * (q // 3), 2))}", "ts"
+    return fmt_qty(q), fam if unit is None else unit
+
+
+def join_qty(parts: list) -> tuple:
+    """[(ilość, rodzina)] -> (tekst, jednostka) tak, żeby 'tekst jednostka nazwa' dało się przeczytać:
+    jedna rodzina ('490', 'g'), kilka nieprzeliczalnych ('500 g + 1', 'stk')."""
+    shown = [show_qty(q, fam) for q, fam in parts if q]
+    if not shown:
+        return "", (parts[0][1] if parts else "")
+    return " + ".join([f"{a} {b}".strip() for a, b in shown[:-1]] + [shown[-1][0]]), shown[-1][1]
 
 
 PANTRY_UNITS = r"kg|g|l|dl|cl|ml|stk|szt|fedd"
@@ -419,8 +578,9 @@ def pantry_stock(names: list) -> list:
     stock = []
     for t in names:
         q, u, n = parse_pantry(t)
-        left, fam = to_base(q, u) if q is not None else (None, None)
-        stock.append({"canon": canon(n), "left": left, "fam": fam, "dish": None})
+        cn = canon(n, u)
+        left, fam = shop_qty(cn, q, u) if q is not None else (None, None)
+        stock.append({"canon": cn, "left": left, "fam": fam, "dish": None})
     return stock
 
 
@@ -442,19 +602,24 @@ def from_stock(stock, flagged, cn, q, fam, mid) -> float:
     return 0
 
 
-def shopping(c, week):
-    meals = [meal_row(r) for r in c.execute(
-        "SELECT * FROM meals WHERE week_id=? ORDER BY day", (week["id"],))]
+def load_meals(c, week_id, bad=None) -> list:
+    bad = disliked_set() if bad is None else bad
+    return [meal_row(r, bad) for r in c.execute("SELECT * FROM meals WHERE week_id=? ORDER BY day", (week_id,))]
+
+
+def shop_agg(c, week, meals=None, dflt=None):
+    """Składniki tygodnia zsumowane po (produkt, rodzina jednostki): osobno to, co trzeba kupić, i to, co pokrywa lodówka."""
+    meals = load_meals(c, week["id"]) if meals is None else meals
     stock = pantry_stock(pantry_names(c, week["id"]))
-    dflt = default_servings()
+    dflt = dflt or default_servings()
     agg, have = {}, {}
 
     def add(tgt, m, i, cn, q, fam):
-        e = tgt.setdefault((cn, fam), {"name": i["name"], "canon": cn, "fam": fam, "unit": i["unit"],
-                                       "qty": 0, "aisle": i["aisle"], "uses": []})
+        e = tgt.setdefault((cn, fam), {"canon": cn, "fam": fam, "qty": 0, "aisles": Counter(), "uses": []})
         if q is not None:
             e["qty"] += q
-        uq, uu = show_qty(q, fam, i["unit"]) if q else ("", i["unit"])
+        e["aisles"][i["aisle"]] += 1
+        uq, uu = show_qty(q, fam) if q else ("", fam)
         e["uses"].append({"meal": m["id"], "day": m["day"], "qty": uq, "unit": uu})
 
     for m in meals:
@@ -463,46 +628,81 @@ def shopping(c, week):
         f = scale_factor(m, dflt)
         for i in m["ingredients"]:
             qty_i = scale_qty(i["qty"], i["unit"], f)
-            cn = canon(i["name"])
-            if isinstance(qty_i, (int, float)):
-                q, fam = to_base(qty_i, i["unit"])
-            else:
-                q, fam = None, (i["unit"] or "").lower().strip()
+            cn = canon(i["name"], i["unit"], i["aisle"])
+            q, fam = shop_qty(cn, qty_i if isinstance(qty_i, (int, float)) else None, i["unit"])
             share = from_stock(stock, i.get("from_pantry"), cn, q, fam, m["id"])
             if share > 0:
                 add(have, m, i, cn, q * share if q is not None else None, fam)
             if share < 1:
                 add(agg, m, i, cn, q * (1 - share) if q is not None else None, fam)
-    checks = {r["key"]: r for r in c.execute("SELECT * FROM checks WHERE week_id=?", (week["id"],))}
+    return agg, have
 
-    def make(e):
-        k = f'{e["canon"]}|{e["fam"]}'
-        total = e["qty"]
+
+def by_product(entries: dict) -> dict:
+    """{(produkt, rodzina): wpis} -> {produkt: [wpisy]}; g i ml przed sztukami, żeby '500 g + 1 stk' czytało się naturalnie."""
+    out = {}
+    for e in entries.values():
+        out.setdefault(e["canon"], []).append(e)
+    for es in out.values():
+        es.sort(key=lambda e: (FAM_ORDER.index(e["fam"]) if e["fam"] in FAM_ORDER else len(FAM_ORDER), e["fam"]))
+    return out
+
+
+def shop_row(cn, es, checks) -> dict:
+    """Jeden wiersz listy na produkt. Każda rodzina jednostki ('ris|g', 'blomkål|stk') ma własne odhaczenie w checks,
+    więc 'dokup' liczy się osobno dla gramów i sztuk, a wiersz jest odhaczony, gdy kupione jest wszystko."""
+    parts = []
+    for e in es:
+        k, total = f'{cn}|{e["fam"]}', e["qty"]
         ch = checks.get(k)
-        checked, topup, shown = bool(ch), False, total
+        done, left = bool(ch), total
         if ch and ch["qty"] is not None and total > ch["qty"] + 1e-6:
-            checked, topup, shown = False, True, total - ch["qty"]
-        qty, unit = show_qty(shown, e["fam"], e["unit"]) if shown else ("", e["unit"])
-        fq, fu = show_qty(total, e["fam"], e["unit"]) if total else ("", e["unit"])
-        return {"key": k, "name": e["name"], "qty": qty, "unit": unit, "aisle": e["aisle"],
-                "checked": checked, "topup": topup, "total": total, "full_qty": fq, "full_unit": fu, "uses": e["uses"],
-                "heads": math.ceil(total / 10) if e["fam"] == "fedd" and total else None}
+            done, left = False, total - ch["qty"]  # kupione wcześniej mniej, niż teraz potrzeba
+        parts.append({"key": k, "fam": e["fam"], "total": total, "left": left, "done": done, "bought": bool(ch)})
+    checked = all(p["done"] for p in parts)
+    topup = not checked and any(p["bought"] for p in parts)
+    todo = [(p["left"], p["fam"]) for p in parts if not p["done"]] if topup else [(p["total"], p["fam"]) for p in parts]
+    qty, unit = join_qty(todo)
+    fq, fu = join_qty([(p["total"], p["fam"]) for p in parts])
+    aisles = sum((e["aisles"] for e in es), Counter())
+    aisle = "Krydder og basis" if cn.endswith("buljong") else max(
+        aisles, key=lambda a: (aisles[a], -AISLES.index(a) if a in AISLES else -len(AISLES)))
+    fedd = next((p["total"] for p in parts if p["fam"] == "fedd"), 0)
+    stock_ml = next((p["total"] for p in parts if p["fam"] == "ml"), 0) if cn.endswith("buljong") else 0
+    return {"key": cn, "name": shop_name(cn), "qty": qty, "unit": unit, "aisle": aisle,
+            "checked": checked, "topup": topup, "total": parts[0]["total"] if len(parts) == 1 else None,
+            "full_qty": fq, "full_unit": fu,
+            "uses": sorted((u for e in es for u in e["uses"]), key=lambda u: u["day"]),
+            "heads": math.ceil(fedd / 10) if fedd else None,
+            "cubes": math.ceil(stock_ml / BULJONG_ML - 1e-9) if stock_ml else None,
+            "parts": [{"key": p["key"], "qty": a, "unit": b, "checked": p["done"]}
+                      for p in parts for a, b in [show_qty(p["total"], p["fam"]) if p["total"] else ("", p["fam"])]]}
 
+
+def shop_rows(c, week, agg, have):
+    checks = {r["key"]: r for r in c.execute("SELECT * FROM checks WHERE week_id=?", (week["id"],))}
     groups = {}
     mine = []
     for r in c.execute("SELECT * FROM extras WHERE week_id=? ORDER BY id", (week["id"],)):
         k = f"x{r['id']}"
         mine.append({"key": k, "name": r["name"], "qty": "", "unit": "", "aisle": MINE,
                      "checked": k in checks, "topup": False, "extra_id": r["id"]})
-    for e in sorted(agg.values(), key=lambda x: x["name"].lower()):
-        groups.setdefault(e["aisle"], []).append(make(e))
+    for row in sorted((shop_row(cn, es, checks) for cn, es in by_product(agg).items()), key=lambda x: x["name"].lower()):
+        groups.setdefault(row["aisle"], []).append(row)
     out = {a: groups[a] for a in AISLES if a in groups}
     if mine:
         out[MINE] = mine
     present = {f'{e["canon"]}|{e["fam"]}' for e in list(agg.values()) + list(have.values())}
     gone = [{"key": k, "label": r["label"]} for k, r in checks.items()
             if r["label"] and k not in present and not re.fullmatch(r"x\d+", k)]
-    return out, [make(e) for e in have.values()], gone
+    return out, [shop_row(cn, es, {}) for cn, es in by_product(have).items()], gone
+
+
+def shopping(c, week, meals=None):
+    return shop_rows(c, week, *shop_agg(c, week, meals))
+
+
+init_db()  # tutaj, bo migracja odhaczeń korzysta z canon() i shop_qty()
 
 
 # ---------- API ----------
@@ -513,7 +713,13 @@ def index():
 
 @app.get("/api/state")
 def state(week: int | None = None):
+    return build_state(week)
+
+
+def build_state(week=None, meals=None, shop=None):
+    """Pełny stan dla frontendu. meals i shop (wynik shop_agg) może podać wołający, który już je policzył."""
     today = date.today()
+    dflt = default_servings()
     with db() as c:
         cur = current_week(c)
         w = current_week(c, week)
@@ -528,28 +734,28 @@ def state(week: int | None = None):
                             "ingredients": d.get("ingredients", []), "steps": d.get("steps", []),
                             "tr": json.loads(r["tr"]) if r["tr"] else {}, "source": d.get("source")})
         favnames = {x["name"].lower() for x in recipes}
-        dislikes = [{"id": x["id"], "name": x["name"], "reason": x["reason"]}
-                    for x in c.execute("SELECT id, name, reason FROM dislikes ORDER BY id DESC")]
+        dislikes, bad = [], set()
+        for x in c.execute("SELECT id, name, norm, reason FROM dislikes ORDER BY id DESC"):
+            dislikes.append({"id": x["id"], "name": x["name"], "reason": x["reason"]})
+            bad.add(x["norm"])
         if not w:
             return {"week": None, "meals": [], "pantry": pantry, "carry": carry, "cravings": cravings,
                     "recipes": recipes, "weeks": [], "current_id": None, "dislikes": dislikes,
-                    "servings_default": default_servings(),
+                    "servings_default": dflt,
                     "next_start": str(saturday_on_or_before(today))}
         start = date.fromisoformat(w["start"])
-        meals = []
-        for r in c.execute("SELECT * FROM meals WHERE week_id=? ORDER BY day", (w["id"],)):
-            m = meal_row(r)
+        meals = load_meals(c, w["id"], bad) if meals is None else meals
+        for m in meals:
             m["date"] = str(start + timedelta(days=m["day"]))
             m["fav"] = m["name"].lower() in favnames
             m["draft"] = bool(m.get("draft"))
             m["filling"] = m["id"] in FILLING
             m["overdue"] = (cur is not None and w["id"] == cur["id"] and m["status"] == "planned"
                             and start + timedelta(days=m["day"]) < today)
-            fct = scale_factor(m, default_servings())
-            m["servings_eff"] = m["servings"] or default_servings()
+            fct = scale_factor(m, dflt)
+            m["servings_eff"] = m["servings"] or dflt
             m["qv"] = [fmt_qty(scale_qty(i["qty"], i["unit"], fct)) for i in m["ingredients"]]
-            meals.append(m)
-        groups, have, gone = shopping(c, w)
+        groups, have, gone = shop_rows(c, w, *(shop or shop_agg(c, w, meals, dflt)))
         pending = sum(1 for m in meals if m["draft"] and m["status"] != "removed")
         if pending:
             gone = []
@@ -558,7 +764,7 @@ def state(week: int | None = None):
                          "confirmed": bool(w["confirmed"])},
                 "meals": meals, "pantry": pantry, "carry": carry, "cravings": cravings, "recipes": recipes,
                 "dislikes": dislikes,
-                "servings_default": default_servings(),
+                "servings_default": dflt,
                 "trmap": build_trmap(meals), "shopping": groups, "gone": gone,
                 "shop_alert": len(gone) + sum(1 for g in groups.values() for i in g if i.get("topup")),
                 "have": have, "today": str(today),
@@ -1497,17 +1703,33 @@ class CheckReq(BaseModel):
 
 @app.post("/api/shop/check")
 def shop_check(req: CheckReq):
+    """Odhacz / odznacz wiersz listy. key to klucz wiersza (produkt) albo 'x<id>' własnego produktu.
+    Zwraca pełny stan; składniki tygodnia liczą się raz i służą i do zapisu ilości, i do odpowiedzi."""
+    meals = shop = None
     with db() as c:
         w = current_week(c, req.week)
-        if req.checked:
-            groups, _, _ = shopping(c, w)
-            item = next((i for g in groups.values() for i in g if i["key"] == req.key), None)
-            label = " ".join(x for x in (item.get("full_qty", ""), item.get("full_unit", ""), item["name"]) if x) if item else None
-            c.execute("INSERT OR REPLACE INTO checks(week_id, key, label, qty) VALUES(?,?,?,?)",
-                      (w["id"], req.key, label, item.get("total") if item else None))
-        else:
+        if not w:
+            raise HTTPException(400, "brak planu")
+        if re.fullmatch(r"x\d+", req.key):
+            ex = c.execute("SELECT name FROM extras WHERE id=? AND week_id=?", (int(req.key[1:]), w["id"])).fetchone()
             c.execute("DELETE FROM checks WHERE week_id=? AND key=?", (w["id"], req.key))
-    return {"ok": True}
+            if req.checked and ex:
+                c.execute("INSERT INTO checks(week_id, key, label, qty) VALUES(?,?,?,NULL)", (w["id"], req.key, ex["name"]))
+        else:
+            cn = req.key.split("|")[0]  # stara otwarta strona może jeszcze przysłać 'produkt|rodzina'
+            if req.checked:
+                meals = load_meals(c, w["id"])
+                shop = shop_agg(c, w, meals)
+                for (k, fam), e in shop[0].items():
+                    if k == cn:  # każda rodzina jednostki produktu dostaje własny wpis z kupioną ilością
+                        label = " ".join(x for x in (*(show_qty(e["qty"], fam) if e["qty"] else ("", fam)), shop_name(cn)) if x)
+                        c.execute("INSERT OR REPLACE INTO checks(week_id, key, label, qty) VALUES(?,?,?,?)",
+                                  (w["id"], f"{cn}|{fam}", label, e["qty"]))
+            else:
+                for r in c.execute("SELECT key FROM checks WHERE week_id=?", (w["id"],)).fetchall():
+                    if r["key"].split("|")[0] == cn and "|" in r["key"]:
+                        c.execute("DELETE FROM checks WHERE week_id=? AND key=?", (w["id"], r["key"]))
+    return build_state(w["id"], meals, shop)
 
 
 class DismissReq(BaseModel):
@@ -1528,8 +1750,9 @@ def shop_dismiss(req: DismissReq):
 def shop_text(lang: str = "no", week: int | None = None):
     with db() as c:
         w = current_week(c, week)
-        groups, _, _ = shopping(c, w)
-        trm = build_trmap([meal_row(r) for r in c.execute("SELECT * FROM meals WHERE week_id=?", (w["id"],))]).get(lang, {})
+        meals = load_meals(c, w["id"])
+        groups, _, _ = shopping(c, w, meals)
+        trm = build_trmap(meals).get(lang, {})
     lines = []
     for items in groups.values():
         for i in items:
