@@ -473,3 +473,19 @@ async function sync(){if(document.hidden||busyUI()||!S)return;
 setInterval(sync,15000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()});
 window.addEventListener('focus',sync);
+/* --- nowa wersja po wdrożeniu. Sam ?v= przy plikach działa dopiero, gdy przeglądarka pobierze świeży index.html,
+   a karta potrafi być otwarta tygodniami (i serwer nie zabrania trzymać index.html w pamięci podręcznej).
+   Przy starcie, po powrocie do aplikacji i co 10 minut porównujemy więc ?v= z index.html na serwerze z tymi,
+   z którymi strona się załadowała. Gdy się różnią, przeładowujemy stronę: raz na daną wersję, nie w trakcie
+   pisania ani zapisu. */
+const verOf=h=>(h.match(/\/static\/[\w.]+\?v=\w+/g)||[]).sort().join(' ');
+const myVer=verOf(document.documentElement.innerHTML);
+let verAt=0;
+async function checkVersion(){
+  if(document.hidden||busyUI()||custOpen||Date.now()-verAt<60000)return;verAt=Date.now();
+  try{const r=await fetch('/',{cache:'no-store'});if(!r.ok)return;const v=verOf(await r.text());
+    if(!v||v===myVer||sessionStorage.getItem('reloadedFor')===v)return;
+    sessionStorage.setItem('reloadedFor',v);location.reload()}catch(e){}}
+checkVersion();setInterval(checkVersion,600000);
+document.addEventListener('visibilitychange',checkVersion);
+window.addEventListener('focus',checkVersion);

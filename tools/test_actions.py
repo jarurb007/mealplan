@@ -63,7 +63,16 @@ async def main():
     ok(st["pending"] == 0 and herb is not None and "'" in herb["key"], f"przygotowanie: produkt z apostrofem na liście, klucz {herb and herb['key']!r}")
 
     A = Tab(9431, "act"); await A.open()
-    if st["week"]["id"] != st["current_id"]:
+    try:
+        await ui(A, wid, ids, herb, st["week"]["id"] != st["current_id"])
+    finally:
+        await A.close()   # także gdy test wyłoży się w połowie: przeglądarka nie może zostać na porcie
+    print("\nWYNIK:", "BŁĘDY" if T.bad else "OK")
+
+
+async def ui(A, wid, ids, herb, other_week):
+    await A.ev("setLang('en')")   # teksty sprawdzamy po angielsku, niezależnie od języka przeglądarki
+    if other_week:
         await A.ev(f"goWeek({wid})"); await asyncio.sleep(1.5)
     await A.ev(HOOK)
     Q = json.dumps  # nazwa jako literał JS
@@ -192,8 +201,17 @@ async def main():
        "„Anuluj” zdejmuje osierocony kręciołek")
 
     ok(not A.errors, f"brak błędów JS {A.errors}")
-    await A.close()
-    print("\nWYNIK:", "BŁĘDY" if T.bad else "OK")
+
+    # ---- 10) nowa wersja po wdrożeniu: otwarta karta sama się przeładowuje, ale tylko raz na wersję
+    newer = ("window.fetch=(f=>async(u,o)=>{if(u!=='/')return f(u,o);const r=await f(u,o);"
+             "return new Response((await r.text()).replace(/\\?v=\\w+/g,'?v=deadbeef'),{status:200})})(window.fetch);"
+             "window.__alive=1;verAt=0;checkVersion();1")
+    await A.ev("goTab('plan')"); await A.ev(newer); await asyncio.sleep(3)
+    ok(await A.ev("typeof window.__alive==='undefined' && (sessionStorage.getItem('reloadedFor')||'').includes('deadbeef')"),
+       "serwer ma nowszy index.html: karta przeładowuje się sama")
+    await A.ev(newer); await asyncio.sleep(2.5)
+    ok(await A.ev("window.__alive===1"), "ta sama wersja drugi raz: bez pętli przeładowań")
+    ok(not A.errors, f"brak błędów JS po przeładowaniu {A.errors}")
 
 
 asyncio.run(main())
