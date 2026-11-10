@@ -7,7 +7,7 @@ APP = T.APP
 
 
 def endpoints_match():
-    html = open(f"{APP}/static/index.html").read()
+    html = open(f"{APP}/static/app.js").read()
     py = open(f"{APP}/app.py").read()
     back = set()
     for m in re.finditer(r'@app\.(get|post|delete|put)\("([^"]+)"', py):
