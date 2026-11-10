@@ -6,7 +6,7 @@ from test_two_users import Tab, api, ok
 import test_two_users as T
 
 DB = os.environ.get("TEST_DB", "/home/jar/mealplan/tools/testdb/t10.db")
-HERB = "herbes d'Provence"
+HERB = "herbes d'provence"  # małe litery: lista zakupów pokazuje nazwę znormalizowaną
 EVIL = "<img src=x onerror=window.__xss=1> ');window.__xss=2;//"
 
 # Podsłuch fetch w stronie: lista wywołań + wymuszanie błędu lub „nowego” kształtu odpowiedzi /api/shop/check.
@@ -165,6 +165,14 @@ async def ui(A, wid, ids, herb, other_week):
        f"operacja z własnym komunikatem: ekran przygasa i wraca {r}")
 
     # ---- 8) szkic bez przepisu w zatwierdzonym tygodniu ma przycisk „Napisz przepis”
+    # backend pisze przepisy na zapas i przy zatwierdzeniu podstawia je także usuniętym dniom, więc stan zawieszony
+    # wymuszamy wprost w bazie (taki szkic może zostać np. po starszej wersji aplikacji)
+    db = sqlite3.connect(DB)
+    d6 = json.loads(db.execute("SELECT data FROM meals WHERE id=?", (ids[6],)).fetchone()[0])
+    d6.update({"draft": True, "ingredients": [], "steps": [], "ingredient_names": ["a", "b"]})
+    d6.pop("draft_error", None)
+    db.execute("UPDATE meals SET data=?, tr=NULL, pre=NULL WHERE id=?", (json.dumps(d6, ensure_ascii=False), ids[6]))
+    db.commit(); db.close()
     card = f"document.querySelector('.meal[data-id=\"{ids[6]}\"]')"
     await A.ev(f"Array.from({card}.querySelectorAll('button')).find(b=>b.textContent.includes('Restore')).click()"); await asyncio.sleep(1.2)
     m6 = meal(api(f"/api/state?week={wid}", "GET"), ids[6])

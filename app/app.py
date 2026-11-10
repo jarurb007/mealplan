@@ -766,7 +766,8 @@ init_db()  # tutaj, bo migracja odhaczeń korzysta z canon() i shop_qty()
 # ---------- API ----------
 @app.get("/")
 def index():
-    return FileResponse(BASE / "static" / "index.html")
+    # no-cache: przeglądarka zawsze pyta, czy index.html się zmienił (ETag), więc po wdrożeniu dostaje nowe ?v= plików
+    return FileResponse(BASE / "static" / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/state")
