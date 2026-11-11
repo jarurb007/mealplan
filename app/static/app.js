@@ -116,7 +116,7 @@ const ACT={
   mv2:d=>{closeSheet();mv2(+d.id,d.d)},removeDay:byId(removeDay),carry:d=>{closeSheet();carry(+d.id)},
   goTab:d=>goTab(d.t),goWeek:d=>goWeek(numOrNull(d.id)),confirmPlan:()=>confirmPlan(),delWeek:byId(delWeek),confirmWeek:byId(confirmWeek),
   findAlts:d=>findAlts(+d.id),swapHint:d=>findAlts(+d.id,d.h),closeAlt:byId(closeAlt),toggleAIng:d=>toggleAIng(d.k),choose:d=>choose(+d.id,+d.i),
-  togUses:d=>togUses(d.k),addX:()=>addX(),delX:byId(delX),dismissG:d=>dismissG(d.k),
+  togUses:d=>togUses(d.k),addX:()=>addX(),delX:d=>{closeSheet();delX(+d.id)},openX:d=>openSheet({kind:'xitem',id:+d.id}),setAisle:d=>{closeSheet();setAisle(+d.id,d.a)},dismissG:d=>dismissG(d.k),
   copyList:()=>copyList(),addP:()=>addP(),delP:byId(delP),addC:()=>addC(),delC:byId(delC),gen:()=>gen(),jbAdd:()=>jbAdd(),
   openBook:d=>openSheet({kind:'book',id:+d.id}),togglePick:d=>takeRec(+d.id,!bookPicked().has(+d.id)),useDay:d=>{sheet.day=+d.d;render()},
   useRec:d=>useRec(+d.id,+d.d),delRecAsk:byId(delRecAsk)},
@@ -159,6 +159,10 @@ function sheetBody(){
   if(sheet.kind==='confirm')return `${sheetHead(esc(sheet.title))}<p class="ptxt">${esc(sheet.text)}</p>
    <div class="row"><button class="b danger" data-click="confirmYes">${esc(sheet.yes)}</button><button class="b" data-click="closeSheet">${t('cancel')}</button></div>`;
   if(sheet.kind==='book')return bookSheet(S.recipes.find(r=>r.id===sheet.id));
+  if(sheet.kind==='xitem'){const x=extraItem(sheet.id);   // własny produkt: dział sklepu (poprawka zostaje zapamiętana) i usunięcie
+    return `${sheetHead(esc(x.name))}<p class="ptxt">${t('aisleQ')}</p>
+     ${AISLES.map(a=>`<button class="act" data-click="setAisle" data-id="${x.extra_id}" data-a="${esc(a)}" aria-pressed="${a===x.aisle}">${esc(t(a))}${a===x.aisle?' ✓':''}</button>`).join('')}
+     <div class="row"><button class="b danger" data-click="delX" data-id="${x.extra_id}">${t('del')}</button><button class="b" data-click="closeSheet">${t('close')}</button></div>`}
   if(sheet.kind==='text')return `${sheetHead(esc(sheet.title))}<textarea rows="12" readonly>${esc(sheet.text)}</textarea>`;
   const m=gm(sheet.id);
   return sheet.kind==='rec'?recSheet(m):mealSheet(m)}
@@ -172,7 +176,7 @@ function paint(el,html,force){
   if(aid){const e=document.getElementById(aid);if(e){e.focus();try{e.setSelectionRange(as,as)}catch(_){}}}
   el.scrollTop=top}
 function renderSheet(){const box=$('#sheet');
-  if(sheet&&(!S||((sheet.kind==='rec'||sheet.kind==='meal'||sheet.kind==='rate')&&!gm(sheet.id))||(sheet.kind==='book'&&!(S.recipes||[]).some(r=>r.id===sheet.id))))sheet=null;   // danie zniknęło (np. inny tydzień): arkusz nie ma czego pokazać
+  if(sheet&&(!S||((sheet.kind==='rec'||sheet.kind==='meal'||sheet.kind==='rate')&&!gm(sheet.id))||(sheet.kind==='xitem'&&!extraItem(sheet.id))||(sheet.kind==='book'&&!(S.recipes||[]).some(r=>r.id===sheet.id))))sheet=null;   // danie zniknęło (np. inny tydzień): arkusz nie ma czego pokazać
   box.classList.toggle('open',!!sheet);document.body.classList.toggle('modal',!!(sheet||cook));
   paint($('#panel'),sheet?sheetBody():'')}
 function menuHtml(){const dl=S.dislikes||[],dark=document.documentElement.getAttribute('data-theme')==='dark';
@@ -355,7 +359,7 @@ function usesHtml(i,k){const u=i.uses||[];if(!u.length)return '';
   return `<div class="use">${t('usedIn').replace('{n}',u.length)}: ${u.map(x=>esc(t('daysS')[x.day])).join(', ')}</div>`+(usesOpen.has(k)?u.map(x=>`<div class="use">${useLine(x,true)}</div>`).join(''):'')}
 function usesBtn(i,k){return (i.uses||[]).length>1?`<button type="button" class="mb" data-click="togUses" data-k="${esc(k)}" aria-label="${esc(t('usesA'))}" aria-expanded="${usesOpen.has(k)}">${usesOpen.has(k)?'▴':'▾'}</button>`:''}
 function headsTxt(i){if(!i.heads)return '';const w=t('heads');return ` <span class="use" style="text-decoration:none">(≈ ${i.heads} ${i.heads===1?w[0]:w[1]})</span>`}
-function shopRow(i){return `<label class="${i.checked?'c':''}"><input type="checkbox" ${i.checked?'checked':''} data-change="chk" data-k="${esc(i.key)}"><div class="li"><span>${i.topup?'<b>+ </b>':''}${esc(i.qty)} ${esc(i.unit)} ${esc(i.extra_id?i.name:nm(i.name))}</span>${headsTxt(i)}${i.topup?` <span class="tag" style="background:var(--badbg);color:var(--bad)">${t('buyMore')}</span>`:''}${usesHtml(i,i.key)}</div>${usesBtn(i,i.key)}${i.extra_id?`<button type="button" class="mb" data-click="delX" data-id="${i.extra_id}" aria-label="${esc(t('del'))}">✕</button>`:''}</label>`}
+function shopRow(i){return `<label class="${i.checked?'c':''}"><input type="checkbox" ${i.checked?'checked':''} data-change="chk" data-k="${esc(i.key)}"><div class="li"><span>${i.topup?'<b>+ </b>':''}${esc(i.qty)} ${esc(i.unit)} ${esc(i.extra_id?i.name:nm(i.name))}</span>${headsTxt(i)}${i.topup?` <span class="tag" style="background:var(--badbg);color:var(--bad)">${t('buyMore')}</span>`:''}${usesHtml(i,i.key)}</div>${usesBtn(i,i.key)}${i.extra_id?`<button type="button" class="mb" data-click="openX" data-id="${i.extra_id}" aria-label="${esc(t('more'))}">⋯</button>`:''}</label>`}
 /* --- zakupy: pasek postępu, w działach tylko to, co zostało do kupienia (z licznikiem), odhaczone zjeżdżają do zwiniętej
    sekcji „Kupione” na dole, pole dopisywania przy dolnej krawędzi. */
 function shop(){
@@ -541,6 +545,9 @@ async function delRec(id){set(await api('/api/recipes/'+id,'DELETE'))}
 async function useRec(id,d){const rc=(S.recipes||[]).find(x=>x.id===id);closeSheet();
   const r=await api(`/api/recipes/${id}/use`,'POST',W({day:d}));if(r){set(r);tab='plan';render();window.scrollTo(0,0);toast('✓ '+t('usedT')+(rc?rv(rc).name:''))}}
 async function addX(){const v=$('#xn').value;if(!v.trim())return;set(added('#xn',v,await api('/api/shop/extra','POST',W({name:v}))))}
+const AISLES=['Moje produkty','Frukt og grønt','Kjøtt og fisk','Meieri og kjøl','Tørrvarer og hermetikk','Brød og deig','Frys','Krydder og basis'];
+function extraItem(id){for(const [a,g] of Object.entries((S&&S.shopping)||{})){const i=g.find(x=>x.extra_id===id);if(i)return {...i,aisle:a}}return null}
+async function setAisle(id,a){set(await api(`/api/shop/extra/${id}/aisle`,'POST',{aisle:a}))}
 async function delX(id){set(await api('/api/shop/extra/'+id,'DELETE'))}
 async function dismissG(k){set(await api('/api/shop/dismiss','POST',W({key:k})))}
 /* Odhaczanie zakupów: pole zmienia się od razu, zapis idzie kolejką w tle (jedno zapytanie na kliknięcie).

@@ -24,6 +24,9 @@ if os.environ.get("FAKE_TR") == "1" and p.startswith("Przetłumacz poniższe dan
     out = {"meals": [{"i": m["i"], "name": "PL " + m["name"], "description": "PL " + m["description"],
                       "ingredients": ["PL " + x for x in m["ingredients"]], "steps": ["PL " + x for x in m["steps"]]}
                      for m in todo]}
+elif '"aisle_of"' in p:
+    kind = "aisle"
+    out = {"aisle_of": "Annet" if "zzannet" in p else "Frys"}
 elif '"options"' in p:
     kind = "options"
     # pierwsza propozycja celowo = danie z listy 👎 (serwer ma ją odfiltrować)

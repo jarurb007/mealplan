@@ -27,6 +27,11 @@ def ok(c, m):
 FG, MK, TH, BD, KB = "Frukt og grønt", "Meieri og kjøl", "Tørrvarer og hermetikk", "Brød og deig", "Krydder og basis"
 
 
+def mine(st):
+    """Pierwszy własny produkt na liście, w którymkolwiek dziale stoi."""
+    return [i for items in st["shopping"].values() for i in items if i.get("extra_id")][0]
+
+
 def ing(qty, unit, name, aisle):
     return {"name": name, "qty": qty, "unit": unit, "aisle": aisle, "from_pantry": False}
 
@@ -173,7 +178,7 @@ def synthetic():
        f"kalafior w g i na sztuki: jeden wiersz '500 g + 1 stk', kupione gramy -> dokup '{text(bl)}'")
     ok(st["gone"] == [{"key": "squash|stk", "label": "1 stk squash"}], f"'kupione, ale już nie w planie': {st['gone']}")
     ok(st["shop_alert"] == 5, f"licznik zmian na liście = 4 × dokup + 1 × nie w planie ({st['shop_alert']})")
-    ok(st["shopping"][app.MINE][0]["checked"], "własny produkt nadal odhaczony")
+    ok(mine(st)["checked"], "własny produkt nadal odhaczony")
 
     # ---- przepis pokazuje składnik tak, jak go napisano
     m = {x["name"]: x for x in st["meals"]}
@@ -212,9 +217,9 @@ def api_part(wid, mids):
         st = post("/api/shop/check", {"key": "løk|stk", "checked": True, "week": wid})
         ok(rows(st)["løk"]["checked"] and check_keys(wid)["løk|stk"] == 3, "klucz w starym formacie (otwarta stara strona) też działa; dokup -> kupione")
         st = post("/api/shop/check", {"key": "x1", "checked": False, "week": wid})
-        ok(not st["shopping"][app.MINE][0]["checked"], "własny produkt: odznaczenie")
+        ok(not mine(st)["checked"], "własny produkt: odznaczenie")
         st = post("/api/shop/check", {"key": "x1", "checked": True, "week": wid})
-        ok(st["shopping"][app.MINE][0]["checked"], "własny produkt: odhaczenie")
+        ok(mine(st)["checked"], "własny produkt: odhaczenie")
         st = post("/api/shop/check", {"key": "nie-ma-takiego", "checked": True, "week": wid})
         ok("shopping" in st and "nie-ma-takiego|" not in "".join(check_keys(wid)), "nieznany klucz niczego nie zapisuje")
 
@@ -313,9 +318,9 @@ def real_copies():
             ings = [i for d in raw if not d.get("owned") for i in d.get("ingredients", [])]
             old = {old_key(i) for i in ings}
             products = {app.canon(i["name"], i.get("unit"), i.get("aisle")) for i in ings}
-            new = [i for g, items in st["shopping"].items() if g != app.MINE for i in items] + st["have"]
+            new = [i for g, items in st["shopping"].items() for i in items if not i.get("extra_id")] + st["have"]
             keys = {i["key"] for i in new}
-            names = [i["name"] for g, items in st["shopping"].items() if g != app.MINE for i in items]
+            names = [i["name"] for g, items in st["shopping"].items() for i in items if not i.get("extra_id")]
             if sig not in seen:
                 seen.add(sig)
                 print(f"  {os.path.basename(f)[-14:]} tydzień {w['start']}: {len(old)} wierszy przed zmianą -> {len(products)} po")
@@ -335,9 +340,56 @@ def real_copies():
     app.DB_PATH = f"{TMP}/t.db"
 
 
+def aisles_part(wid):
+    """Własne produkty trafiają do działów sklepu; nierozpoznane i chemia stoją na samej górze."""
+    import time
+    app.AISLE_LLM = False
+    with app.db() as c:
+        idx = app.aisle_history(c)
+        for name, want in (("Havre melk", "Meieri og kjøl"), ("Mleko", "Meieri og kjøl"), ("mleko owsiane", "Meieri og kjøl"),
+                           ("Brød", "Brød og deig"), ("chleb tostowy", "Brød og deig"), ("Bananer", "Frukt og grønt"),
+                           ("pomidory", "Frukt og grønt"), ("Kyllingfilet", "Kjøtt og fisk"), ("tunfisk", "Tørrvarer og hermetikk"),
+                           ("potetgull", "Tørrvarer og hermetikk"), ("Grandiosa", "Frys"), ("lody", "Frys"),
+                           ("Toalettpapir", app.MINE), ("pasta do zębów", app.MINE), ("płyn do naczyń", app.MINE),
+                           ("makaron", "Tørrvarer og hermetikk"), ("ketchup", "Krydder og basis"), ("qwertyx", None)):
+            got = app.guess_aisle(c, name, idx)
+            ok(got == want, f"dział: {name} -> {want} (jest {got})")
+        known = next((k for k in idx), None)
+        ok(known is not None and app.guess_aisle(c, known.upper(), idx) == idx[known], "dział z historii składników dań")
+    with TestClient(app.app) as cl:
+        def where(st, name):
+            return next((g for g, items in st["shopping"].items() for i in items if i.get("extra_id") and i["name"] == name), None)
+        st = cl.post("/api/shop/extra", json={"name": "Skummet melk", "week": wid}).json()
+        ok(where(st, "Skummet melk") == "Meieri og kjøl", "dopisany produkt stoi w swoim dziale")
+        st = cl.post("/api/shop/extra", json={"name": "qwertyx", "week": wid}).json()
+        ok(where(st, "qwertyx") == app.MINE and list(st["shopping"])[0] == app.MINE, "nierozpoznany produkt: „Moje produkty” na samej górze")
+        eid = next(i["extra_id"] for i in st["shopping"][app.MINE] if i["name"] == "qwertyx")
+        st = cl.post(f"/api/shop/extra/{eid}/aisle", json={"aisle": "Frys"}).json()
+        ok(where(st, "qwertyx") == "Frys", "ręczna zmiana działu")
+        ok(cl.post(f"/api/shop/extra/{eid}/aisle", json={"aisle": "Nie ma"}).status_code == 400, "nieznany dział odrzucony")
+        cl.delete(f"/api/shop/extra/{eid}")
+        st = cl.post("/api/shop/extra", json={"name": "QWERTYX", "week": wid}).json()
+        ok(where(st, "QWERTYX") == "Frys", "poprawka zapamiętana dla tej samej nazwy")
+        # model w tle (atrapa): odpowiedź trafia do wiersza i do pamięci
+        app.AISLE_LLM = True
+        os.environ["PATH"] = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fakebin") + os.pathsep + os.environ["PATH"]
+        os.environ["FAKE_DELAY"] = "0"
+        cl.post("/api/shop/extra", json={"name": "xyzzyq", "week": wid})
+        cl.post("/api/shop/extra", json={"name": "zzannet xq", "week": wid})
+        for _ in range(40):
+            st = cl.get(f"/api/state?week={wid}").json()
+            if where(st, "xyzzyq") == "Frys":
+                break
+            time.sleep(0.25)
+        ok(where(st, "xyzzyq") == "Frys", "model w tle przypisał dział")
+        ok(where(st, "zzannet xq") == app.MINE, "model: bez działu -> zostaje na górze")
+        app.AISLE_LLM = False
+
+
 try:
     wid, mids = synthetic()
     api_part(wid, mids)
+    aisles_part(wid)
     real_copies()
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
