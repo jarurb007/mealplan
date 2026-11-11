@@ -84,6 +84,11 @@ def init_db():
         CREATE TABLE IF NOT EXISTS aisle_memo(norm TEXT PRIMARY KEY, aisle TEXT);
         CREATE TABLE IF NOT EXISTS dislikes(id INTEGER PRIMARY KEY, name TEXT, norm TEXT UNIQUE, reason TEXT DEFAULT '',
                                             created TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS todo_lists(id INTEGER PRIMARY KEY, name TEXT, pos INTEGER DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS todo_items(id INTEGER PRIMARY KEY, list_id INTEGER, name TEXT, due TEXT,
+                                              pos INTEGER DEFAULT 0, done INTEGER DEFAULT 0, done_at TEXT);
+        CREATE TABLE IF NOT EXISTS todo_steps(id INTEGER PRIMARY KEY, item_id INTEGER, name TEXT,
+                                              pos INTEGER DEFAULT 0, done INTEGER DEFAULT 0);
         """)
 
     for table, col in (("meals", "tr TEXT"), ("meals", "servings INTEGER"),
@@ -930,9 +935,10 @@ def build_state(week=None, meals=None, shop=None):
         for x in c.execute("SELECT id, name, norm, reason FROM dislikes ORDER BY id DESC"):
             dislikes.append({"id": x["id"], "name": x["name"], "reason": x["reason"]})
             bad.add(x["norm"])
+        todo = todo_state(c)
         if not w:
             return {"week": None, "meals": [], "pantry": pantry, "carry": carry, "cravings": cravings,
-                    "recipes": recipes, "weeks": [], "current_id": None, "dislikes": dislikes,
+                    "recipes": recipes, "weeks": [], "current_id": None, "dislikes": dislikes, "todo": todo,
                     "servings_default": dflt,
                     "next_start": str(saturday_on_or_before(today))}
         start = date.fromisoformat(w["start"])
@@ -955,7 +961,7 @@ def build_state(week=None, meals=None, shop=None):
                 "week": {"id": w["id"], "start": w["start"], "end": str(start + timedelta(days=6)),
                          "confirmed": bool(w["confirmed"])},
                 "meals": meals, "pantry": pantry, "carry": carry, "cravings": cravings, "recipes": recipes,
-                "dislikes": dislikes,
+                "dislikes": dislikes, "todo": todo,
                 "servings_default": dflt,
                 "trmap": build_trmap(meals), "shopping": groups, "gone": gone,
                 "shop_alert": len(gone) + sum(1 for g in groups.values() for i in g if i.get("topup")),
@@ -2233,3 +2239,216 @@ def del_extra(eid: int):
         c.execute("DELETE FROM extras WHERE id=?", (eid,))
         c.execute("DELETE FROM checks WHERE key=?", (f"x{eid}",))
     return state()
+
+
+# ---------- listy rzeczy do zrobienia ----------
+# Kilka list, w każdej pozycje w kolejności ważności (pos). Pozycja może mieć kroki; po odhaczeniu ostatniego
+# przechodzi do zrobionych. Niezależne od tygodni, więc działają także bez planu obiadów.
+def todo_state(c) -> dict:
+    steps = {}
+    for r in c.execute("SELECT * FROM todo_steps ORDER BY pos, id"):
+        steps.setdefault(r["item_id"], []).append({"id": r["id"], "name": r["name"], "done": bool(r["done"])})
+    items = {}
+    for r in c.execute("SELECT * FROM todo_items ORDER BY done, CASE WHEN done THEN done_at END DESC, pos, id"):
+        items.setdefault(r["list_id"], []).append({"id": r["id"], "name": r["name"], "due": r["due"],
+                                                   "done": bool(r["done"]), "steps": steps.get(r["id"], [])})
+    return {"today": str(date.today()),
+            "lists": [{"id": r["id"], "name": r["name"], "items": items.get(r["id"], [])}
+                      for r in c.execute("SELECT * FROM todo_lists ORDER BY pos, id")]}
+
+
+def todo_reply(c) -> dict:
+    return {"todo": todo_state(c)}
+
+
+def todo_name(raw: str | None) -> str:
+    name = " ".join((raw or "").split())[:200]
+    if not name:
+        raise HTTPException(400, "pusta nazwa")
+    return name
+
+
+def todo_item(c, iid: int):
+    r = c.execute("SELECT * FROM todo_items WHERE id=?", (iid,)).fetchone()
+    if not r:
+        raise HTTPException(404, "nie ma takiej pozycji")
+    return r
+
+
+def todo_end(c, table: str, col: str, val) -> int:
+    """Następne wolne miejsce na końcu listy (pozycji w liście albo kroków w pozycji)."""
+    return c.execute(f"SELECT COALESCE(MAX(pos), 0) + 1 FROM {table} WHERE {col}=?", (val,)).fetchone()[0]
+
+
+def todo_set_done(c, iid: int, done: bool):
+    """Zrobiona pozycja pamięta, kiedy ją odhaczono (kolejność w „Zrobione”); przywrócona wraca na koniec listy."""
+    r = todo_item(c, iid)
+    if bool(r["done"]) == done:
+        return
+    if done:
+        c.execute("UPDATE todo_items SET done=1, done_at=? WHERE id=?", (datetime.now().isoformat(timespec="seconds"), iid))
+    else:
+        c.execute("UPDATE todo_items SET done=0, done_at=NULL, pos=? WHERE id=?",
+                  (todo_end(c, "todo_items", "list_id", r["list_id"]), iid))
+
+
+def todo_sync_steps(c, iid: int):
+    """Pozycja z krokami jest zrobiona dokładnie wtedy, gdy zrobione są wszystkie jej kroki."""
+    st = [r["done"] for r in c.execute("SELECT done FROM todo_steps WHERE item_id=?", (iid,))]
+    if st:
+        todo_set_done(c, iid, all(st))
+
+
+class TodoListReq(BaseModel):
+    name: str
+
+
+@app.post("/api/todo/list")
+def todo_list_add(req: TodoListReq):
+    name = todo_name(req.name)
+    with db() as c:
+        pos = c.execute("SELECT COALESCE(MAX(pos), 0) + 1 FROM todo_lists").fetchone()[0]
+        lid = c.execute("INSERT INTO todo_lists(name, pos) VALUES(?,?)", (name, pos)).lastrowid
+        return {**todo_reply(c), "list": lid}
+
+
+@app.post("/api/todo/list/{lid}")
+def todo_list_rename(lid: int, req: TodoListReq):
+    name = todo_name(req.name)
+    with db() as c:
+        if not c.execute("UPDATE todo_lists SET name=? WHERE id=?", (name, lid)).rowcount:
+            raise HTTPException(404, "nie ma takiej listy")
+        return todo_reply(c)
+
+
+@app.delete("/api/todo/list/{lid}")
+def todo_list_del(lid: int):
+    with db() as c:
+        c.execute("DELETE FROM todo_steps WHERE item_id IN (SELECT id FROM todo_items WHERE list_id=?)", (lid,))
+        c.execute("DELETE FROM todo_items WHERE list_id=?", (lid,))
+        c.execute("DELETE FROM todo_lists WHERE id=?", (lid,))
+        return todo_reply(c)
+
+
+class TodoAddReq(BaseModel):
+    list: int
+    name: str
+
+
+@app.post("/api/todo/item")
+def todo_item_add(req: TodoAddReq):
+    """Nowa pozycja trafia na koniec listy, żeby nie wpychała się przed ważniejsze."""
+    name = todo_name(req.name)
+    with db() as c:
+        if not c.execute("SELECT 1 FROM todo_lists WHERE id=?", (req.list,)).fetchone():
+            raise HTTPException(404, "nie ma takiej listy")
+        iid = c.execute("INSERT INTO todo_items(list_id, name, pos) VALUES(?,?,?)",
+                        (req.list, name, todo_end(c, "todo_items", "list_id", req.list))).lastrowid
+        return {**todo_reply(c), "item": iid}
+
+
+class TodoItemReq(BaseModel):
+    """Pola bez wartości zostają bez zmian. due: 'RRRR-MM-DD' albo '' (bez terminu)."""
+    name: str | None = None
+    due: str | None = None
+    done: bool | None = None
+    list: int | None = None
+
+
+@app.post("/api/todo/item/{iid}")
+def todo_item_set(iid: int, req: TodoItemReq):
+    with db() as c:
+        r = todo_item(c, iid)
+        if req.name is not None:
+            c.execute("UPDATE todo_items SET name=? WHERE id=?", (todo_name(req.name), iid))
+        if req.due is not None:
+            if req.due:
+                try:
+                    date.fromisoformat(req.due)
+                except ValueError:
+                    raise HTTPException(400, "zła data")
+            c.execute("UPDATE todo_items SET due=? WHERE id=?", (req.due or None, iid))
+        if req.list is not None and req.list != r["list_id"]:
+            if not c.execute("SELECT 1 FROM todo_lists WHERE id=?", (req.list,)).fetchone():
+                raise HTTPException(404, "nie ma takiej listy")
+            c.execute("UPDATE todo_items SET list_id=?, pos=? WHERE id=?",
+                      (req.list, todo_end(c, "todo_items", "list_id", req.list), iid))
+        if req.done is not None:
+            # kroki idą w parze z pozycją: zrobiona ma wszystkie odhaczone, przywrócona dostaje z powrotem ostatni krok
+            if req.done:
+                c.execute("UPDATE todo_steps SET done=1 WHERE item_id=?", (iid,))
+            elif r["done"]:
+                c.execute("UPDATE todo_steps SET done=0 WHERE id=(SELECT id FROM todo_steps WHERE item_id=? "
+                          "ORDER BY pos DESC, id DESC LIMIT 1)", (iid,))
+            todo_set_done(c, iid, req.done)
+        return todo_reply(c)
+
+
+class TodoMoveReq(BaseModel):
+    index: int
+
+
+@app.post("/api/todo/item/{iid}/move")
+def todo_item_move(iid: int, req: TodoMoveReq):
+    """Przestaw pozycję na miejsce index (od 0) wśród niezrobionych pozycji jej listy."""
+    with db() as c:
+        r = todo_item(c, iid)
+        ids = [x["id"] for x in c.execute("SELECT id FROM todo_items WHERE list_id=? AND done=0 ORDER BY pos, id",
+                                          (r["list_id"],)) if x["id"] != iid]
+        if not r["done"]:
+            ids.insert(max(0, min(req.index, len(ids))), iid)
+        for n, x in enumerate(ids, 1):
+            c.execute("UPDATE todo_items SET pos=? WHERE id=?", (n, x))
+        return todo_reply(c)
+
+
+@app.delete("/api/todo/item/{iid}")
+def todo_item_del(iid: int):
+    with db() as c:
+        c.execute("DELETE FROM todo_steps WHERE item_id=?", (iid,))
+        c.execute("DELETE FROM todo_items WHERE id=?", (iid,))
+        return todo_reply(c)
+
+
+class TodoStepAddReq(BaseModel):
+    name: str
+
+
+@app.post("/api/todo/item/{iid}/step")
+def todo_step_add(iid: int, req: TodoStepAddReq):
+    name = todo_name(req.name)
+    with db() as c:
+        todo_item(c, iid)
+        c.execute("INSERT INTO todo_steps(item_id, name, pos) VALUES(?,?,?)",
+                  (iid, name, todo_end(c, "todo_steps", "item_id", iid)))
+        todo_sync_steps(c, iid)  # nowy krok w zrobionej pozycji otwiera ją z powrotem
+        return todo_reply(c)
+
+
+class TodoStepReq(BaseModel):
+    name: str | None = None
+    done: bool | None = None
+
+
+@app.post("/api/todo/step/{sid}")
+def todo_step_set(sid: int, req: TodoStepReq):
+    with db() as c:
+        r = c.execute("SELECT item_id FROM todo_steps WHERE id=?", (sid,)).fetchone()
+        if not r:
+            raise HTTPException(404, "nie ma takiego kroku")
+        if req.name is not None:
+            c.execute("UPDATE todo_steps SET name=? WHERE id=?", (todo_name(req.name), sid))
+        if req.done is not None:
+            c.execute("UPDATE todo_steps SET done=? WHERE id=?", (int(req.done), sid))
+            todo_sync_steps(c, r["item_id"])
+        return todo_reply(c)
+
+
+@app.delete("/api/todo/step/{sid}")
+def todo_step_del(sid: int):
+    with db() as c:
+        r = c.execute("SELECT item_id FROM todo_steps WHERE id=?", (sid,)).fetchone()
+        c.execute("DELETE FROM todo_steps WHERE id=?", (sid,))
+        if r:
+            todo_sync_steps(c, r["item_id"])
+        return todo_reply(c)

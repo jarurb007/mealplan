@@ -114,7 +114,7 @@ async def week_view(A, wid, st):
                    "title:document.getElementById('range').textContent,weekbar:!!document.getElementById('weekbar')}})()")
     ok(g["hdr"] <= 56 and not g["weekbar"], f"nagłówek w jednej linii ({g['hdr']} px), bez paska chipów tygodni")
     ok("Uke" in g["title"] and "–" in g["title"], f"nagłówek pokazuje tydzień i zakres dat: '{g['title']}'")
-    ok(g["navBottom"] == g["ih"] and g["tabs"] == 4, f"zakładki na dolnym pasku ({g['tabs']})")
+    ok(g["navBottom"] == g["ih"] and g["tabs"] == 5, f"zakładki na dolnym pasku ({g['tabs']})")
     left = sum(1 for v in st["shopping"].values() for i in v if not i["checked"])
     ok(await A.ev("document.getElementById('n_cnt').textContent") == str(left), f"przy zakładce zakupów licznik pozycji do kupienia ({left})")
     # ---- cały tydzień na jednym ekranie
@@ -242,7 +242,7 @@ async def recipes_tab(A, wid):
     st = api(f"/api/state?week={wid}", "GET")
     recs = st["recipes"]
     await A.ev("sync()"); await asyncio.sleep(1)
-    ok(await A.ev("document.querySelectorAll('nav button').length") == 4, "czwarta zakładka na dolnym pasku")
+    ok(await A.ev("document.querySelectorAll('nav button').length") == 5, "pięć zakładek na dolnym pasku (Przepisy czwarta)")
     await A.ev("document.getElementById('n_book').click()"); await asyncio.sleep(0.5)
     g = await A.ev("[document.getElementById('range').textContent,document.querySelectorAll('#blist .brow').length,!!document.getElementById('bq'),"
                    "!!document.querySelector('#main [data-click=toggleCust]'),document.getElementById('wkPrev').hidden]")
