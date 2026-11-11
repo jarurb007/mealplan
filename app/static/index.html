@@ -6,7 +6,7 @@
 <script>(function(){var s=localStorage.getItem('theme');var d=s?s==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
 if(d)document.documentElement.setAttribute('data-theme','dark')})()</script>
 <!-- ?v= to skrót treści pliku. Po każdej zmianie css/js: python3 tools/test_static.py --fix (inaczej przeglądarki trzymają starą wersję) -->
-<link rel="stylesheet" href="/static/app.css?v=60ef2bcf">
+<link rel="stylesheet" href="/static/app.css?v=6b9eb9d6">
 </head><body>
 <header><button class="hb" id="wkPrev" data-click="weekStep" data-d="-1">‹</button><div id="range"></div><button class="hb" id="wkNext" data-click="weekStep" data-d="1">›</button><button class="hb" id="gear" data-click="openMenu">⋯</button></header>
 <main id="main"></main>
@@ -14,5 +14,5 @@ if(d)document.documentElement.setAttribute('data-theme','dark')})()</script>
 <div id="sheet"><div class="backdrop" data-click="closeSheet"></div><div class="panel" id="panel" role="dialog" aria-modal="true"></div></div>
 <div id="toast"></div><div id="busybar"></div><div id="jobbar"></div><div id="trbar"></div>
 <script src="/static/i18n.js?v=f25616a6"></script>
-<script src="/static/app.js?v=dcfaec05"></script>
+<script src="/static/app.js?v=c1b90b49"></script>
 </body></html>

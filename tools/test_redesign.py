@@ -46,6 +46,34 @@ def center(sel):
 
 OPEN = "document.getElementById('sheet').classList.contains('open')"
 
+# Audyt ekranu: kontrast tekstu z tłem (WCAG: 4,5:1, duży tekst 3:1), rozmiar celów dotyku (44 px) i elementy z obniżonym kryciem.
+AUDIT = r"""
+window.__audit=()=>{
+ const P=c=>{const m=c.match(/[\d.]+/g).map(Number);return {r:m[0],g:m[1],b:m[2],a:m.length>3?m[3]:1}};
+ const over=(f,b)=>({r:f.r*f.a+b.r*(1-f.a),g:f.g*f.a+b.g*(1-f.a),b:f.b*f.a+b.b*(1-f.a),a:1});
+ const lum=c=>{const f=v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)};return .2126*f(c.r)+.7152*f(c.g)+.0722*f(c.b)};
+ const bgOf=el=>{const st=[];for(let e=el;e;e=e.parentElement){const c=P(getComputedStyle(e).backgroundColor);if(c.a>0){st.push(c);if(c.a>=1)break}}
+   let b={r:255,g:255,b:255,a:1};for(const c of st.reverse())b=over(c,b);return b};
+ const vis=el=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>0&&r.height>0&&s.visibility!=='hidden'};
+ const out={contrast:[],targets:[],faded:[]},seen=new Set();
+ const tw=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+ for(let n;n=tw.nextNode();){const tx=n.nodeValue.trim();if(!/[\p{L}\p{N}]/u.test(tx))continue;const el=n.parentElement;
+   if(!vis(el)||el.closest('[disabled],script,style'))continue;
+   const s=getComputedStyle(el);let op=1;for(let e=el;e;e=e.parentElement)op*=+getComputedStyle(e).opacity;
+   const bg=bgOf(el),f0=P(s.color),fg=over({...f0,a:f0.a*op},bg);
+   const ratio=(Math.max(lum(fg),lum(bg))+.05)/(Math.min(lum(fg),lum(bg))+.05);
+   const px=parseFloat(s.fontSize),big=px>=24||(px>=18.66&&+s.fontWeight>=700);
+   const key=(el.className||el.tagName)+'|'+s.color+'|'+ratio.toFixed(1);
+   if(ratio<(big?3:4.5)&&!seen.has(key)){seen.add(key);out.contrast.push(`„${tx.slice(0,22)}” ${ratio.toFixed(2)} <${el.tagName.toLowerCase()} class=${el.className}>`)}}
+ for(const el of document.querySelectorAll('button,a[href],input,select,textarea,summary,label,[data-click]')){if(!vis(el)||el.disabled)continue;
+   if(el.matches('input')&&el.closest('label'))continue;   // celem dotyku jest cała etykieta
+   const r=el.getBoundingClientRect();
+   if(r.width<43.5||r.height<43.5)out.targets.push(`<${el.tagName.toLowerCase()} class=${el.className} ${el.dataset.click||el.id||''}> ${Math.round(r.width)}×${Math.round(r.height)} „${el.textContent.trim().slice(0,14)}”`)}
+ for(const el of document.querySelectorAll('main *,#panel *,nav *,header *')){if(!vis(el)||el.closest('[disabled]'))continue;
+   if(+getComputedStyle(el).opacity<1&&getComputedStyle(el).animationName==='none')out.faded.push(`<${el.tagName.toLowerCase()} class=${el.className}> ${getComputedStyle(el).opacity}`)}
+ return out};1
+"""
+
 
 async def prepare():
     j = api("/api/week/generate", body={})
@@ -215,6 +243,40 @@ async def touch_and_drag(A, wid):
     ok(nm[6] == a["name"] and nm[5] == b["name"] and not await A.ev(OPEN), f"przeciągnięcie palcem za datę zamienia dni 5 <-> 6 ({nm[5]} / {nm[6]})")
 
 
+async def audit(A, wid):
+    st = api(f"/api/state?week={wid}", "GET")
+    api("/api/pantry", body={"name": "aubergine"}); api("/api/cravings", body={"text": "suppe"})
+    api(f"/api/meal/{st['meals'][2]['id']}/favorite")
+    api(f"/api/meal/{st['meals'][0]['id']}/status", body={"status": "removed"})
+    api(f"/api/meal/{st['meals'][1]['id']}/status", body={"status": "done"})
+    await A.ev("sync()"); await asyncio.sleep(1.2)
+    await A.ev(AUDIT)
+    mid = st["meals"][5]["id"]
+    gif = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
+    screens = [("tydzień", "closeSheet();goTab('plan')"), ("menu", "openSheet({kind:'menu'})"), ("arkusz akcji", f"openSheet({{kind:'meal',id:{mid}}})"),
+               ("pole 👎", "document.querySelector('#panel [data-click=dislikeAsk]').click()"), ("usunięty dzień", f"openSheet({{kind:'meal',id:{st['meals'][0]['id']}}})"),
+               ("przepis", f"openSheet({{kind:'rec',id:{mid}}})"), ("szukanie zamiany", f"openSheet({{kind:'meal',id:{mid}}});findAlts({mid},'');1"),
+               ("propozycje", "new Promise(r=>setTimeout(r,4000))"), ("potwierdzenie", f"closeAlt({mid});delWeek({wid})"),
+               ("toast z Cofnij", "closeSheet();toast('Middagen er fjernet',{label:'Angre',fn:()=>0})"),
+               ("zakupy", "sec.bought=true;goTab('shop')"), ("planuj", "sec.pantry=sec.crav=sec.book=true;goTab('fridge')"),
+               ("własny przepis", f"custOpen=true;custImgs=['{gif}'];render()")]
+    bad = {"contrast": [], "targets": [], "faded": []}
+    for th in ("light", "dark"):
+        await A.ev(f"setTheme('{th}')")
+        for name, js in screens:
+            await A.ev(js); await asyncio.sleep(0.5)
+            r = await A.ev("__audit()")
+            for k in bad:
+                bad[k] += [f"{th}/{name}: {x}" for x in r[k]]
+    await A.ev("setTheme('light');custOpen=false;custImgs=[];closeSheet();goTab('plan')")
+    n = len(screens)
+    ok(not bad["contrast"], f"kontrast tekstu co najmniej 4,5:1 na {n} ekranach, jasny i ciemny motyw {bad['contrast'][:6]}")
+    ok(not bad["targets"], f"wszystkie elementy klikalne mają co najmniej 44×44 px {sorted(set(x.split(': ', 1)[1] for x in bad['targets']))[:8]}")
+    ok(not bad["faded"], f"żaden tekst ani ikona stanu nie ma obniżonego krycia {sorted(set(x.split(': ', 1)[1] for x in bad['faded']))[:6]}")
+    api(f"/api/meal/{st['meals'][0]['id']}/status", body={"status": "planned"})
+    await A.ev("sync()"); await asyncio.sleep(1)
+
+
 async def delete_week(A, wid):
     await A.ev("document.getElementById('gear').click()"); await asyncio.sleep(0.4)
     await shot(A, "menu")
@@ -241,6 +303,7 @@ async def main():
         await week_view(A, wid, st)
         await shopping(A, wid)
         await touch_and_drag(A, wid)
+        await audit(A, wid)
         await delete_week(A, wid)
         ok(not A.dialogs, f"żadnego okna systemowego prompt/confirm {A.dialogs}")
         ok(not A.errors, f"brak błędów JS {A.errors}")
