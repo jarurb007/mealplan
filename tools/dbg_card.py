@@ -1,5 +1,4 @@
 import asyncio, json, sys
-sys.path.insert(0, "/home/jar/mealplan/tools")
 from test_two_users import Tab, api
 
 async def main():

@@ -1,6 +1,7 @@
 import asyncio, base64, sys
-sys.path.insert(0, "/home/jar/mealplan/tools")
+import os
 from test_two_users import Tab, api
+TOOLS = os.path.dirname(os.path.abspath(__file__))  # ścieżki od położenia pliku: działa też w worktree
 
 async def main():
     st = api("/api/state", "GET")
@@ -13,7 +14,7 @@ async def main():
     await A.ev("document.querySelector('.slot[data-day=\"3\"]').scrollIntoView({block:'start'})")
     await asyncio.sleep(0.6)
     r = await A.cmd("Page.captureScreenshot", format="png")
-    open("/home/jar/mealplan/tools/removed_day.png", "wb").write(base64.b64decode(r["data"]))
+    open(f"{TOOLS}/removed_day.png", "wb").write(base64.b64decode(r["data"]))
     print("zapisano", A.errors)
     await A.close()
     api(f"/api/meal/{m['id']}/status", body={"status": "planned"})

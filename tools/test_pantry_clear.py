@@ -1,10 +1,10 @@
 """Lodówka ('Hva vil du bruke opp'): składnik znika z listy dopiero gdy jest użyty w zatwierdzonym planie."""
 import sqlite3, os, sys, time
-sys.path.insert(0, "/home/jar/mealplan/tools")
 from test_two_users import api, ok
 import test_two_users as T
+TOOLS = os.path.dirname(os.path.abspath(__file__))  # ścieżki od położenia pliku: działa też w worktree
 
-DB = os.environ.get("TEST_DB", "/home/jar/mealplan/tools/testdb/t10.db")
+DB = os.environ.get("TEST_DB", f"{TOOLS}/testdb/t10.db")
 
 
 def wait_job(jid):

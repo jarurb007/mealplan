@@ -1,8 +1,9 @@
-"""Test 👎: zapis, flaga, lista w ⚙, filtr w zamiennikach i w planie, prompt bez wykluczania kategorii, cofanie, ⭐<->👎, UI."""
+"""Test 👎: zapis, flaga, lista w ⚙, filtr w zamiennikach i w planie, prompt bez wykluczania kategorii, cofanie,
+👎 nie kasuje przepisu z książki, ⭐ zdejmuje 👎, UI."""
 import asyncio, json, os, sys, time
-sys.path.insert(0, "/home/jar/mealplan/tools")
 from test_two_users import Tab, api, ok
 import test_two_users as T
+TOOLS = os.path.dirname(os.path.abspath(__file__))  # ścieżki od położenia pliku: działa też w worktree
 
 LOG = os.getenv("FAKE_LOG", "/tmp/ukes-fake-prompts.log")
 
@@ -28,14 +29,14 @@ async def main():
     m2 = next(m for m in st["meals"] if m["name"] == "Szkic 2")
     ok(not m2["disliked"] and st["dislikes"] == [], "start: brak 👎")
 
-    # ⭐ najpierw, potem 👎 -> zdejmuje ⭐
+    # ⭐ najpierw, potem 👎 -> przepis zostaje w książce (👎 niczego po cichu nie kasuje)
     api(f"/api/meal/{m2['id']}/favorite")
     ok(any(r["name"] == "Szkic 2" for r in api(f"/api/state?week={wid}", "GET")["recipes"]), "⭐ zapisane")
     st = api(f"/api/meal/{m2['id']}/dislike", body={"reason": "za ostre"})
     m2s = next(m for m in st["meals"] if m["id"] == m2["id"])
     ok(m2s["disliked"] and [d["name"] for d in st["dislikes"]] == ["Szkic 2"] and st["dislikes"][0]["reason"] == "za ostre",
        "👎 zapisane z powodem, flaga na daniu")
-    ok(not any(r["name"] == "Szkic 2" for r in st["recipes"]), "👎 zdejmuje ⭐ z tego samego dania")
+    ok(any(r["name"] == "Szkic 2" for r in st["recipes"]) and m2s["fav"], "👎 nie usuwa przepisu z książki (danie nadal ⭐)")
 
     # zamienniki: atrapa zwraca 'Szkic 2' jako pierwszą propozycję -> ma wypaść
     open(LOG, "w").close()
@@ -63,7 +64,10 @@ async def main():
     api(f"/api/meal/{m2['id']}/dislike", body={"reason": ""})
     st = api(f"/api/meal/{m2['id']}/dislike", body={"reason": ""})
     ok(st["dislikes"] == [], "drugie kliknięcie 👎 cofa")
-    # ⭐ zdejmuje 👎
+    ok(any(r["name"] == "Szkic 2" for r in st["recipes"]), "po 👎 i cofnięciu przepis nadal jest w książce")
+    # ⭐ zdejmuje 👎 (danie spoza książki: najpierw świadomie zdejmujemy ⭐)
+    st = api(f"/api/meal/{m2['id']}/favorite")
+    ok(not any(r["name"] == "Szkic 2" for r in st["recipes"]), "⭐ kliknięte drugi raz usuwa przepis z książki (świadomie)")
     api(f"/api/meal/{m2['id']}/dislike", body={"reason": ""})
     st = api(f"/api/meal/{m2['id']}/favorite")
     ok(st["dislikes"] == [] and any(r["name"] == "Szkic 2" for r in st["recipes"]), "⭐ zdejmuje 👎 (nie może być naraz)")
@@ -73,51 +77,37 @@ async def main():
     A = Tab(9391, "dis"); await A.open()
     await A.ev(f"goWeek({wid})"); await asyncio.sleep(1.5)
     ok(await A.ev("!document.querySelector('[aria-label=like]')"), "👍 zniknął z kart")
-    ok(await A.ev("document.querySelectorAll('[aria-label=dislike]').length") == 7, "👎 na każdej z 7 kart")
-    # klik 👎 -> prompt (powód) -> confirm (zamienić?) = tak
-    seq = []
-
-    async def answer(T_, msg_to_reply):
-        pass
-    sel = f"document.querySelector('.meal[data-id=\"{m2['id']}\"] [aria-label=dislike]')"
-    # obsługa okien: prompt -> tekst, confirm -> tak
-    A.accept = True
-    orig_cmd = A.cmd
-
-    async def cmd_with_prompt(method, **params):
-        A.i += 1
-        await A.ws.send(json.dumps({"id": A.i, "method": method, "params": params}))
-        while True:
-            r = json.loads(await A.ws.recv())
-            if r.get("method") == "Runtime.exceptionThrown":
-                A.errors.append(r["params"]["exceptionDetails"].get("exception", {}).get("description", "?")[:150])
-            if r.get("method") == "Page.javascriptDialogOpening":
-                seq.append((r["params"]["type"], r["params"]["message"][:60]))
-                prm = {"accept": True}
-                if r["params"]["type"] == "prompt":
-                    prm["promptText"] = "dziecko nie je"
-                await A.ws.send(json.dumps({"id": 80000 + len(seq), "method": "Page.handleJavaScriptDialog", "params": prm}))
-            if r.get("id") == A.i:
-                return r.get("result", r)
-    A.cmd = cmd_with_prompt
-    await A.ev(f"{sel}.click()")
+    n = await A.ev("(()=>{let n=0;S.meals.forEach(m=>{openSheet({kind:'meal',id:m.id});if(document.querySelector('#panel [aria-label=dislike]'))n++});closeSheet();return n})()")
+    ok(n == 7, f"👎 w arkuszu akcji każdego z 7 dań ({n})")
+    # ⋯ w wierszu -> arkusz -> „Nie smakowało” -> pole powodu w arkuszu (bez okien systemowych)
+    mid = m2["id"]
+    sel = "document.querySelector('#panel [aria-label=dislike]')"
+    await A.ev(f"document.querySelector('.meal[data-id=\"{mid}\"] [data-click=sheetMeal]').click()"); await asyncio.sleep(0.4)
+    ok(await A.ev(f"{sel}.getAttribute('aria-pressed')") == "false", "arkusz dania otwarty, 👎 niezaznaczone")
+    await A.ev(f"{sel}.click()"); await asyncio.sleep(0.3)
+    ok(await A.ev(f"!!document.getElementById('why{mid}') && document.activeElement===document.getElementById('why{mid}')"), "„Nie smakowało” otwiera pole powodu w tym samym arkuszu")
+    await A.ev(f"document.getElementById('why{mid}').value='dziecko nie je';document.querySelector('#panel [data-click=dislikeSave]').click()")
     await asyncio.sleep(1.5)
-    await A.ev("1")  # dociągnij zaległe zdarzenia (okno confirm otwiera się dopiero po odpowiedzi serwera)
-    ok([x[0] for x in seq] == ["prompt", "confirm"], f"👎: pyta o powód, potem czy zamienić {seq}")
-    ok(await A.ev(f"{sel}.classList.contains('on')"), "👎 podświetlone na karcie")
-    ok(await A.ev(f"!!document.querySelector('#aw{m2['id']}')"), "po 'tak' otwiera się Zamień danie")
+    ok(not A.dialogs, f"👎 bez okien systemowych prompt/confirm {A.dialogs}")
+    st = api(f"/api/state?week={wid}", "GET")
+    ok([d.get("reason") for d in st["dislikes"]] == ["dziecko nie je"], f"powód zapisany na serwerze {st['dislikes']}")
+    ok(await A.ev(f"{sel}.getAttribute('aria-pressed')") == "true", "👎 zaznaczone w arkuszu")
+    ok(await A.ev("document.getElementById('sheet').classList.contains('open') && !!document.querySelector('#panel .swap [data-click=swapHint]')"),
+       "arkusz zostaje otwarty z podpowiedziami zamiany (można od razu zamienić danie)")
     await A.ev("document.getElementById('gear').click()"); await asyncio.sleep(0.4)
     gear = await A.ev("document.getElementById('gearbox').innerText")
-    ok("Szkic 2" in gear and "dziecko nie je" in gear, "lista 👎 w ⚙ z powodem")
+    ok("Szkic 2" in gear and "dziecko nie je" in gear, "lista 👎 w menu ⋯ z powodem")
     await A.ev("Array.from(document.querySelectorAll('#gearbox button')).pop().click()"); await asyncio.sleep(1)
-    ok(await A.ev(f"!{sel}.classList.contains('on')") and "Szkic 2" not in await A.ev("document.getElementById('gearbox').innerText"),
-       "✕ w ⚙ cofa 👎 i zdejmuje podświetlenie")
+    ok("Szkic 2" not in await A.ev("document.getElementById('gearbox').innerText") and api(f"/api/state?week={wid}", "GET")["dislikes"] == [],
+       "✕ w menu cofa 👎")
+    await A.ev(f"openSheet({{kind:'meal',id:{mid}}})"); await asyncio.sleep(0.3)
+    ok(await A.ev(f"{sel}.getAttribute('aria-pressed')") == "false", "i zdejmuje zaznaczenie w arkuszu dania")
     for th in ("light", "dark"):
-        await A.ev(f"localStorage.setItem('theme','{th}');applyTheme();window.scrollTo(0,0)")
+        await A.ev(f"setTheme('{th}');window.scrollTo(0,0)")
         await asyncio.sleep(0.3)
         import base64
         r = await A.cmd("Page.captureScreenshot", format="png")
-        open(f"/home/jar/mealplan/tools/shots/dislike_{th}.png", "wb").write(base64.b64decode(r["data"]))
+        open(f"{T.SHOTS}/dislike_{th}.png", "wb").write(base64.b64decode(r["data"]))
     ok(not A.errors, f"brak błędów JS {A.errors}")
     await A.close()
     print("\nWYNIK:", "BŁĘDY" if T.bad else "OK")

@@ -1,22 +1,50 @@
 #!/usr/bin/env python3
 """Atrapa `claude -p` do testów: czeka FAKE_DELAY s i zwraca deterministyczny JSON.
-FAKE_LOG=plik -> dopisuje tam pełny prompt (do sprawdzania, co dostaje model)."""
-import json, os, sys, time
+FAKE_LOG=plik -> dopisuje tam pełny prompt (do sprawdzania, co dostaje model).
+Dodatki, wyłączone, dopóki nie ustawi się zmiennej (stare testy ich nie widzą):
+FAKE_PLAN_FILE=plik -> jeśli plik istnieje, plan tygodnia ma nazwy dań z tego pliku (lista JSON) zamiast "Szkic 1..9".
+FAKE_TR=1 -> prompt tłumaczenia dostaje prawdziwą odpowiedź (każdy tekst z przedrostkiem "PL ").
+FAKE_TIMES=plik -> po każdym wywołaniu dopisuje wiersz "rodzaj początek koniec" (do liczenia równoległości).
+FAKE_FAIL_FILE=plik -> jeśli plik istnieje, a prompt zawiera jego treść, atrapa kończy się błędem (model zawiódł)."""
+import json, os, re, sys, time
+t0 = time.time()
 p = sys.stdin.read()
 if os.environ.get("FAKE_LOG"):
     with open(os.environ["FAKE_LOG"], "a") as f:
         f.write(p + "\n=====\n")
+fail_file = os.environ.get("FAKE_FAIL_FILE")
+if fail_file and os.path.exists(fail_file) and open(fail_file).read().strip() in p:
+    sys.exit("atrapa: zamówiony błąd modelu")
 time.sleep(float(os.environ.get("FAKE_DELAY", "2")))
 ing = ["a", "b", "c", "d", "e", "f"]
-if '"options"' in p:
+plan_file = os.environ.get("FAKE_PLAN_FILE")
+if os.environ.get("FAKE_TR") == "1" and p.startswith("Przetłumacz poniższe dania"):
+    kind = "tr"
+    todo = json.loads(re.search(r"^Dane: (.*)$", p, re.M).group(1))
+    out = {"meals": [{"i": m["i"], "name": "PL " + m["name"], "description": "PL " + m["description"],
+                      "ingredients": ["PL " + x for x in m["ingredients"]], "steps": ["PL " + x for x in m["steps"]]}
+                     for m in todo]}
+elif '"aisle_of"' in p:
+    kind = "aisle"
+    out = {"aisle_of": "Annet" if "zzannet" in p else "Frys"}
+elif '"options"' in p:
+    kind = "options"
     # pierwsza propozycja celowo = danie z listy 👎 (serwer ma ją odfiltrować)
     out = {"options": [{"name": "Szkic 2", "description": "zablokowane?", "is_fish": False, "ingredients": ing}] +
                       [{"name": f"Alt {i+1} testowy", "description": "opis testowy", "is_fish": False, "ingredients": ing} for i in range(3)]}
 elif '"meal": {' in p:
+    kind = "meal"
     out = {"meal": {"name": "Test", "time_min": 30, "description": "d", "is_fish": False,
                     "ingredients": [{"name": "gulrot", "qty": 2, "unit": "stk", "aisle": "Frukt og grønt", "from_pantry": False}],
                     "steps": ["krok 1", "krok 2"]}}
 else:
+    kind = "plan"
     # 9 propozycji (serwer prosi o 7+2), w tym "Szkic 2" - jeśli jest na liście 👎, ma wypaść
-    out = {"meals": [{"name": f"Szkic {i+1}", "description": "d", "is_fish": False, "ingredients": ing} for i in range(9)]}
+    names = [f"Szkic {i+1}" for i in range(9)]
+    if plan_file and os.path.exists(plan_file):
+        names = json.load(open(plan_file))
+    out = {"meals": [{"name": n, "description": "d", "is_fish": False, "ingredients": ing} for n in names]}
+if os.environ.get("FAKE_TIMES"):
+    with open(os.environ["FAKE_TIMES"], "a") as f:
+        f.write(f"{kind} {t0:.3f} {time.time():.3f}\n")
 print(json.dumps(out))
