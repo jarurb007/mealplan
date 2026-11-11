@@ -788,17 +788,17 @@ AISLE_WORDS = {
         apple banana orange lemon grape berries berry tomato cucumber lettuce carrot potato onion garlic broccoli
         cauliflower cabbage spinach mushroom avocado ginger fruit vegetable herbs""",
     "Kjøtt og fisk": """kjott kylling svin biff bacon skinke polse laks torsk fisk reker kalkun lam karbonade kotelett
-        salami leverpostei fiskeboller kjottboller kjottkaker fiskekaker
+        salami leverpostei postei gronnsakspostei palegg fiskeboller kjottboller kjottkaker fiskekaker
         mieso miesa miesn mielon kurcza wieprz wolow boczek boczk szynk kielbas parowk losos dorsz ryba ryby krewet indyk schab
         filet wedlin
         meat chicken pork beef ham sausage salmon fish shrimp turkey mince""",
     "Meieri og kjøl": """melk flote romme yoghurt jogurt ost hvitost gulost brunost kremost smor egg eggs kesam skyr
-        cottage fraiche margarin juice kefir
+        cottage fraiche margarin juice kefir joghurt salatost fetaost feta mozzarella parmesan cheddar
         mlek smietan ser sera serek twarog maslo masla maslank jajk jajek jaja sok
         milk cream cheese butter yogurt""",
     "Tørrvarer og hermetikk": """pasta spaghetti ris mel sukker havregryn musli cornflakes frokostblanding bonner
         linser kikerter hermetisk nudler kaffe te kakao notter rosin knekkebrod 
-        brus cola vann ol vin syltetoy honning peanott tunfisk kokosmelk
+        brus cola vann ol vin syltetoy honning peanott tunfisk kokosmelk makrell oliven
         makaron ryz ryzu maka maki cukier cukr platki fasol soczewic ciecierzyc puszk kawa kawy herbat 
         orzech rodzynk woda wody piwo wino dzem miod tunczyk kasza kaszy napoj
         rice flour sugar oats cereal beans lentils coffee tea nuts soda water
@@ -871,7 +871,8 @@ def guess_aisle(c, name, idx=None):
         return idx[f]
     words = f.split()
     for k, a in AISLE_KEYS:  # najdłuższy fragment wygrywa: 'potetgull' przed 'potet', 'tunfisk' przed 'fisk'
-        if k in words or (len(k) >= 4 and k in f):
+        # fragment liczy się na początku albo na końcu słowa ('laksefilet', 'havremelk'), nie w środku ('flakslodd')
+        if k in words or (len(k) >= 4 and (k in f if " " in k else any(w.startswith(k) or w.endswith(k) for w in words))):
             return a
     for w in (words[-1], words[0]):  # 'tine lettmelk', 'mleko owsiane': rdzeń bywa na końcu albo na początku
         if w in idx:
