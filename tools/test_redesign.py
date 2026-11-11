@@ -126,7 +126,7 @@ async def week_view(A, wid, st):
        f"cały tydzień (7 wierszy) widoczny bez przewijania na {g['iw']}×{g['ih']}: wiersze {w['top']:.0f}–{w['bottom']:.0f} px, pasek od {g['navTop']:.0f} px")
     overdue = sum(1 for m in st["meals"] if m.get("overdue"))
     ok(w["late"] == overdue and w["warn"] == 0, f"zaległe dania ({overdue}) są oznaczone w wierszach, bez ostrzeżeń nad listą")
-    ok(w["today"] == 1 and w["tr"] >= 3, "dzisiejszy dzień jest rozwinięty (przyciski pod nazwą)")
+    ok(w["today"] == 1 and w["tr"] >= 2, "dzisiejszy dzień jest rozwinięty (przyciski pod nazwą)")
     rows = await A.ev("[...document.querySelectorAll('.week .meal')].map(m=>[!!m.querySelector('.d'),!!m.querySelector('.name'),!!m.querySelector('[data-click=toggleDone]')])")
     ok(all(all(r) for r in rows), "każdy wiersz: data, nazwa dania i „zrobione”")
     await shot(A, "week")

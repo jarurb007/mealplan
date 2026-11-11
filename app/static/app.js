@@ -277,7 +277,7 @@ function schedulePoll(){if(pollT||!needPoll())return;pollT=setTimeout(async()=>{
     render();ready.forEach(attention);return}}catch(e){}render()},2500)}
 function ingList(names){return `<ul>${names.map(n=>`<li>${esc(n)}</li>`).join('')}</ul>`}
 /* --- tydzień: jeden wiersz na dzień (data, nazwa, kółko „zrobione”). Data jest uchwytem do przeciągania, dotknięcie
-   nazwy otwiera przepis, a rzadkie akcje są w arkuszu pod ⋯. Dzisiejszy dzień jest rozwinięty. */
+   nazwy otwiera przepis, a rzadkie akcje są w arkuszu pod ⋯. Dzisiejszy dzień jest rozwinięty i ma to samo kółko co reszta. */
 function mealState(m){   // dopisek pod nazwą, tylko gdy z daniem coś się dzieje
   if(m.loading||(m.alts&&m.alts.length===0))return '⏳ '+t('bSwap');
   if(m.alts&&m.alts.length)return t('readyT');
@@ -291,14 +291,15 @@ function mealCard(m){const v=mv(m),id=m.id,isT=m.date===S.today,done=m.status===
   if(m.status==='removed')return `<div class="meal off" data-id="${id}"><div class="dr">${d}
    <button class="nmb" data-click="sheetMeal" data-id="${id}"><span class="name">${t('dayOffS')}</span><span class="desc"><s>${esc(v.name)}</s></span></button>
    <button class="mb" data-click="st" data-id="${id}" data-s="planned" aria-label="${esc(t('restore'))}" title="${esc(t('restore'))}">${ic('undo')}</button></div></div>`;
-  const sub=[mealState(m),...(isT?[m.time_min?m.time_min+' min':'',m.servings_eff+' '+t('por'),m.is_fish?t('fish'):'']:[]),
+  let sub=[mealState(m),...(isT?[m.time_min?m.time_min+' min':'',m.servings_eff+' '+t('por'),m.is_fish?t('fish'):'']:[]),
     m.status==='skipped'?t('tSkip'):'',m.owned?t('tCarry'):''].filter(Boolean).map(esc).join(' · ').replace(/^⏳ /,ic('wait')+' ').replace(/^⚠ /,ic('warn')+' ');
+  if(isT&&done)sub=`<b>${esc(t('tDoneT'))}</b>`+(sub?' · '+sub:'');   // dziś: stan także słowem, nie tylko kółkiem
   const ck=`<button class="ck ${done?'on':''}" data-click="toggleDone" data-id="${id}" aria-pressed="${done}" aria-label="${esc(t('markDoneA'))}"></button>`;
   return `<div class="meal ${done?'done':''} ${m.overdue&&m.status==='planned'?'late':''}" data-id="${id}"><div class="dr">${d}
    <button class="nmb" data-click="openMeal" data-id="${id}"><span class="name">${esc(v.name)}</span>${sub?`<span class="desc">${sub}</span>`:''}</button>
-   ${isT?'':more+ck}</div>
-   ${isT?`<div class="tr">${m.draft?`<button class="b p" data-click="openMeal" data-id="${id}">${ic('book')} ${t('recipe')}</button>`:`<button class="b p" data-click="openCook" data-id="${id}">${ic('pot')} ${t('cookBtn')}</button>`}
-    <button class="b dn ${done?'on':''}" data-click="toggleDone" data-id="${id}" aria-pressed="${done}">${ic('done')} ${t('markDone').replace(' ✓','')}</button><span class="sp"></span>${more}</div>`:''}</div>`}
+   ${isT?ck:more+ck}</div>
+   ${isT?`<div class="tr">${m.draft?`<button class="b p" data-click="openMeal" data-id="${id}">${ic('book')} ${t('recipe')}</button>`:`<button class="b ${done?'':'p'}" data-click="openCook" data-id="${id}">${ic('pot')} ${t('cookBtn')}</button>`}
+    <span class="sp"></span>${more}</div>`:''}</div>`}
 function plan(){
   if(!S.week)return `<div class="card">${t('noplan')}<div class="row"><button class="b p" data-click="goTab" data-t="fridge">${t('goPlanner')}</button></div></div>`;
   let h='';
