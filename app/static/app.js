@@ -138,7 +138,8 @@ const numOrNull=v=>v===''||v==null?null:+v;
 const ACT={
  click:{
   foldSec:d=>foldSec(d.k),toggleCust:()=>toggleCust(),sendCust:()=>sendCust(),custCancel:()=>{custOpen=false;render()},rmImg:d=>rmImg(+d.i),
-  setDef:d=>setDef(+d.n),undislike:byId(undislike),weekStep:d=>weekStep(+d.d),
+  setDef:d=>setDef(+d.n),priceOn:d=>priceOn(d.on),priceMap:()=>priceMap(),priceItem:d=>{sheet={kind:'pitem',k:d.k};render()},
+  pricePick:d=>pricePick(d.k,d.e),priceSkip:d=>priceSkip(d.k),priceSearch:d=>priceSearch(d.k),undislike:byId(undislike),weekStep:d=>weekStep(+d.d),
   openMenu:()=>openSheet({kind:'menu'}),closeSheet:()=>closeSheet(),setLang:d=>setLang(d.l),setTheme:d=>setTheme(d.th),
   openCook:d=>openCook(d.rid?{rid:+d.rid}:{id:+d.id}),closeCook:()=>closeCook(),cookStep:d=>{cook.i+=+d.d;render();const b=$('#cook .cbody');if(b)b.scrollTop=0},
   cookIng:()=>{cook.ing=!cook.ing;render()},cookDone:()=>cookDone(),rateDislike:d=>{sheet={kind:'meal',id:+d.id,why:true};render()},
@@ -161,7 +162,7 @@ const ACT={
   tToList:d=>tToList(+d.id,+d.l),tRename:()=>tRename(),tRenameSave:byId(tRenameSave),tDelAsk:byId(tDelAsk)},
  change:{
   chk:(d,el)=>chk(d.k,el.checked),tDue:(d,el)=>tDue(+d.id,el.value),addImgs:(d,el)=>{addImgs(el.files);el.value=''}},
- enter:{offPost:()=>offPost(),addT:()=>addT(),tNewList:()=>tNewList(),tListSave:byId(tListSave),tStepAdd:byId(tStepAdd),tRenameSave:byId(tRenameSave),findAlts:d=>findAlts(+d.id),dislikeSave:byId(dislikeSave),addX:()=>addX(),addP:()=>addP(),addC:()=>addC(),jbAdd:()=>jbAdd()},
+ enter:{offPost:()=>offPost(),addT:()=>addT(),tNewList:()=>tNewList(),tListSave:byId(tListSave),tStepAdd:byId(tStepAdd),tRenameSave:byId(tRenameSave),findAlts:d=>findAlts(+d.id),dislikeSave:byId(dislikeSave),priceSearch:d=>priceSearch(d.k),addX:()=>addX(),addP:()=>addP(),addC:()=>addC(),jbAdd:()=>jbAdd()},
  input:{custText:(d,el)=>{custText=el.value},bookQ:(d,el)=>{bookQ=el.value;const b=$('#blist');if(b)b.innerHTML=bookList()}}};
 function dispatch(kind,e){
   const el=e.target&&e.target.closest?e.target.closest('[data-'+kind+']'):null;if(!el)return;
@@ -205,6 +206,8 @@ function sheetBody(){
   if(sheet.kind==='offers')return offersSheet();
   if(sheet.kind==='titem')return tItemSheet();
   if(sheet.kind==='tlist')return tListSheet();
+  if(sheet.kind==='pmap')return pmapSheet();
+  if(sheet.kind==='pitem')return pitemSheet();
   if(sheet.kind==='text')return `${sheetHead(esc(sheet.title))}<textarea rows="12" readonly>${esc(sheet.text)}</textarea>`;
   const m=gm(sheet.id);
   return sheet.kind==='rec'?recSheet(m):mealSheet(m)}
@@ -226,6 +229,7 @@ function menuHtml(){const dl=S.dislikes||[],dark=document.documentElement.getAtt
   <div class="mrow"><span>${t('langT')}</span><span class="seg">${['no','pl','en'].map(l=>`<button class="${l===lang?'on':''}" data-click="setLang" data-l="${l}">${l.toUpperCase()}</button>`).join('')}</span></div>
   <div class="mrow"><span>${t('themeT')}</span><span class="seg"><button class="${dark?'':'on'}" data-click="setTheme" data-th="light">${ic('sun')} ${t('thLight')}</button><button class="${dark?'on':''}" data-click="setTheme" data-th="dark">${ic('moon')} ${t('thDark')}</button></span></div>
   <div class="mrow"><span>${t('pDef')}</span><span class="stp"><button class="b" data-click="setDef" data-n="${S.servings_default-1}" aria-label="−">−</button><b>${S.servings_default}</b><button class="b" data-click="setDef" data-n="${S.servings_default+1}" aria-label="+">+</button></span></div>
+  ${priceMenu()}
   <div class="msec"><b>${ic('bad')} ${t('dislikesT')}</b> <span class="desc">${t('dislikesSub')}</span>
   ${dl.length?dl.map(d=>`<div class="mrow"><span>${esc(d.name)}${d.reason?` <i>– ${esc(d.reason)}</i>`:''}</span><button class="b" aria-label="${esc(t('restore'))}" data-click="undislike" data-id="${d.id}">${ic('x')}</button></div>`).join(''):`<div class="desc">${t('dislikesNone')}</div>`}</div></div>${offMenu()}
   ${S.week?`<button class="act danger" data-click="delWeek" data-id="${S.week.id}">${ic('del')} ${t('delWeek')} · ${t('wk')}${isoWk(S.week.start)}</button>`:''}`}
@@ -487,19 +491,57 @@ function delRecAsk(id){const r=(S.recipes||[]).find(x=>x.id===id);if(!r)return;
 function rv(r){const x=lang!=='no'&&r.tr&&r.tr[lang];return x?{name:x.name,description:x.description,ing:x.ingredients,steps:x.steps}:{name:r.name,description:r.description,ing:r.ingredients.map(i=>i.name),steps:r.steps}}
 let wizDraft=null,wizBusy=false;
 function latestWeek(){return (S.weeks||[]).reduce((a,w)=>!a||w.start>a.start?w:a,null)}
-async function wizSync(){const lw=latestWeek();
+let wizT=null;
+// force: pobierz szkic jeszcze raz (ceny dań dochodzą w tle, więc karta szkicu odświeża się, dopóki coś jest „w toku”)
+async function wizSync(force){const lw=latestWeek();
   if(!lw||lw.confirmed){if(wizDraft){wizDraft=null}return}
-  if(wizDraft&&wizDraft.id===lw.id||wizBusy)return;
+  if((!force&&wizDraft&&wizDraft.id===lw.id)||wizBusy)return;
   wizBusy=true;
   try{const r=await fetch('/api/state?week='+lw.id);if(r.ok){const d=await r.json();
-    wizDraft={id:lw.id,start:lw.start,end:lw.end,meals:d.meals.map(m=>({day:m.day,name:m.name,tr:m.tr}))};
+    wizDraft={id:lw.id,start:lw.start,end:lw.end,prices:d.prices,meals:d.meals.map(m=>({id:m.id,day:m.day,name:m.name,tr:m.tr}))};
     if(tab==='fridge'&&!drag)render()}}catch(e){}
-  wizBusy=false}
+  wizBusy=false;clearTimeout(wizT);
+  if(wizDraft&&wizDraft.prices&&wizDraft.prices.pending&&tab==='fridge')wizT=setTimeout(()=>{if(tab==='fridge')wizSync(true)},4000)}
+/* --- ceny orientacyjne (Kassalapp): tylko w szkicu planu. P = S.prices szkicu albo null (brak klucza, ceny wyłączone). */
+const krP=x=>(+x).toFixed(2).replace('.',',');
+function priceCell(P,id){const x=P&&P.meals[id];if(!x)return '';
+  if(x.pending)return `<span class="pr mu">${t('prWait')}</span>`;
+  if(x.few)return `<span class="pr mu">${t('prFew')}</span>`;
+  return `<span class="pr">≈ ${x.kr} kr</span>`}
+function priceSum(P){if(!P||!P.total)return '';
+  const miss=Object.values(P.meals).reduce((a,x)=>a+(x.missing||0),0);
+  return `<div class="wsum"><i>${t('prWeek')}</i><b>${P.counted?'≈ '+P.kr+' kr':'…'}</b></div>
+   <div class="desc wsub">${[t('prCnt').replace('{a}',P.counted).replace('{b}',P.total),P.pp?t('prPP').replace('{n}',P.pp):'',miss?t('prMiss').replace('{n}',miss):'',t('prApprox')].filter(Boolean).join(' · ')}</div>`}
+function priceMenu(){const p=S.price_cfg;if(!p)return '';
+  if(!p.key)return `<div class="mrow"><span>${t('prT')}<div class="desc">${t('prNoKey')}</div></span></div>`;
+  return `<div class="mrow"><span>${t('prT')}<div class="desc">${t('prHint')}</div></span><span class="seg"><button class="${p.on?'on':''}" data-click="priceOn" data-on="1">${t('prOn')}</button><button class="${p.on?'':'on'}" data-click="priceOn" data-on="">${t('prOff')}</button></span></div>`
+   +(p.on?`<div class="mrow"><span>${t('prMapT')}<div class="desc">${t('prMapN').replace('{a}',p.mapped).replace('{b}',p.total)}${p.check?' · '+t('prChk').replace('{n}',p.check):''}${p.refreshed?' · '+dm(p.refreshed):''}</div></span><button class="b" data-click="priceMap">${t('open')}</button></div>`:'')}
+let pmap=null;
+async function priceOn(on){set(await api('/api/prices/on','POST',{on:!!on}));wizSync(true)}
+async function priceMap(){try{const r=await fetch('/api/prices/map');pmap=(await r.json()).items}catch(e){pmap=[]}
+  sheet={kind:'pmap'};render()}
+function packTxt(x){return x.pack?(x.fam==='g'&&x.pack>=1000?(x.pack/1000)+' kg':x.fam==='ml'&&x.pack>=1000?(x.pack/1000)+' l':x.pack+' '+x.fam):''}
+function prodLine(x){return [krP(x.price)+' kr',packTxt(x),x.chain,x.pdate?dm(x.pdate):''].filter(Boolean).map(esc).join(' · ')}
+function pmapSheet(){const st={none:t('prNone'),auto:t('prAuto'),off:t('prSkip')};
+  return `${sheetHead(t('prMapT'))}<div class="desc">${t('prMapHint')}</div>`+((pmap||[]).length?pmap.map(x=>
+   `<button class="act" data-click="priceItem" data-k="${esc(x.canon)}"><span class="li"><b>${esc(nm(x.label))}</b><div class="desc">${x.ean&&x.source!=='off'?esc(x.name)+' · '+krP(x.price)+' kr':'–'}</div></span>${st[x.source]?`<span class="tag">${st[x.source]}</span>`:''}</button>`).join('')
+   :`<p class="ptxt">${t('prMapNone')}</p>`)}
+function pitemSheet(){const x=(pmap||[]).find(i=>i.canon===sheet.k);if(!x)return pmapSheet();
+  return `${sheetHead(esc(nm(x.label))+': '+t('prWhich'))}<div class="desc">${t('prRemember')}</div>`
+   +(x.cands.length?x.cands.map(c=>{const on=x.source!=='off'&&c.ean===x.ean;
+     return `<button class="act pick" data-click="pricePick" data-k="${esc(x.canon)}" data-e="${esc(c.ean)}" aria-pressed="${on}"><i class="rb ${on?'on':''}"></i><span class="li">${esc(c.name)}<div class="desc">${prodLine(c)}</div></span></button>`}).join('')
+    :`<p class="ptxt">${t('prNoCand')}</p>`)
+   +`<div class="inrow"><input id="pq" placeholder="${esc(t('prSearchPh'))}" data-enter="priceSearch" data-k="${esc(x.canon)}"><button class="b" data-click="priceSearch" data-k="${esc(x.canon)}">${t('search')}</button></div>
+   <div class="row"><button class="b" data-click="priceMap">${ic('chl')} ${t('back')}</button><span class="sp"></span><button class="b" data-click="priceSkip" data-k="${esc(x.canon)}" aria-pressed="${x.source==='off'}">${t('prSkipBtn')}${x.source==='off'?' ✓':''}</button></div>`}
+async function priceSave(body,path){const r=await api(path||'/api/prices/map','POST',body);if(r&&r.items){pmap=r.items;render();refreshQuiet();wizSync(true)}}
+function pricePick(k,e){priceSave({canon:k,ean:e})}
+function priceSkip(k){priceSave({canon:k,off:true})}
+function priceSearch(k){const q=($('#pq')||{}).value||'';if(q.trim().length<2)return;priceSave({canon:k,q:q.trim()},'/api/prices/search')}
 function shouldOpenWizard(s){if(!s)return false;
   const future=(s.weeks||[]).some(w=>w.start>s.today);
   const days=Math.round((new Date(s.next_start+'T12:00:00')-new Date((s.today||s.next_start)+'T12:00:00'))/864e5);
   return !future&&days<=2}
-function goTab(k){tab=k;render();window.scrollTo(0,0)}
+function goTab(k){tab=k;if(k==='fridge'&&wizDraft)wizSync(true);render();window.scrollTo(0,0)}
 function fridge(){
   const D=t('days');
   const lw=latestWeek();const draft=lw&&!lw.confirmed?wizDraft:null;
@@ -511,7 +553,7 @@ function fridge(){
    <div class="desc" style="margin-top:4px">${t('wizSub')}</div></div>`;
   if(lw&&!lw.confirmed){
     h+=`<div class="card" style="border:2px solid var(--ac)"><b>${t('draftT')} · ${t('wk')}${isoWk(lw.start)}</b>
-    ${draft?draft.meals.map(m=>{const x=lang!=='no'&&m.tr&&m.tr[lang];return `<div class="desc" style="padding:3px 0;border-bottom:1px solid var(--line)"><b>${D[m.day]}</b> · ${esc(x?x.name:m.name)}</div>`}).join(''):`<div class="desc">…</div>`}
+    ${draft?draft.meals.map(m=>{const x=lang!=='no'&&m.tr&&m.tr[lang];return `<div class="desc drow" style="padding:3px 0;border-bottom:1px solid var(--line)"><span><b>${D[m.day]}</b> · ${esc(x?x.name:m.name)}</span>${priceCell(draft.prices,m.id)}</div>`}).join('')+priceSum(draft.prices):`<div class="desc">…</div>`}
     <div class="row"><button class="b p" data-click="confirmWeek" data-id="${lw.id}">${t('confirmBtn')}</button><button class="b" data-click="goWeek" data-id="${lw.id===S.current_id?'':lw.id}">${t('openPlan')}</button><button class="b" style="color:var(--bad);border-color:var(--badbd)" data-click="delWeek" data-id="${lw.id}" aria-label="${esc(t('delWeek'))}">${ic('del')}</button></div></div>`;
   }else if(lw&&lw.start>S.today){
     h+=`<div class="warn" style="background:var(--ok);border-color:var(--okbd)"><b>${t('wk')}${isoWk(lw.start)} · ${dm(lw.start)} ${t('nextReady')}</b><div class="desc">${t('nextAfter')} ${t('wk')}${isoWk(S.next_start)} · ${dm(S.next_start)}</div>
