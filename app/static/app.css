@@ -105,6 +105,13 @@ input[type=checkbox]:checked{background:var(--tx) var(--tick) center/15px no-rep
 .shop .li{flex:1;min-width:0}
 .shop label.c .li>span:first-child{text-decoration:line-through;color:var(--mu)}
 .shop .use{font-size:13px;line-height:1.35;color:var(--mu);margin-top:2px}
+/* promocje z gazetek: cena i sieć po prawej stronie pozycji, pasek sieci nad listą, oferty w arkuszu */
+.shop .pr{flex:none;min-width:78px;min-height:44px;padding:2px 0 2px 8px;border:0;border-left:1px solid var(--line);background:none;color:var(--ac);font-family:inherit;text-align:right;line-height:1.2;font-variant-numeric:tabular-nums}
+.shop .pr b{display:block;font-size:16px;white-space:nowrap}.shop .pr small{font-size:12px;color:var(--tx2);white-space:nowrap}.shop .pr:active{background:var(--soft2)}
+.obar{align-items:center;margin-top:8px}.obar .desc{flex:none;white-space:nowrap}.chip:disabled{color:var(--tx2);font-weight:400}
+.of{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:10px 0 4px;border-top:1px solid var(--line);font-size:16px}.panel .desc+.of{margin-top:10px}
+.of .p{text-align:right;color:var(--ac);font-variant-numeric:tabular-nums}
+.of .od{grid-column:1/-1;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;font-size:14px;line-height:1.4;color:var(--tx2)}.of .od .lnk{flex:none;white-space:nowrap}.of .tag{margin-left:0;background:var(--warn);color:var(--tx)}
 .bhead{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:48px;margin-top:10px;padding:0 4px;border:0;border-bottom:1px solid var(--line);background:none;color:var(--tx2);font-size:15px;font-weight:700;font-family:inherit;text-align:left}
 .haverow{display:flex;align-items:center;gap:8px;min-height:44px;color:var(--tx2)}
 .addbar{position:sticky;bottom:calc(var(--navh) + 1px + env(safe-area-inset-bottom));z-index:3;display:flex;gap:8px;margin-top:auto;padding:10px 0 8px;background:var(--bg)}
