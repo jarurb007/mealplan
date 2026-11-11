@@ -936,10 +936,21 @@ OFFER_BUSY = set()      # sieci w trakcie pobierania; "match" = trwa dopasowanie
 OFFER_MATCH_FAIL = [0.0]  # czas ostatniego nieudanego dopasowania (model nie odpowiedział): chwila przerwy przed kolejnym
 
 
+# Stan wyjściowy, dopóki nikt nie zmienił ustawień: obie sieci włączone, KIWI z kodem pocztowym domu.
+# OFFER_DEFAULT_CHAINS="" (testy) wyłącza to i aplikacja niczego sama nie pobiera.
+OFFER_DEFAULT_CHAINS = [x for x in os.getenv("OFFER_DEFAULT_CHAINS", "extra,kiwi").split(",") if x]
+KIWI_POSTCODE_DEFAULT = os.getenv("KIWI_POSTCODE", "1930")
+
+
+def kiwi_postcode(c) -> str:
+    r = c.execute("SELECT value FROM settings WHERE key='kiwi_postcode'").fetchone()
+    return (r["value"] or "") if r else (KIWI_POSTCODE_DEFAULT if "kiwi" in OFFER_DEFAULT_CHAINS else "")
+
+
 def offer_chains_on(c) -> list:
     r = c.execute("SELECT value FROM settings WHERE key='offer_chains'").fetchone()
     try:
-        on = json.loads(r["value"]) if r else []
+        on = json.loads(r["value"]) if r else OFFER_DEFAULT_CHAINS
     except ValueError:
         on = []
     return [k for k in OFFER_CHAINS if k in on]
@@ -1177,11 +1188,11 @@ def kiwi_load(src, wk: date):
         url = saved["url"]
     else:
         with db() as c:
-            r = c.execute("SELECT value FROM settings WHERE key='kiwi_postcode'").fetchone()
-        if not r or not re.fullmatch(r"\d{4}", r["value"] or ""):
+            code = kiwi_postcode(c)
+        if not re.fullmatch(r"\d{4}", code):
             raise ValueError("brak kodu pocztowego")
         head = {"User-Agent": OFFER_UA, "Accept-Language": "nb"}
-        rr = httpx.get(KIWI_API, params={"postCode": r["value"]}, timeout=30, headers=head)
+        rr = httpx.get(KIWI_API, params={"postCode": code}, timeout=30, headers=head)
         rr.raise_for_status()
         url = str((rr.json() or {}).get("url") or "")
         if not re.fullmatch(r"/filer/[0-9a-zA-Z]{16,80}", url):
@@ -1552,7 +1563,7 @@ def offers_info(c) -> dict:
     on = offer_chains_on(c)
     srcs = {r["chain"]: r for r in c.execute("SELECT * FROM offer_sources")}
     today = str(date.today())
-    post = c.execute("SELECT value FROM settings WHERE key='kiwi_postcode'").fetchone()
+    post = kiwi_postcode(c)
     chains = []
     for k, (name, _) in OFFER_CHAINS.items():
         s = srcs.get(k)
@@ -1560,7 +1571,7 @@ def offers_info(c) -> dict:
         chains.append({"id": k, "name": name, "on": k in on, "n": (s["n"] if s and to else 0), "at": s["ok_at"] if s else None,
                        "to": to, "error": bool(s and s["error"] and s["error"] != "unchanged"), "busy": k in OFFER_BUSY})
         if k == "kiwi":  # gazetka KIWI zależy od regionu
-            chains[-1]["postcode"] = post["value"] if post else ""
+            chains[-1]["postcode"] = post
     return {"chains": chains, "busy": bool(OFFER_BUSY)}
 
 

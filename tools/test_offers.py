@@ -5,7 +5,7 @@ Bez sieci i bez przeglądarki: moduł app jest importowany na tymczasowej bazie,
 tools/testdata/offers (Coop Extra: strona; KIWI: wiersze PDF-a z położeniem; pobrane 2026-11-11), model to tools/fakebin/claude. Uruchamianie Pythonem aplikacji:
     /home/jar/mealplan/app/.venv/bin/python tools/test_offers.py
 Tryb „ui” (interfejs na telefonie 390×844, zrzuty do UKES_SHOTS) wymaga działającego serwera z atrapą modelu
-i zmiennymi OFFERS_SRC_DIR=<repo>/tools/testdata/offers OFFER_MATCH_WAIT=0 (baza: dowolna kopia, pusta też):
+i zmiennymi OFFERS_SRC_DIR=<repo>/tools/testdata/offers OFFER_MATCH_WAIT=0 OFFER_DEFAULT_CHAINS= (baza: dowolna kopia, pusta też):
     UKES_PORT=<port> /home/jar/.hermes/hermes-agent/venv/bin/python3 tools/test_offers.py ui"""
 import asyncio, base64, json, os, shutil, sys, tempfile, time
 from datetime import date, datetime, timedelta
@@ -44,7 +44,7 @@ def backend():
     src = os.path.join(tmp, "src")
     shutil.copytree(SAMPLES, src)
     log = os.path.join(tmp, "prompts.log")
-    os.environ.update(DB_PATH=f"{tmp}/t.db", BACKUP_DIR=f"{tmp}/bk", PREFS_PATH=f"{tmp}/brak.md", OFFERS_SRC_DIR=src,
+    os.environ.update(DB_PATH=f"{tmp}/t.db", BACKUP_DIR=f"{tmp}/bk", PREFS_PATH=f"{tmp}/brak.md", OFFERS_SRC_DIR=src, OFFER_DEFAULT_CHAINS="",
                       FAKE_LOG=log, FAKE_DELAY="0", OFFER_MATCH_WAIT="0", PATH=os.path.join(TOOLS, "fakebin") + os.pathsep + os.environ["PATH"])
     sys.path.insert(0, os.path.join(os.path.dirname(TOOLS), "app"))
     import app
