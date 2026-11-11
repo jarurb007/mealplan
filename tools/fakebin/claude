@@ -5,6 +5,7 @@ Dodatki, wyłączone, dopóki nie ustawi się zmiennej (stare testy ich nie widz
 FAKE_PLAN_FILE=plik -> jeśli plik istnieje, plan tygodnia ma nazwy dań z tego pliku (lista JSON) zamiast "Szkic 1..9".
 FAKE_TR=1 -> prompt tłumaczenia dostaje prawdziwą odpowiedź (każdy tekst z przedrostkiem "PL ").
 FAKE_TIMES=plik -> po każdym wywołaniu dopisuje wiersz "rodzaj początek koniec" (do liczenia równoległości).
+Prompt z "price_pick" (wybór produktu do ceny) dostaje drugi produkt z listy każdego składnika.
 FAKE_FAIL_FILE=plik -> jeśli plik istnieje, a prompt zawiera jego treść, atrapa kończy się błędem (model zawiódł)."""
 import json, os, re, sys, time
 t0 = time.time()
@@ -24,6 +25,11 @@ if os.environ.get("FAKE_TR") == "1" and p.startswith("Przetłumacz poniższe dan
     out = {"meals": [{"i": m["i"], "name": "PL " + m["name"], "description": "PL " + m["description"],
                       "ingredients": ["PL " + x for x in m["ingredients"]], "steps": ["PL " + x for x in m["steps"]]}
                      for m in todo]}
+elif '"price_pick"' in p:
+    kind = "price"
+    # drugi kandydat, gdy jest (widać, że wybór modelu wygrywa z rankingiem); 'zzbrak' = żaden produkt nie pasuje
+    todo = json.loads(re.search(r"^Dane: (.*)$", p, re.M).group(1))
+    out = {"price_pick": {x["ingredient"]: -1 if "zzbrak" in x["ingredient"] else min(1, len(x["products"]) - 1) for x in todo}}
 elif '"aisle_of"' in p:
     kind = "aisle"
     out = {"aisle_of": "Annet" if "zzannet" in p else "Frys"}
