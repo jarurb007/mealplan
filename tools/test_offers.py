@@ -2,7 +2,7 @@
 zakupów (atrapa modelu), pamięć dopasowań i ręczne „to nie to”.
 
 Bez sieci i bez przeglądarki: moduł app jest importowany na tymczasowej bazie, gazetki to zapisane strony z
-tools/testdata/offers (pobrane 2026-11-11), model to tools/fakebin/claude. Uruchamianie Pythonem aplikacji:
+tools/testdata/offers (Coop Extra: strona; KIWI: wiersze PDF-a z położeniem; pobrane 2026-11-11), model to tools/fakebin/claude. Uruchamianie Pythonem aplikacji:
     /home/jar/mealplan/app/.venv/bin/python tools/test_offers.py
 Tryb „ui” (interfejs na telefonie 390×844, zrzuty do UKES_SHOTS) wymaga działającego serwera z atrapą modelu
 i zmiennymi OFFERS_SRC_DIR=<repo>/tools/testdata/offers OFFER_MATCH_WAIT=0 (baza: dowolna kopia, pusta też):
@@ -85,8 +85,7 @@ def backend():
     ok(by["Coca-Cola original 10pk"]["pant"] == 1, "kaucja (pant)")
     ok(by["Kaki"]["unsure"] == "info", "oferta bez ceny jednostkowej dostaje dopisek „sprawdź w sklepie”")
     ok(by["L'or espresso 30pk"]["products"][0]["name"] == "L'or Profondo 30stk", "apostrof w literale JS odczytany poprawnie")
-    ok(len(app.parse_coop(open(os.path.join(SAMPLES, "coop-obs.html"), encoding="utf-8").read(), "obs")) == 66, "Obs: 66 ofert")
-    for bad_html, chain_id, what in ((html, "obs", "strona innej sieci"), ("<html></html>", "extra", "strona bez danych"),
+    for bad_html, chain_id, what in ((html, "kiwi", "strona innej sieci"), ("<html></html>", "extra", "strona bez danych"),
                                      (html.replace('"offers":[', '"offers_":['), "extra", "gazetka bez ofert")):
         try:
             app.parse_coop(bad_html, chain_id)
@@ -137,7 +136,7 @@ def backend():
         c.execute("INSERT INTO extras(week_id, name, aisle) VALUES(?, 'Hvetemel', ?)", (wid, TH))
 
     st = cl.get("/api/state").json()
-    ok([c["id"] for c in st["offers"]["chains"]] == ["extra", "obs", "prix", "mega"] and not any(c["on"] for c in st["offers"]["chains"])
+    ok([c["id"] for c in st["offers"]["chains"]] == ["extra", "kiwi"] and not any(c["on"] for c in st["offers"]["chains"])
        and not any("offers" in r for r in rows(st).values()) and not calls(),
        "domyślnie żadna sieć nie jest włączona: brak ofert, brak pobierania, brak pytań do modelu")
     app.offers_tick()
@@ -232,17 +231,52 @@ def backend():
     ok(len(rows(st)["kjøttdeig"].get("offers", [])) == 1,
        "po ponownym pobraniu tej samej gazetki oferty są od razu (pamięć dopasowań)")
 
-    # ---- druga sieć, wygaśnięcie, wyłączenie
+    # ---- KIWI: gazetka PDF (tu zapisane wiersze z położeniem), oferty czyta model, rachunek sprawdza serwer
+    pages = json.load(open(os.path.join(SAMPLES, "kiwi.json"), encoding="utf-8"))["pages"]
+    ok(len(pages) == 32 and [0, 0, 0, "GULROT"][3] in [ln[3] for ln in pages[2]], "próbka KIWI: 32 strony, na trzeciej GULROT")
+    ok(app.kiwi_valid_to(pages, date(2026, 11, 9)) == date(2026, 11, 15) and app.kiwi_valid_to([[[0, 0, 9, "bez daty"]]], date(2026, 11, 9)) is None
+       and app.kiwi_valid_to(pages, date(2027, 3, 1)) is None, "„Gjelder til og med 15. november” -> termin ważności (stara gazetka: brak)")
+    pr = app.kiwi_prompt(pages[:8], 1)
+    ok("--- strona 3 ---" in pr and "| GULROT" in pr and "| 1990" in pr, "prompt odczytu: strony z wierszami „x y wielkość | tekst”")
+    g = app.kiwi_offer({"name": "GULROT", "info": "750 g, Gartner", "price": 19.9, "per": "stk", "unit_price": 26.53, "unit": "kg"})
+    ok((g["title"], g["price"], g["unsure"], g["products"][0]["detail"]) == ("Gulrot 750 g, Gartner", 19.9, "", "Pr kg 26,53"),
+       "oferta KIWI z ceną za kg: rachunek się zgadza")
+    ok(app.kiwi_offer({"name": "GULROT", "info": "750 g", "price": 19.9, "per": "stk", "unit_price": 46.53, "unit": "kg"})["unsure"] == "sum",
+       "cena przypisana do złego produktu (rachunek się nie zgadza): oferta oznaczona do ukrycia")
+    k = app.kiwi_offer({"name": "LUTEFISK", "info": "Ca. 1,25 kg, Lerøy", "price": 179, "per": "kg"})
+    ok((k["unsure"], k["products"][0]["detail"]) == ("", "Pr kg 179,00"), "cena za kg: bez kontroli gramatury")
+    t32 = app.kiwi_offer({"name": "PÅLEGG", "info": "", "multi": 3, "pay": 2})
+    ok((t32["price"], t32["multi"], t32["pay"], t32["unsure"]) == (None, 3, 2, "") and app.kiwi_offer({"name": "X"}) is None
+       and app.kiwi_offer({"price": 10}) is None, "„3 for 2” bez ceny przechodzi, wpis bez nazwy albo bez ceny odpada")
+
+    def leaf():
+        return [p for p in open(log, encoding="utf-8").read().split("\n=====\n") if '"leaflet_offers"' in p]
+
     n0 = len(calls())
-    post("/api/offers/chain", chain="obs", on=True); st = settle(); st = settle()
-    ko = rows(st)["kjøttdeig"].get("offers", [])
-    ok(chain(st, "obs")["n"] == 66 and sorted(x["chain"] for x in ko) == ["extra", "obs"] and len(calls()) == n0 + 1
-       and "gazetki sieci Obs" in calls()[-1], "druga sieć: własne pobranie i jedno wywołanie modelu, kjøttdeig ma oferty z obu")
+    ok(post("/api/offers/postcode", code="12a")[0] == 400, "kod pocztowy inny niż cztery cyfry: 400")
+    code, st = post("/api/offers/postcode", code="0150")
+    ok(code == 200 and chain(st, "kiwi")["postcode"] == "0150", "kod pocztowy zapisany w ustawieniach")
+    post("/api/offers/chain", chain="kiwi", on=True); st = settle(); st = settle()
+    go = rows(st)["gulrot"].get("offers", [])
+    ok(len(leaf()) == 4, f"32 strony gazetki KIWI: 4 wywołania modelu (jest {len(leaf())})")
+    ok(chain(st, "kiwi")["n"] == 4 and [(x["chain"], x["unit"]) for x in go] == [("kiwi", ["kg", 26.53]), ("extra", ["kg", 32.25])]
+       and len(calls()) == n0 + 1 and "gazetki sieci KIWI" in calls()[-1],
+       "gulrot: oferty z KIWI i Extra, tańsza za kg na górze; jedno wywołanie dopasowania dla KIWI")
     with app.db() as c:
-        c.execute("UPDATE offers SET valid_to=? WHERE chain='obs'", (str(date.today() - timedelta(days=1)),))
+        bad_row = c.execute("SELECT unsure FROM offers WHERE chain='kiwi' AND title LIKE 'Kinakål%'").fetchone()
+    ok(bad_row and bad_row["unsure"] == "sum" and "Kinakål" not in calls()[-1],
+       "oferta KIWI z niezgodnym rachunkiem jest zapisana jako niepewna i nie trafia ani do modelu, ani na listę")
+    app.offer_refresh("kiwi", force=True)
+    ok(len(leaf()) == 4, "ta sama gazetka KIWI drugi raz: bez ponownego czytania modelem")
+    with app.db() as c:
+        c.execute("UPDATE offers SET valid_to=? WHERE chain='kiwi'", (str(date.today() - timedelta(days=1)),))
     st = cl.get("/api/state").json()
-    ok([x["chain"] for x in rows(st)["kjøttdeig"].get("offers", [])] == ["extra"] and chain(st, "obs")["n"] == 0,
+    ok([x["chain"] for x in rows(st)["gulrot"].get("offers", [])] == ["extra"] and chain(st, "kiwi")["n"] == 0,
        "oferty po terminie ważności znikają z listy")
+    app.offer_refresh("kiwi", force=True)
+    with app.db() as c:
+        ok(c.execute("SELECT error FROM offer_sources WHERE chain='kiwi'").fetchone()[0] == "unchanged" and len(leaf()) == 4,
+           "gazetka KIWI po terminie, a nowej jeszcze nie ma: czekamy, bez pytania modelu")
     code, st = post("/api/offers/chain", chain="extra", on=False)
     ok(code == 200 and "offers" not in rows(st)["kjøttdeig"], "wyłączenie sieci: jej oferty znikają z listy")
 
@@ -306,10 +340,11 @@ async def ui():
             if st["week"] and not st.get("pending"):
                 break
             time.sleep(1)
-    for name in ("kjøttdeig", "Hvetemel", "laksefilet", "revet ost", "potet"):
+    for name in ("kjøttdeig", "Hvetemel", "laksefilet", "gulrot", "purre", "potet"):
         api("/api/shop/extra", "POST", {"name": name})
     api("/api/offers/chain", "POST", {"chain": "extra", "on": True})
-    api("/api/offers/chain", "POST", {"chain": "obs", "on": True})
+    api("/api/offers/postcode", "POST", {"code": "0150"})
+    api("/api/offers/chain", "POST", {"chain": "kiwi", "on": True})
     time.sleep(1); wait_idle(); api("/api/state", "GET"); time.sleep(1); st = wait_idle()
     A = Tab(9460, "A")
     await A.open()
@@ -343,7 +378,8 @@ async def ui():
         ok(back >= 1, "„Cofnij” przywraca ofertę")
         await A.ev("closeSheet();openSheet({kind:'menu'})"); await asyncio.sleep(0.5)
         menu = await A.ev("document.getElementById('panel').innerText")
-        ok("Promocje" in menu and "Extra" in menu and "ofert: 57" in menu and "Pobierz teraz" in menu, "menu: sieci, stan pobrania i ręczne odświeżenie")
+        ok("Promocje" in menu and "Extra" in menu and "KIWI" in menu and "ofert: 57" in menu and "Pobierz teraz" in menu
+           and await A.ev("document.getElementById('kpc').value") == "0150", "menu: sieci, stan pobrania, kod pocztowy KIWI i ręczne odświeżenie")
         await A.ev("document.querySelector('#panel .msec:last-of-type').scrollIntoView()"); await asyncio.sleep(0.3)
         await audit(A, "menu z sieciami"); await shot(A, "menu")
     finally:

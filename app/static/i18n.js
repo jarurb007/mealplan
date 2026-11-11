@@ -2,6 +2,10 @@
    Brakujący klucz w pl/en bierze się z no (patrz t() w app.js). Klucze w cudzysłowach to nazwy działów sklepu z bazy. */
 const L = {
 no: {
+  offNeedPost: 'mangler postnummer',
+  offPostPh: 'Postnummer (kundeavisen er regional)',
+  offPostBad: 'Postnummeret har fire sifre',
+  offPostOk: 'Postnummer lagret',
   offT: 'Tilbud',
   offSub: '(kundeaviser, hentes én gang i uken)',
   offOn: 'På',
@@ -277,6 +281,10 @@ no: {
   'Snacks og godteri': 'Snacks og godteri',
 },
 pl: {
+  offNeedPost: 'brakuje kodu pocztowego',
+  offPostPh: 'Kod pocztowy (gazetka jest regionalna)',
+  offPostBad: 'Kod pocztowy ma cztery cyfry',
+  offPostOk: 'Kod pocztowy zapisany',
   offT: 'Promocje',
   offSub: '(gazetki, pobierane raz w tygodniu)',
   offOn: 'Wł.',
@@ -559,6 +567,10 @@ pl: {
   'Krydder og basis': 'Przyprawy i podstawy',
 },
 en: {
+  offNeedPost: 'postcode missing',
+  offPostPh: 'Postcode (the leaflet is regional)',
+  offPostBad: 'The postcode has four digits',
+  offPostOk: 'Postcode saved',
   offT: 'Offers',
   offSub: '(store leaflets, fetched once a week)',
   offOn: 'On',

@@ -32,6 +32,8 @@ DB_PATH=/tmp/moja-kopia.db BACKUP_DIR=/tmp/moje-kopie \
   ta sama wartość musi być ustawiona dla serwera i dla testu).
 - Port 8099 jest zarezerwowany dla wersji podglądowej. Nie zajmuj go w testach.
 - Gazetki (promocje na liście zakupów) w testach nie sięgają do sieci: `OFFERS_SRC_DIR=<repo>/tools/testdata/offers`
-  każe czytać zapisane strony zamiast `coop.no`, a `OFFER_MATCH_WAIT=0` wyłącza zwłokę przed pytaniem modelu.
+  każe czytać zapisane próbki zamiast `coop.no` i `kiwi.no`, a `OFFER_MATCH_WAIT=0` wyłącza zwłokę przed pytaniem modelu.
+  Prawdziwa gazetka KIWI to PDF: do jej odczytu potrzebny jest pakiet `pypdf` (jest w `deploy/ukesmeny/requirements.txt`,
+  w lokalnym `.venv` może go nie być; testy go nie potrzebują).
   `tools/test_offers.py` (bez argumentów) ustawia to sam; tryb `ui` wymaga serwera uruchomionego z tymi zmiennymi.
   Dopóki w ustawieniach nie jest włączona żadna sieć, aplikacja niczego nie pobiera.

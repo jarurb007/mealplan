@@ -151,7 +151,7 @@ const ACT={
   goTab:d=>goTab(d.t),goWeek:d=>goWeek(numOrNull(d.id)),confirmPlan:()=>confirmPlan(),delWeek:byId(delWeek),confirmWeek:byId(confirmWeek),
   findAlts:d=>findAlts(+d.id),swapHint:d=>findAlts(+d.id,d.h),closeAlt:byId(closeAlt),toggleAIng:d=>toggleAIng(d.k),choose:d=>choose(+d.id,+d.i),
   togUses:d=>togUses(d.k),addX:()=>addX(),delX:d=>{closeSheet();delX(+d.id)},openX:d=>openSheet({kind:'xitem',id:+d.id}),setAisle:d=>{closeSheet();setAisle(+d.id,d.a)},dismissG:d=>dismissG(d.k),
-  openOffers:d=>openSheet({kind:'offers',k:d.k}),offFilter:d=>offFilter(d.c),offNot:d=>offNot(d.k,+d.id),offChainSet:d=>offChainSet(d.c,d.on==='1'),offRefresh:()=>offRefresh(),
+  openOffers:d=>openSheet({kind:'offers',k:d.k}),offFilter:d=>offFilter(d.c),offNot:d=>offNot(d.k,+d.id),offChainSet:d=>offChainSet(d.c,d.on==='1'),offRefresh:()=>offRefresh(),offPost:()=>offPost(),
   copyList:()=>copyList(),addP:()=>addP(),delP:byId(delP),addC:()=>addC(),delC:byId(delC),gen:()=>gen(),jbAdd:()=>jbAdd(),
   openBook:d=>openSheet({kind:'book',id:+d.id}),togglePick:d=>takeRec(+d.id,!bookPicked().has(+d.id)),useDay:d=>{sheet.day=+d.d;render()},
   useRec:d=>useRec(+d.id,+d.d),delRecAsk:byId(delRecAsk),
@@ -161,7 +161,7 @@ const ACT={
   tToList:d=>tToList(+d.id,+d.l),tRename:()=>tRename(),tRenameSave:byId(tRenameSave),tDelAsk:byId(tDelAsk)},
  change:{
   chk:(d,el)=>chk(d.k,el.checked),tDue:(d,el)=>tDue(+d.id,el.value),addImgs:(d,el)=>{addImgs(el.files);el.value=''}},
- enter:{addT:()=>addT(),tNewList:()=>tNewList(),tListSave:byId(tListSave),tStepAdd:byId(tStepAdd),tRenameSave:byId(tRenameSave),findAlts:d=>findAlts(+d.id),dislikeSave:byId(dislikeSave),addX:()=>addX(),addP:()=>addP(),addC:()=>addC(),jbAdd:()=>jbAdd()},
+ enter:{offPost:()=>offPost(),addT:()=>addT(),tNewList:()=>tNewList(),tListSave:byId(tListSave),tStepAdd:byId(tStepAdd),tRenameSave:byId(tRenameSave),findAlts:d=>findAlts(+d.id),dislikeSave:byId(dislikeSave),addX:()=>addX(),addP:()=>addP(),addC:()=>addC(),jbAdd:()=>jbAdd()},
  input:{custText:(d,el)=>{custText=el.value},bookQ:(d,el)=>{bookQ=el.value;const b=$('#blist');if(b)b.innerHTML=bookList()}}};
 function dispatch(kind,e){
   const el=e.target&&e.target.closest?e.target.closest('[data-'+kind+']'):null;if(!el)return;
@@ -432,11 +432,13 @@ function offersSheet(){const i=shopItem(sheet.k);
 async function offNot(k,id){const r=await api('/api/offers/verdict','POST',W({key:k,offer:id,ok:false}));if(!r)return;set(r);
   toast(t('offNotT'),{label:t('undo'),fn:async()=>set(await api('/api/offers/verdict','POST',W({key:k,offer:id,ok:true})))})}
 async function offChainSet(c,on){set(await api('/api/offers/chain','POST',W({chain:c,on})))}
+async function offPost(){const v=($('#kpc')||{}).value||'';if(!/^\d{4}$/.test(v.trim())){toast(t('offPostBad'));return}
+  const r=await api('/api/offers/postcode','POST',W({code:v.trim()}));if(r){set(r);toast(t('offPostOk'))}}
 async function offRefresh(){const r=await api('/api/offers/refresh','POST',W({}));if(r){set(r);toast(t('offLoading'))}}
 function offMenu(){const o=S.offers;if(!o)return '';
-  const st=c=>c.busy?t('offLoading'):!c.on?'':c.at&&c.n?t('offAt').replace('{d}',dm(c.at.slice(0,10))).replace('{n}',c.n)+(c.error?' · '+t('offErrOld'):''):c.error?t('offErr'):t('offNever');
+  const st=c=>c.busy?t('offLoading'):!c.on?'':c.postcode===''?t('offNeedPost'):c.at&&c.n?t('offAt').replace('{d}',dm(c.at.slice(0,10))).replace('{n}',c.n)+(c.error?' · '+t('offErrOld'):''):c.error?t('offErr'):t('offNever');
   return `<div class="msec"><b>${ic('shop')} ${t('offT')}</b> <span class="desc">${t('offSub')}</span>
-  ${o.chains.map(c=>`<div class="mrow"><span>${esc(c.name)}${st(c)?`<br><span class="desc">${esc(st(c))}</span>`:''}</span><button class="chip ${c.on?'on':''}" data-click="offChainSet" data-c="${c.id}" data-on="${c.on?0:1}" aria-pressed="${c.on}" aria-label="${esc(c.name)}">${c.on?t('offOn'):t('offOff')}</button></div>`).join('')}
+  ${o.chains.map(c=>`<div class="mrow"><span>${esc(c.name)}${st(c)?`<br><span class="desc">${esc(st(c))}</span>`:''}</span><button class="chip ${c.on?'on':''}" data-click="offChainSet" data-c="${c.id}" data-on="${c.on?0:1}" aria-pressed="${c.on}" aria-label="${esc(c.name)}">${c.on?t('offOn'):t('offOff')}</button></div>${c.on&&c.postcode!==undefined?`<div class="inrow"><input id="kpc" inputmode="numeric" maxlength="4" autocomplete="postal-code" placeholder="${esc(t('offPostPh'))}" aria-label="${esc(t('offPostPh'))}" value="${esc(c.postcode)}" data-enter="offPost"><button class="b" data-click="offPost">${t('save')}</button></div>`:''}`).join('')}
   <div class="row"><button class="b" data-click="offRefresh" ${o.chains.some(c=>c.on)&&!o.busy?'':'disabled'}>${t('offUpd')}</button></div></div>`}
 /* --- zakupy: pasek postępu, w działach tylko to, co zostało do kupienia (z licznikiem), odhaczone zjeżdżają do zwiniętej
    sekcji „Kupione” na dole, pole dopisywania przy dolnej krawędzi. */
