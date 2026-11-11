@@ -218,6 +218,7 @@ no: {
   menuA: 'Meny',
   curWk: 'Denne uken',
   'Moje produkty': 'Mine varer',
+  'Snacks og godteri': 'Snacks og godteri',
 },
 pl: {
   custTake: 'Zrób zdjęcie',
@@ -436,6 +437,7 @@ pl: {
   menuA: 'Menu',
   curWk: 'Bieżący tydzień',
   'Moje produkty': 'Moje produkty',
+  'Snacks og godteri': 'Słodycze i przekąski',
   'Frukt og grønt': 'Owoce i warzywa',
   'Kjøtt og fisk': 'Mięso i ryby',
   'Meieri og kjøl': 'Nabiał i chłodnia',
@@ -661,6 +663,7 @@ en: {
   menuA: 'Menu',
   curWk: 'Current week',
   'Moje produkty': 'My items',
+  'Snacks og godteri': 'Sweets & snacks',
   'Frukt og grønt': 'Fruit & veg',
   'Kjøtt og fisk': 'Meat & fish',
   'Meieri og kjøl': 'Dairy & chilled',

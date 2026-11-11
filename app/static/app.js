@@ -545,7 +545,7 @@ async function delRec(id){set(await api('/api/recipes/'+id,'DELETE'))}
 async function useRec(id,d){const rc=(S.recipes||[]).find(x=>x.id===id);closeSheet();
   const r=await api(`/api/recipes/${id}/use`,'POST',W({day:d}));if(r){set(r);tab='plan';render();window.scrollTo(0,0);toast('✓ '+t('usedT')+(rc?rv(rc).name:''))}}
 async function addX(){const v=$('#xn').value;if(!v.trim())return;set(added('#xn',v,await api('/api/shop/extra','POST',W({name:v}))))}
-const AISLES=['Moje produkty','Frukt og grønt','Kjøtt og fisk','Meieri og kjøl','Tørrvarer og hermetikk','Brød og deig','Frys','Krydder og basis'];
+const AISLES=['Moje produkty','Frukt og grønt','Tørrvarer og hermetikk','Krydder og basis','Brød og deig','Kjøtt og fisk','Frys','Meieri og kjøl','Snacks og godteri'];
 function extraItem(id){for(const [a,g] of Object.entries((S&&S.shopping)||{})){const i=g.find(x=>x.extra_id===id);if(i)return {...i,aisle:a}}return null}
 async function setAisle(id,a){set(await api(`/api/shop/extra/${id}/aisle`,'POST',{aisle:a}))}
 async function delX(id){set(await api('/api/shop/extra/'+id,'DELETE'))}

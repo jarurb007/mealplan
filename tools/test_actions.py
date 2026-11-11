@@ -78,7 +78,8 @@ async def ui(A, wid, ids, herb, other_week):
     Q = json.dumps  # nazwa jako literał JS
 
     # ---- 1) apostrof w nazwie produktu
-    await A.ev("goTab('shop')"); await asyncio.sleep(0.5)
+    # profil przeglądarki zostaje między przebiegami: „Kupione” ma startować zwinięte
+    await A.ev("delete sec.bought;localStorage.removeItem('sec');goTab('shop')"); await asyncio.sleep(0.5)
     ok(await A.ev(f"!!__lab({Q(HERB)})"), "produkt z apostrofem widoczny na liście zakupów")
     ok(await A.ev(f"__lab({Q(HERB)}).querySelector('input').dataset.k") == herb["key"], "klucz produktu siedzi w data-k (tekst, nie kod JS)")
     ok(await A.ev("!document.querySelector('.shop .bhead') && !document.querySelector('.shop .bought')"), "nic nie kupione: nie ma sekcji „Kupione”")
