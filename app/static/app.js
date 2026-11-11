@@ -289,23 +289,30 @@ const usesOpen=new Set();
 function togUses(k){usesOpen.has(k)?usesOpen.delete(k):usesOpen.add(k);render()}
 function useLine(u,withQty){const m=(S.meals||[]).find(x=>x.id===u.meal);const q=withQty&&u.qty?` – ${esc(u.qty)} ${esc(u.unit)}`:'';
   return `${esc(t('daysS')[u.day])} · ${esc(m?rv(m).name:'')}${q}`}
+// W ilu daniach jest produkt. Jedno danie: sama linia. Kilka: linia z dniami, a szczegóły z ilościami rozwija przycisk ▾ na końcu wiersza.
 function usesHtml(i,k){const u=i.uses||[];if(!u.length)return '';
   if(u.length===1)return `<div class="use">${useLine(u[0])}</div>`;
-  const open=usesOpen.has(k);
-  return `<button type="button" class="use" data-click="togUses" data-k="${esc(k)}">${t('usedIn').replace('{n}',u.length)}: ${u.map(x=>esc(t('daysS')[x.day])).join(', ')} ${open?'▴':'▾'}</button>`+(open?u.map(x=>`<div class="use">${useLine(x,true)}</div>`).join(''):'')}
+  return `<div class="use">${t('usedIn').replace('{n}',u.length)}: ${u.map(x=>esc(t('daysS')[x.day])).join(', ')}</div>`+(usesOpen.has(k)?u.map(x=>`<div class="use">${useLine(x,true)}</div>`).join(''):'')}
+function usesBtn(i,k){return (i.uses||[]).length>1?`<button type="button" class="mb" data-click="togUses" data-k="${esc(k)}" aria-label="${esc(t('usesA'))}" aria-expanded="${usesOpen.has(k)}">${usesOpen.has(k)?'▴':'▾'}</button>`:''}
 function headsTxt(i){if(!i.heads)return '';const w=t('heads');return ` <span class="use" style="text-decoration:none">(≈ ${i.heads} ${i.heads===1?w[0]:w[1]})</span>`}
+function shopRow(i){return `<label class="${i.checked?'c':''}"><input type="checkbox" ${i.checked?'checked':''} data-change="chk" data-k="${esc(i.key)}"><div class="li"><span>${i.topup?'<b>+ </b>':''}${esc(i.qty)} ${esc(i.unit)} ${esc(i.extra_id?i.name:nm(i.name))}</span>${headsTxt(i)}${i.topup?` <span class="tag" style="background:var(--badbg);color:var(--bad)">${t('buyMore')}</span>`:''}${usesHtml(i,i.key)}</div>${usesBtn(i,i.key)}${i.extra_id?`<button type="button" class="mb" data-click="delX" data-id="${i.extra_id}" aria-label="${esc(t('del'))}">✕</button>`:''}</label>`}
+/* --- zakupy: pasek postępu, w działach tylko to, co zostało do kupienia (z licznikiem), odhaczone zjeżdżają do zwiniętej
+   sekcji „Kupione” na dole, pole dopisywania przy dolnej krawędzi. */
 function shop(){
   if(!S.week)return '';
-  let h=`<div class="shop"><div class="row" style="margin:0 0 6px"><input id="xn" placeholder="${esc(t('addPh'))}" data-enter="addX" style="flex:1"><button class="b p" data-click="addX">${t('add')}</button></div>`;
-  const g=S.shopping||{};
+  const g=S.shopping||{},all=Object.values(g).flat(),done=all.filter(i=>i.checked),of=(a,b)=>t('ofN').replace('{a}',a).replace('{b}',b);
+  let h='<div class="shop">';
+  if(all.length)h+=`<div class="shead"><b>${of(done.length,all.length)}</b><span class="desc">${t('leftN').replace('{n}',all.length-done.length)}</span><span class="sp"></span><button class="b" data-click="copyList">⧉ ${t('copyS')}</button></div>
+   <div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="${all.length}" aria-valuenow="${done.length}"><i style="width:${Math.round(100*done.length/all.length)}%"></i></div>`;
   if(S.pending)h+=`<div class="warn">${t('shopWait')}</div>`;
-  if(!Object.keys(g).length&&!S.pending)h+=`<div class="card">${t('empty')}</div>`;
-  if(Object.keys(g).length)h+=`<div class="row" style="margin:0 0 6px"><button class="b" data-click="copyList">📋 ${t('copy')}</button></div>`;
-  for(const [a,items] of Object.entries(g)){h+=`<h3>${esc(t(a))}</h3>`;
-    items.forEach(i=>h+=`<label class="${i.checked?'c':''}"><input type="checkbox" ${i.checked?'checked':''} data-change="chk" data-k="${esc(i.key)}"><div style="flex:1;min-width:0"><span>${i.topup?'<b>+ </b>':''}${esc(i.qty)} ${esc(i.unit)} ${esc(i.extra_id?i.name:nm(i.name))}</span>${headsTxt(i)}${i.topup?` <span class="tag" style="background:var(--badbg);color:var(--bad)">${t('buyMore')}</span>`:''}${usesHtml(i,i.key)}</div>${i.extra_id?`<a href="#" data-click="delX" data-id="${i.extra_id}" style="color:var(--del);text-decoration:none;padding:0 6px">✕</a>`:''}</label>`)}
-  if((S.gone||[]).length)h+=`<h3 style="color:var(--orange)">${t('goneT')}</h3>`+S.gone.map(g=>`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span>✓ ${esc(g.label)}</span><button class="b" data-click="dismissG" data-k="${esc(g.key)}">${t('dismiss')}</button></div>`).join('');
-  if(S.have.length)h+=`<h3>${t('have')}</h3>`+S.have.map(i=>`<div style="color:var(--mu);padding:4px 0">${esc(i.qty)} ${esc(i.unit)} ${esc(nm(i.name))}${usesHtml(i,'have:'+i.key)}</div>`).join('');
-  return h+`</div>`}
+  if(!all.length&&!S.pending)h+=`<div class="card">${t('empty')}</div>`;
+  if(all.length&&done.length===all.length)h+=`<div class="card">✓ ${t('allBought')}</div>`;
+  for(const [a,items] of Object.entries(g)){const todo=items.filter(i=>!i.checked);if(!todo.length)continue;
+    h+=`<h3><span>${esc(t(a))}</span><span class="cnt">${of(items.length-todo.length,items.length)}</span></h3>`+todo.map(shopRow).join('')}
+  if((S.gone||[]).length)h+=`<h3 style="color:var(--orange)">${t('goneT')}</h3>`+S.gone.map(g=>`<div class="mrow"><span>✓ ${esc(g.label)}</span><button class="b" data-click="dismissG" data-k="${esc(g.key)}">${t('dismiss')}</button></div>`).join('');
+  if(done.length)h+=`<button type="button" class="bhead" data-click="foldSec" data-k="bought" aria-expanded="${!!sec.bought}"><span>${t('bought')} (${done.length})</span><span>${sec.bought?'▾':'▸'}</span></button>`+(sec.bought?`<div class="bought">${done.map(shopRow).join('')}</div>`:'');
+  if(S.have.length)h+=`<h3>${t('have')}</h3>`+S.have.map(i=>`<div class="haverow"><div class="li">${esc(i.qty)} ${esc(i.unit)} ${esc(nm(i.name))}${usesHtml(i,'have:'+i.key)}</div>${usesBtn(i,'have:'+i.key)}</div>`).join('');
+  return h+`<div class="addbar"><input id="xn" placeholder="${esc(t('addPh'))}" data-enter="addX"><button class="b p" data-click="addX" aria-label="${esc(t('add'))}">+</button></div></div>`}
 function rv(r){const x=lang!=='no'&&r.tr&&r.tr[lang];return x?{name:x.name,description:x.description,ing:x.ingredients,steps:x.steps}:{name:r.name,description:r.description,ing:r.ingredients.map(i=>i.name),steps:r.steps}}
 let wizDraft=null,wizBusy=false;
 function latestWeek(){return (S.weeks||[]).reduce((a,w)=>!a||w.start>a.start?w:a,null)}
@@ -440,14 +447,16 @@ async function choose(id,i){let m=gm(id);m.choosing=i;render();
     if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===409){const mm=gm(id);if(mm){mm.choosing=null;mm.alts=null;mm.open=false}await refreshQuiet()}throw new Error(e.detail||r.statusText)}
     const d=await r.json();const mm=gm(id);if(mm)mm.choosing=null;set(d);if(sheet&&sheet.kind==='meal'&&sheet.id===id)closeSheet()}catch(e){const mm=gm(id);if(mm)mm.choosing=null;toast(t('err')+e.message);render()}}
 async function mv2(id,d){if(d==='')return;set(await api(`/api/meal/${id}/move`,'POST',{day:+d}))}
-async function addP(){const v=$('#pn').value;if(!v.trim())return;set(await api('/api/pantry','POST',{name:v}))}
+// Po udanym dopisaniu pole się czyści (o ile nikt nie zdążył wpisać w nie czegoś nowego); po błędzie tekst zostaje do poprawienia.
+function added(sel,v,r){const e=$(sel);if(r&&e&&e.value===v)e.value='';return r}
+async function addP(){const v=$('#pn').value;if(!v.trim())return;set(added('#pn',v,await api('/api/pantry','POST',{name:v})))}
 async function delP(id){set(await api('/api/pantry/'+id,'DELETE'))}
-async function addC(){const v=$('#cn').value.trim();if(!v)return;const isU=/^https?:\/\/\S+$/i.test(v);
-  const r=await api('/api/cravings','POST',{text:v},isU?t('bImport'):undefined);if(r){set(r);if(isU)toast('⭐ '+t('favOn'))}}
+async function addC(){const raw=$('#cn').value,v=raw.trim();if(!v)return;const isU=/^https?:\/\/\S+$/i.test(v);
+  const r=added('#cn',raw,await api('/api/cravings','POST',{text:v},isU?t('bImport'):undefined));if(r){set(r);if(isU)toast('⭐ '+t('favOn'))}}
 async function delC(id){set(await api('/api/cravings/'+id,'DELETE'))}
 async function delRec(id){set(await api('/api/recipes/'+id,'DELETE'))}
 async function useRec(id,d){if(d==='')return;const r=await api(`/api/recipes/${id}/use`,'POST',W({day:+d}));if(r){set(r);tab='plan';render()}}
-async function addX(){const v=$('#xn').value;if(!v.trim())return;set(await api('/api/shop/extra','POST',W({name:v})))}
+async function addX(){const v=$('#xn').value;if(!v.trim())return;set(added('#xn',v,await api('/api/shop/extra','POST',W({name:v}))))}
 async function delX(id){set(await api('/api/shop/extra/'+id,'DELETE'))}
 async function dismissG(k){set(await api('/api/shop/dismiss','POST',W({key:k})))}
 /* Odhaczanie zakupów: pole zmienia się od razu, zapis idzie kolejką w tle (jedno zapytanie na kliknięcie).

@@ -81,9 +81,14 @@ async def ui(A, wid, ids, herb, other_week):
     await A.ev("goTab('shop')"); await asyncio.sleep(0.5)
     ok(await A.ev(f"!!__lab({Q(HERB)})"), "produkt z apostrofem widoczny na liście zakupów")
     ok(await A.ev(f"__lab({Q(HERB)}).querySelector('input').dataset.k") == herb["key"], "klucz produktu siedzi w data-k (tekst, nie kod JS)")
-    r = await A.ev(f"(()=>{{__lab({Q(HERB)}).querySelector('input').click();const l=__lab({Q(HERB)});"
-                   "return [l.classList.contains('c'),l.querySelector('input').checked,document.body.classList.contains('spin')]})()")
-    ok(r == [True, True, False], f"odhaczenie widać od razu, ekran nie przygasa {r}")
+    ok(await A.ev("!document.querySelector('.shop .bhead') && !document.querySelector('.shop .bought')"), "nic nie kupione: nie ma sekcji „Kupione”")
+    r = await A.ev(f"(()=>{{__lab({Q(HERB)}).querySelector('input').click();const b=document.querySelector('.shop .bhead');"
+                   f"return [!!__lab({Q(HERB)}),!!b&&b.textContent.includes('(1)'),!!document.querySelector('.shop .bought'),document.body.classList.contains('spin')]}})()")
+    ok(r == [False, True, False, False], f"odhaczona pozycja od razu zjeżdża z listy do zwiniętej sekcji „Kupione (1)”, ekran nie przygasa {r}")
+    # dalsze kroki sprawdzają odhaczone pozycje, więc rozwijamy „Kupione”
+    r = await A.ev(f"(()=>{{document.querySelector('.shop .bhead').click();const l=__lab({Q(HERB)});"
+                   "return [!!l.closest('.bought'),l.classList.contains('c'),l.querySelector('input').checked]})()")
+    ok(r == [True, True, True], f"po rozwinięciu „Kupione” pozycja jest tam, przekreślona i odhaczona {r}")
     await asyncio.sleep(1.2)
     ok(item(api(f"/api/state?week={wid}", "GET"), HERB)["checked"], "odhaczenie produktu z apostrofem zapisane na serwerze")
     ok(await A.ev("__n('POST /api/shop/check')") == 1, "odhaczenie = jedno zapytanie /api/shop/check")
@@ -100,7 +105,7 @@ async def ui(A, wid, ids, herb, other_week):
     # ---- 3) seria szybkich odhaczeń: żadne nie ginie
     await A.ev("__calls.length=0")
     await A.ev("['mleko','chleb','masło'].forEach(n=>__lab(n).querySelector('input').click())")
-    ok(await A.ev("['mleko','chleb','masło'].every(n=>__lab(n).classList.contains('c'))"), "trzy szybkie odhaczenia: wszystkie od razu przekreślone")
+    ok(await A.ev("['mleko','chleb','masło'].every(n=>__lab(n).classList.contains('c')&&!!__lab(n).closest('.bought'))"), "trzy szybkie odhaczenia: wszystkie od razu przekreślone, w „Kupione”")
     await asyncio.sleep(1.5)
     st = api(f"/api/state?week={wid}", "GET")
     ok(all(item(st, n)["checked"] for n in ("mleko", "chleb", "masło")), "trzy szybkie odhaczenia: wszystkie zapisane na serwerze")
@@ -109,10 +114,10 @@ async def ui(A, wid, ids, herb, other_week):
     # ---- 4) błąd zapisu: pole wraca, jest komunikat
     for mode, what in (("net", "brak sieci"), ("500", "błąd serwera")):
         await A.ev(f"__mode='{mode}'")
-        r = await A.ev("(()=>{__lab('mleko').querySelector('input').click();return __lab('mleko').querySelector('input').checked})()")
-        ok(r is False, f"{what}: odznaczenie widać od razu")
+        r = await A.ev("(()=>{__lab('mleko').querySelector('input').click();return [__lab('mleko').querySelector('input').checked,!!__lab('mleko').closest('.bought')]})()")
+        ok(r == [False, False], f"{what}: odznaczenie widać od razu (pozycja wraca na listę) {r}")
         await asyncio.sleep(1)
-        ok(await A.ev("__lab('mleko').querySelector('input').checked && __lab('mleko').classList.contains('c')"), f"{what}: pole wraca do stanu z serwera")
+        ok(await A.ev("__lab('mleko').querySelector('input').checked && __lab('mleko').classList.contains('c') && !!__lab('mleko').closest('.bought')"), f"{what}: pole wraca do stanu z serwera")
         toast = await A.ev("document.getElementById('toast').style.display==='block'?document.getElementById('toast').textContent:''")
         ok("mleko" in toast, f"{what}: komunikat z nazwą produktu: '{toast}'")
         ok(item(api(f"/api/state?week={wid}", "GET"), "mleko")["checked"], f"{what}: na serwerze nic się nie zmieniło")
@@ -128,8 +133,8 @@ async def ui(A, wid, ids, herb, other_week):
 
     # ---- 6) przycisk kopiowania listy
     await A.ev("__calls.length=0")
-    ok(await A.ev("!!document.querySelector('.shop [data-click=copyList]') && document.querySelector('.shop [data-click=copyList]').textContent.includes('Copy list')"),
-       "przycisk „Kopiuj listę” jest w zakładce zakupów")
+    ok(await A.ev("!!document.querySelector('.shop .shead [data-click=copyList]') && document.querySelector('.shop [data-click=copyList]').textContent.includes('Copy list')"),
+       "przycisk „Kopiuj listę” jest w nagłówku listy zakupów")
     await A.ev("document.querySelector('.shop [data-click=copyList]').click()"); await asyncio.sleep(1); await A.ev("1")
     toast = await A.ev("document.getElementById('toast').textContent")
     manual = await A.ev("(document.querySelector('#panel textarea')||{}).value||''")   # schowek niedostępny: lista w arkuszu, do skopiowania ręcznie

@@ -75,11 +75,20 @@ details summary{cursor:pointer;color:var(--ac);font-size:14px;min-height:44px;di
 ul{padding-left:18px;margin:6px 0}ol{padding-left:20px;margin:6px 0}
 input[type=text],input:not([type]),textarea{min-height:44px;padding:9px;border:1px solid var(--bd);border-radius:9px;font-size:16px;font-family:inherit;width:100%;background:var(--card);color:var(--tx)}
 input[type=checkbox]{width:24px;height:24px;flex:none;margin:0;accent-color:var(--ac)}
-.shop h3{margin:14px 0 4px;font-size:14px;color:var(--ac)}
-.shop label{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:16px}
-.shop label.c span{text-decoration:line-through;color:var(--mu)}
-.shop .use{font-size:12px;line-height:1.35;color:var(--mu);margin-top:2px}
-.shop button.use{display:block;padding:0;border:0;background:none;text-align:left;font-family:inherit;cursor:pointer}
+/* zakupy */
+.shop{display:flex;flex-direction:column;min-height:calc(100vh - var(--hdrh) - var(--navh) - 30px - env(safe-area-inset-bottom));min-height:calc(100dvh - var(--hdrh) - var(--navh) - 30px - env(safe-area-inset-bottom))}
+.shead{display:flex;align-items:center;gap:10px}.shead b{font-size:20px}
+.pbar{height:8px;margin:8px 0 4px;border-radius:4px;background:var(--slot);overflow:hidden}.pbar i{display:block;height:100%;border-radius:4px;background:var(--ac);transition:width .3s}
+.shop h3{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:14px 0 2px;font-size:14px;color:var(--ac)}
+.shop h3 .cnt{color:var(--tx2);font-weight:400;font-size:13px}
+.shop label{display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 0;border-bottom:1px solid var(--line);font-size:16px}
+.shop .li{flex:1;min-width:0}
+.shop label.c .li>span:first-child{text-decoration:line-through;color:var(--mu)}
+.shop .use{font-size:13px;line-height:1.35;color:var(--mu);margin-top:2px}
+.bhead{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:48px;margin-top:10px;padding:0 4px;border:0;border-bottom:1px solid var(--line);background:none;color:var(--tx2);font-size:15px;font-weight:700;font-family:inherit;text-align:left}
+.haverow{display:flex;align-items:center;gap:8px;min-height:44px;color:var(--tx2)}
+.addbar{position:sticky;bottom:calc(var(--navh) + env(safe-area-inset-bottom));z-index:3;display:flex;gap:8px;margin-top:auto;padding:10px 0 8px;background:var(--bg)}
+.addbar input{flex:1;min-width:0}.addbar button{flex:none;min-width:48px;font-size:20px}
 .alt{border:1px solid var(--bd);border-radius:10px;padding:10px;margin-top:8px}
 #toast{position:fixed;bottom:calc(var(--navh) + 12px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 14px;border-radius:10px;display:none;z-index:50;width:max-content;max-width:92%;box-shadow:0 4px 18px #0006}
 #toast button{min-height:44px;margin:-8px -8px -8px 10px;padding:0 12px;border:0;border-radius:8px;background:none;color:#8fe0a8;font-size:15px;font-weight:700;font-family:inherit;text-transform:uppercase}

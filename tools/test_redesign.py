@@ -65,6 +65,8 @@ async def prepare():
         d = json.loads(data); d["name"] = LONG[day]
         db.execute("UPDATE meals SET data=?, tr=NULL WHERE id=?", (json.dumps(d, ensure_ascii=False), mid))
     db.commit(); db.close()
+    for n in ("melk", "brød", "smør", "egg"):   # atrapa daje jedną pozycję zakupów: dopisujemy własne, żeby lista miała dwa działy
+        api("/api/shop/extra", body={"name": n, "week": wid})
     st = api(f"/api/state?week={wid}", "GET")
     ok(st["pending"] == 0 and names(st) == LONG and st["week"]["id"] == st["current_id"], "przygotowanie: bieżący tydzień z 7 daniami o prawdziwych nazwach")
     return wid, st
@@ -153,6 +155,48 @@ async def week_view(A, wid, st):
     return mid
 
 
+async def shopping(A, wid):
+    await A.ev("delete sec.bought;localStorage.removeItem('sec');goTab('shop')"); await asyncio.sleep(0.6)
+    st = api(f"/api/state?week={wid}", "GET")
+    alli = [i for v in st["shopping"].values() for i in v]
+    done = sum(1 for i in alli if i["checked"])
+    ok(len(alli) >= 3 and done == 0, f"przygotowanie: lista zakupów z {len(alli)} pozycjami, nic nie kupione")
+    g = await A.ev("(()=>{const q=s=>document.querySelector('.shop '+s),r=e=>e.getBoundingClientRect();"
+                   "return {head:q('.shead b').textContent,copy:!!q('.shead [data-click=copyList]'),bar:q('.pbar i').style.width,"
+                   "cnts:[...document.querySelectorAll('.shop h3 .cnt')].map(e=>e.textContent),rows:document.querySelectorAll('.shop label').length,"
+                   "bought:!!q('.bhead'),addBottom:r(q('.addbar')).bottom,addTop:r(q('.addbar')).top,navTop:r(document.querySelector('nav')).top,"
+                   "inMain:!!q('.addbar #xn'),last:Math.max(...[...document.querySelectorAll('.shop label')].map(e=>r(e).bottom))}})()")
+    ok(g["head"] == f"0 av {len(alli)}" and g["bar"] == "0%" and g["copy"], f"pasek postępu „X z Y” i przycisk kopiowania w nagłówku listy: '{g['head']}', {g['bar']}")
+    ok(g["cnts"] == [f"0 av {len(v)}" for v in st["shopping"].values()] and g["rows"] == len(alli), f"licznik w każdym dziale {g['cnts']}")
+    ok(g["inMain"] and 0 <= g["navTop"] - g["addBottom"] <= 28 and g["addTop"] >= g["last"],
+       f"pole dopisywania przy dolnej krawędzi, pod listą (dół pola {g['addBottom']:.0f} px, pasek zakładek od {g['navTop']:.0f} px)")
+    ok(not g["bought"], "nic nie kupione: brak sekcji „Kupione”")
+    await shot(A, "shop")
+    # odhaczenie: pozycja zjeżdża do zwiniętej sekcji „Kupione (1)”, liczniki i pasek rosną
+    key = alli[0]["key"]
+    await A.ev(f"document.querySelector('.shop label input[data-k={json.dumps(key)}]').click()")
+    r = await A.ev(f"(()=>{{const q=s=>document.querySelector('.shop '+s);return [!!q('label input[data-k={json.dumps(key)}]'),q('.bhead').textContent,"
+                   "q('.bhead').getAttribute('aria-expanded'),!!q('.bought'),q('.shead b').textContent,document.getElementById('n_cnt').textContent,q('h3 .cnt').textContent]})()")
+    ok(r[0] is False and "(1)" in r[1] and r[2] == "false" and r[3] is False, f"odhaczona pozycja znika z listy do zwiniętej sekcji „Kupione (1)” {r[:4]}")
+    first = len(next(iter(st["shopping"].values())))
+    ok(r[4] == f"1 av {len(alli)}" and r[5] == str(len(alli) - 1) and (first == 1 or r[6] == f"1 av {first}"), f"postęp, licznik na zakładce i licznik działu od razu aktualne {r[4:]}")
+    await asyncio.sleep(1)
+    ok(next(i for v in api(f"/api/state?week={wid}", "GET")["shopping"].values() for i in v if i["key"] == key)["checked"], "odhaczenie zapisane na serwerze")
+    await A.ev("document.querySelector('.shop .bhead').click()"); await asyncio.sleep(0.3)
+    r = await A.ev(f"(()=>{{const i=document.querySelector('.shop .bought label input[data-k={json.dumps(key)}]');return [!!i,i&&i.checked,i&&i.closest('label').classList.contains('c'),"
+                   "document.querySelectorAll('.shop .bought label').length,document.querySelector('.shop .bhead').getBoundingClientRect().top>"
+                   "Math.max(...[...document.querySelectorAll('.shop>label')].map(e=>e.getBoundingClientRect().bottom))]})()")
+    ok(r == [True, True, True, 1, True], f"„Kupione” rozwija się dotknięciem: odhaczona pozycja jest tam, przekreślona, pod listą do kupienia {r}")
+    await shot(A, "shop_bought")
+    # odznaczenie w „Kupione” wraca na listę; dopisany produkt trafia na listę
+    await A.ev(f"document.querySelector('.shop .bought input[data-k={json.dumps(key)}]').click()"); await asyncio.sleep(1)
+    ok(await A.ev(f"!!document.querySelector('.shop>label input[data-k={json.dumps(key)}]') && !document.querySelector('.shop .bhead')"), "odznaczenie w „Kupione” przenosi pozycję z powrotem na listę")
+    await A.ev("document.getElementById('xn').value='havremelk';document.querySelector('.addbar [data-click=addX]').click()"); await asyncio.sleep(1.2)
+    ok(await A.ev("[...document.querySelectorAll('.shop>label')].some(l=>l.textContent.includes('havremelk')) && document.getElementById('xn').value===''"),
+       "pole na dole dopisuje produkt do listy i czyści się")
+    await A.ev("goTab('plan')"); await asyncio.sleep(0.4)
+
+
 async def touch_and_drag(A, wid):
     st = api(f"/api/state?week={wid}", "GET")
     await A.cmd("Emulation.setTouchEmulationEnabled", enabled=True)
@@ -195,6 +239,7 @@ async def main():
         await A.ev("setLang('no')")   # nazwy dań są po norwesku: bez tłumaczenia w tle
         await asyncio.sleep(0.5)
         await week_view(A, wid, st)
+        await shopping(A, wid)
         await touch_and_drag(A, wid)
         await delete_week(A, wid)
         ok(not A.dialogs, f"żadnego okna systemowego prompt/confirm {A.dialogs}")
