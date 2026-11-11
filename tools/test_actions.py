@@ -186,7 +186,7 @@ async def ui(A, wid, ids, herb, other_week):
     await A.ev(f"{card}.querySelector('[data-click=st]').click()"); await asyncio.sleep(1.2)
     m6 = meal(api(f"/api/state?week={wid}", "GET"), ids[6])
     ok(m6["draft"] and not m6["filling"] and not m6.get("draft_error"), "przywrócony dzień to szkic, którego nikt nie pisze (stan zawieszony)")
-    ok("⚠" in (await A.ev(f"{card}.querySelector('.desc').textContent")), "wiersz takiego dania pokazuje ostrzeżenie o braku przepisu")
+    ok(await A.ev(f"!!{card}.querySelector('.desc .ic[data-i=warn]')"), "wiersz takiego dania pokazuje ostrzeżenie o braku przepisu")
     await A.ev(f"openSheet({{kind:'rec',id:{ids[6]}}})"); await asyncio.sleep(0.4)
     ok(await A.ev("!!document.querySelector('#panel [data-click=retryRec]') && document.querySelector('#panel [data-click=retryRec]').textContent.includes('Write recipe')"),
        "podgląd przepisu takiego dania ma przycisk „Napisz przepis”")
@@ -216,7 +216,7 @@ async def ui(A, wid, ids, herb, other_week):
     # znacznik „szukam” zostawiony przez serwer (np. restart w trakcie): kręciołek bez końca też da się zamknąć
     db = sqlite3.connect(DB); db.execute("UPDATE meals SET alts='[]' WHERE id=?", (ids[1],)); db.commit(); db.close()
     await A.ev("sync()"); await asyncio.sleep(1.2)
-    ok("⏳" in (await A.ev(f"document.querySelector('.meal[data-id=\"{ids[1]}\"] .desc').textContent")), "osierocony znacznik szukania widać w wierszu dnia")
+    ok(await A.ev(f"!!document.querySelector('.meal[data-id=\"{ids[1]}\"] .desc .ic[data-i=wait]')"), "osierocony znacznik szukania widać w wierszu dnia")
     await A.ev(f"document.querySelector('.meal[data-id=\"{ids[1]}\"] [data-click=openMeal]').click()"); await asyncio.sleep(0.4)
     ok(await A.ev(f"!!document.querySelector('#panel #aw{ids[1]} .spinner')"), "dotknięcie wiersza otwiera arkusz z kręciołkiem")
     await A.ev(f"document.querySelector('#aw{ids[1]} [data-click=closeAlt]').click()"); await asyncio.sleep(1)
