@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s);
-let S=null,sheet=null,tab='plan',viewWeek=null,scrolled=false,showArch=false,openSrv={},openRec={},openIng={},openStp={},openAIng={},pollT=null,
+let S=null,sheet=null,tab='plan',viewWeek=null,openAIng={},pollT=null,
   lang=localStorage.getItem('lang')||(/^(nb|no|nn)/i.test(navigator.language)?'no':/^pl/i.test(navigator.language)?'pl':(/^en/i.test(navigator.language)?'en':'no'));
 const t=k=>(L[lang][k]??L.no[k]??k);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -9,7 +9,12 @@ const mv=m=>{const x=lang!=='no'&&m.tr&&m.tr[lang];return x?{name:x.name,descrip
 const dm=d=>d.slice(8)+'.'+d.slice(5,7);
 const wq=()=>viewWeek?`?week=${viewWeek}`:'';
 const W=o=>viewWeek?{...o,week:viewWeek}:o;
-function toast(x){const e=$('#toast');e.textContent=x;e.style.display='block';setTimeout(()=>e.style.display='none',3500)}
+// Komunikat na dole ekranu; act = {label, fn} dodaje przycisk (np. „Cofnij”) i wydłuża czas wyświetlania.
+let toastT=null,toastFn=null;
+function toast(x,act){const e=$('#toast');clearTimeout(toastT);toastFn=act?act.fn:null;
+  e.innerHTML=`<span>${esc(x)}</span>`+(act?`<button data-click="toastAct">${esc(act.label)}</button>`:'');
+  e.style.display='block';toastT=setTimeout(()=>{e.style.display='none';toastFn=null},act?7000:3500)}
+function toastAct(){const f=toastFn;toastFn=null;clearTimeout(toastT);$('#toast').style.display='none';if(f)f()}
 /* --- zapis zmian: kolejka mutacji. Każda akcja czeka na poprzednią i żadna nie przepada (dawniej akcja kliknięta
    w trakcie innej była po cichu pomijana). Ekran przygasa i pokazuje żółty pasek tylko przy długich operacjach
    z modelem, czyli tych, które podają msg; krótkie akcje nie blokują interfejsu.
@@ -63,7 +68,7 @@ async function sendCust(){if(!custText.trim()&&!custImgs.length){toast(t('custNe
   const r=await api('/api/recipes/custom','POST',{text:custText,images:custImgs},t('custReading'));
   if(r){custText='';custImgs=[];custOpen=false;set(r);toast('⭐ '+t('custSaved'))}}
 let initDone=false;
-async function load(){adopt(await fetchState());if(!viewWeek)scrolled=false;
+async function load(){adopt(await fetchState());
   if(!initDone){initDone=true;if(shouldOpenWizard(S))goTab('fridge')}
   render();ensureTr()}
 function set(r){if(!r||r.meals===undefined)return;
@@ -101,18 +106,19 @@ const ACT={
   foldSec:d=>foldSec(d.k),toggleCust:()=>toggleCust(),sendCust:()=>sendCust(),custCancel:()=>{custOpen=false;render()},rmImg:d=>rmImg(+d.i),
   setDef:d=>setDef(+d.n),undislike:byId(undislike),weekStep:d=>weekStep(+d.d),
   openMenu:()=>openSheet({kind:'menu'}),closeSheet:()=>closeSheet(),setLang:d=>setLang(d.l),setTheme:d=>setTheme(d.th),
-  st:d=>st(+d.id,d.s),restoreSwap:d=>st(+d.id,'planned').then(()=>openAlt(+d.id)),
-  retryRec:byId(retryRec),toggleIng:byId(toggleIng),toggleRec:byId(toggleRec),toggleSec:d=>toggleSec(d.w,+d.id),
-  dislike:byId(dislike),fav:byId(fav),toggleSrv:byId(toggleSrv),srv:d=>srv(+d.id,numOrNull(d.n)),
-  openAlt:byId(openAlt),removeDay:byId(removeDay),carry:byId(carry),
+  toastAct:()=>toastAct(),confirmYes:()=>{const f=sheet&&sheet.fn;closeSheet();if(f)f()},
+  openMeal:byId(openMeal),openRec:d=>openSheet({kind:'rec',id:+d.id}),sheetMeal:d=>openSheet({kind:'meal',id:+d.id}),toggleDone:byId(toggleDone),
+  st:d=>{if(sheet&&d.s!=='planned')closeSheet();st(+d.id,d.s)},restoreSwap:d=>st(+d.id,'planned'),retryRec:byId(retryRec),
+  dislikeAsk:()=>{sheet.why=true;render();const i=$('#panel input[id^=why]');if(i)i.focus()},dislikeCancel:()=>{sheet.why=false;render()},
+  dislikeSave:byId(dislikeSave),dislikeOff:byId(dislikeOff),fav:byId(fav),srv:d=>srv(+d.id,numOrNull(d.n)),
+  mv2:d=>{closeSheet();mv2(+d.id,d.d)},removeDay:byId(removeDay),carry:d=>{closeSheet();carry(+d.id)},
   goTab:d=>goTab(d.t),goWeek:d=>goWeek(numOrNull(d.id)),confirmPlan:()=>confirmPlan(),delWeek:byId(delWeek),confirmWeek:byId(confirmWeek),
-  findAlts:d=>findAlts(+d.id,false),closeAlt:byId(closeAlt),toggleAIng:d=>toggleAIng(d.k),choose:d=>choose(+d.id,+d.i),
+  findAlts:d=>findAlts(+d.id),swapHint:d=>findAlts(+d.id,d.h),closeAlt:byId(closeAlt),toggleAIng:d=>toggleAIng(d.k),choose:d=>choose(+d.id,+d.i),
   togUses:d=>togUses(d.k),addX:()=>addX(),delX:byId(delX),dismissG:d=>dismissG(d.k),
   copyList:()=>copyList(),addP:()=>addP(),delP:byId(delP),addC:()=>addC(),delC:byId(delC),delRec:byId(delRec),gen:()=>gen(),jbAdd:()=>jbAdd()},
  change:{
-  done:(d,el)=>st(+d.id,el.checked?'done':'planned'),mv2:(d,el)=>mv2(+d.id,el.value),chk:(d,el)=>chk(d.k,el.checked),
-  takeRec:(d,el)=>takeRec(+d.id,el.checked),setDay:(d,el)=>setDay(d.kind,+d.id,el.value),addImgs:(d,el)=>{addImgs(el.files);el.value=''}},
- enter:{findAlts:d=>findAlts(+d.id,false),addX:()=>addX(),addP:()=>addP(),addC:()=>addC(),jbAdd:()=>jbAdd()},
+  chk:(d,el)=>chk(d.k,el.checked),takeRec:(d,el)=>takeRec(+d.id,el.checked),addImgs:(d,el)=>{addImgs(el.files);el.value=''}},
+ enter:{findAlts:d=>findAlts(+d.id),dislikeSave:byId(dislikeSave),addX:()=>addX(),addP:()=>addP(),addC:()=>addC(),jbAdd:()=>jbAdd()},
  input:{custText:(d,el)=>{custText=el.value}}};
 function dispatch(kind,e){
   const el=e.target&&e.target.closest?e.target.closest('[data-'+kind+']'):null;if(!el)return;
@@ -134,7 +140,11 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&sheet)closeSheet()}
 function sheetHead(title){return `<div class="phead"><h2>${title}</h2><button class="hb" data-click="closeSheet" aria-label="${esc(t('close'))}">✕</button></div>`}
 function sheetBody(){
   if(sheet.kind==='menu')return menuHtml();
-  return ''}
+  if(sheet.kind==='confirm')return `${sheetHead(esc(sheet.title))}<p class="ptxt">${esc(sheet.text)}</p>
+   <div class="row"><button class="b danger" data-click="confirmYes">${esc(sheet.yes)}</button><button class="b" data-click="closeSheet">${t('cancel')}</button></div>`;
+  if(sheet.kind==='text')return `${sheetHead(esc(sheet.title))}<textarea rows="12" readonly>${esc(sheet.text)}</textarea>`;
+  const m=gm(sheet.id);
+  return sheet.kind==='rec'?recSheet(m):mealSheet(m)}
 // Podmienia treść elementu tylko wtedy, gdy się zmieniła; wpisany tekst, kursor i przewinięcie zostają.
 function paint(el,html,force){
   if(el._h===html&&!force)return;
@@ -145,7 +155,7 @@ function paint(el,html,force){
   if(aid){const e=document.getElementById(aid);if(e){e.focus();try{e.setSelectionRange(as,as)}catch(_){}}}
   el.scrollTop=top}
 function renderSheet(){const box=$('#sheet');
-  if(sheet&&!S)sheet=null;
+  if(sheet&&(!S||((sheet.kind==='rec'||sheet.kind==='meal')&&!gm(sheet.id))))sheet=null;   // danie zniknęło (np. inny tydzień): arkusz nie ma czego pokazać
   box.classList.toggle('open',!!sheet);document.body.classList.toggle('modal',!!sheet);
   paint($('#panel'),sheet?sheetBody():'')}
 function menuHtml(){const dl=S.dislikes||[],dark=document.documentElement.getAttribute('data-theme')==='dark';
@@ -154,7 +164,8 @@ function menuHtml(){const dl=S.dislikes||[],dark=document.documentElement.getAtt
   <div class="mrow"><span>${t('themeT')}</span><span class="seg"><button class="${dark?'':'on'}" data-click="setTheme" data-th="light">☀️ ${t('thLight')}</button><button class="${dark?'on':''}" data-click="setTheme" data-th="dark">🌙 ${t('thDark')}</button></span></div>
   <div class="mrow"><span>${t('pDef')}</span><span class="stp"><button class="b" data-click="setDef" data-n="${S.servings_default-1}" aria-label="−">−</button><b>${S.servings_default}</b><button class="b" data-click="setDef" data-n="${S.servings_default+1}" aria-label="+">+</button></span></div>
   <div class="msec"><b>👎 ${t('dislikesT')}</b> <span class="desc">${t('dislikesSub')}</span>
-  ${dl.length?dl.map(d=>`<div class="mrow"><span>${esc(d.name)}${d.reason?` <i>– ${esc(d.reason)}</i>`:''}</span><button class="b" aria-label="${esc(t('restore'))}" data-click="undislike" data-id="${d.id}">✕</button></div>`).join(''):`<div class="desc">${t('dislikesNone')}</div>`}</div></div>`}
+  ${dl.length?dl.map(d=>`<div class="mrow"><span>${esc(d.name)}${d.reason?` <i>– ${esc(d.reason)}</i>`:''}</span><button class="b" aria-label="${esc(t('restore'))}" data-click="undislike" data-id="${d.id}">✕</button></div>`).join(''):`<div class="desc">${t('dislikesNone')}</div>`}</div></div>
+  ${S.week?`<button class="act danger" data-click="delWeek" data-id="${S.week.id}">${t('delWeek')} · ${t('wk')}${isoWk(S.week.start)}</button>`:''}`}
 function isoWk(ds){const x=new Date(ds+'T12:00:00');x.setDate(x.getDate()+2);const d=new Date(Date.UTC(x.getFullYear(),x.getMonth(),x.getDate()));const n=d.getUTCDay()||7;d.setUTCDate(d.getUTCDate()+4-n);const y=new Date(Date.UTC(d.getUTCFullYear(),0,1));return Math.ceil(((d-y)/864e5+1)/7)}
 /* --- nagłówek: jedna linia. Na zakładkach tygodnia i zakupów tydzień ze strzałkami ‹ ›, na pozostałych nazwa zakładki. */
 function weekNb(d){const ws=[...((S&&S.weeks)||[])].sort((a,b)=>a.start<b.start?-1:1),i=S&&S.week?ws.findIndex(w=>w.id===S.week.id):-1;return i<0?null:ws[i+d]||null}
@@ -174,20 +185,14 @@ function navRender(){
   TABS.forEach(([k,l])=>{const b=$('#n_'+k);b.querySelector('span').textContent=t(l);b.classList.toggle('on',tab===k);
     if(tab===k)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
   const n=shopLeft(),c=$('#n_cnt');c.textContent=n||'';c.hidden=!n;c.classList.toggle('alert',!!(S&&S.shop_alert>0))}
-let mainHtml=null,forceRender=false;
+let forceRender=false;
 function render(){
-  const keep={};document.querySelectorAll('#main input[type=text],#main input:not([type])').forEach(e=>{if(e.id)keep[e.id]=e.value});
-  const ae=document.activeElement,aid=ae&&ae.id,as=ae&&ae.selectionStart;
-  headRender();navRender();renderSheet();
-  // Listę przebudowujemy tylko wtedy, gdy jej treść się zmieniła. Odświeżenie w tle, które nic nie zmienia, nie podmienia
-  // więc elementu pod palcem (dotknięcie trwające w chwili podmiany przepadało). forceRender wymusza przebudowę,
-  // gdy trzeba cofnąć coś, co zmieniło się tylko na ekranie (zaznaczone pole po nieudanym zapisie).
-  const html=tab==='plan'?plan():tab==='shop'?shop():fridge();
-  if(html!==mainHtml||forceRender){forceRender=false;mainHtml=html;
-    $('#main').innerHTML=html;
-    for(const [id,v] of Object.entries(keep)){const e=document.getElementById(id);if(e&&!e.value)e.value=v}
-    if(aid){const e=document.getElementById(aid);if(e){e.focus();try{e.setSelectionRange(as,as)}catch(_){}}}}
-  if(tab==='plan'&&!scrolled){scrolled=true;const td=document.querySelector('.slot.today');if(td)setTimeout(()=>td.scrollIntoView({block:'start',behavior:'smooth'}),60)}
+  headRender();navRender();
+  // Listę przebudowujemy tylko wtedy, gdy jej treść się zmieniła (patrz paint). Odświeżenie w tle, które nic nie zmienia,
+  // nie podmienia więc elementu pod palcem (dotknięcie trwające w chwili podmiany przepadało). forceRender wymusza
+  // przebudowę, gdy trzeba cofnąć coś, co zmieniło się tylko na ekranie (zaznaczone pole po nieudanym zapisie).
+  paint($('#main'),tab==='plan'?plan():tab==='shop'?shop():fridge(),forceRender);forceRender=false;
+  renderSheet();
   if(tab==='fridge')wizSync();
   schedulePoll()}
 function needPoll(){return S&&S.meals&&S.meals.some(m=>m.filling||(m.alts&&m.alts.length===0&&!m.loading))}
@@ -199,89 +204,95 @@ function schedulePoll(){if(pollT||!needPoll())return;pollT=setTimeout(async()=>{
     adopt(d);const ready=d.meals.filter(m=>waiting.has(m.id)&&m.alts&&m.alts.length>0).map(m=>m.id);
     render();ready.forEach(attention);return}}catch(e){}render()},2500)}
 function ingList(names){return `<ul>${names.map(n=>`<li>${esc(n)}</li>`).join('')}</ul>`}
-function mealCard(m){const v=mv(m),D=t('days');const isToday=m.date===S.today;
-  if(m.status==='removed')return `<div class="meal off" data-id="${m.id}">
-   <div class="mh"><span class="offtxt">🚫 ${t('dayOff')}</span><span class="handle">⠿</span></div>
-   <div class="desc" style="text-decoration:line-through">${esc(v.name)}</div>
-   <div class="row"><button class="b" data-click="st" data-id="${m.id}" data-s="planned">↺ ${t('restore')}</button>
-    <button class="b" data-click="restoreSwap" data-id="${m.id}">🔄 ${t('otherDish')}</button></div>
-   <div id="alt${m.id}">${m.open?altsHtml(m):''}</div></div>`;
-  const sOpen=openSrv[m.id];
-  const tags=`${m.is_fish?`<span class="tag">${t('fish')}</span>`:''}${m.status==='skipped'?`<span class="tag">${t('tSkip')}</span>`:''}${m.owned?`<span class="tag">${t('tCarry')}</span>`:''}`;
-  let chip,panel='';
-  if(m.draft){
-    const iOpen=!!openIng[m.id];
-    if(m.filling)chip=`<button class="srv chip on" disabled>⏳ ${t('recWait')}</button>`;
-    else if(m.draft_error)chip=`<button class="srv chip" style="background:var(--badbg);color:var(--bad)" data-click="retryRec" data-id="${m.id}">${t('recFail')}</button>`;
-    else chip=`<button class="srv chip ${iOpen?'on':''}" data-click="toggleIng" data-id="${m.id}">🧾 ${t('ingChip')} ${iOpen?'▴':'▾'}</button>`;
-    if(iOpen&&!m.filling&&!m.draft_error)panel=`<div class="rec">${ingList(m.ingredient_names||[])}</div>`;
-  }else{
-    const rOpen=openRec[m.id]??(isToday&&m.status==='planned');
-    chip=`<button class="srv chip ${rOpen?'on':''}" data-click="toggleRec" data-id="${m.id}">📖 ${t('recipe')} ${rOpen?'▴':'▾'}</button>`;
-    if(rOpen){const iO=openIng[m.id]??true,sO=openStp[m.id]??true;
-      panel=`<div class="rec"><a href="#" class="sec" data-click="toggleSec" data-w="ing" data-id="${m.id}"><b>${t('sectIng')}</b> ${iO?'▴':'▾'}</a>
-       ${iO?`<ul>${m.ingredients.map((i,k)=>`<li>${esc(m.qv[k]??'')} ${esc(i.unit)} ${esc(v.ing[k]||i.name)}</li>`).join('')}</ul>`:''}
-       <a href="#" class="sec" data-click="toggleSec" data-w="stp" data-id="${m.id}"><b>${t('sectStp')}</b> ${sO?'▴':'▾'}</a>
-       ${sO?`<ol>${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>`:''}
-       ${okUrl(m.source)?`<div class="desc"><a href="${esc(m.source)}" target="_blank" rel="noopener">${t('src')}</a></div>`:''}</div>`}
-  }
-  // szkic bez przepisu w zatwierdzonym tygodniu, którego nikt nie pisze (np. przywrócony dzień, restart serwera w trakcie pisania)
-  const stuck=m.draft&&!m.filling&&!m.draft_error&&S.week.confirmed;
-  const showAlt=m.open||(m.alts&&m.alts.length>=0&&m.alts!==null);
-  return `<div class="meal ${m.status!=='planned'?'done':''}" data-id="${m.id}">
-   <div class="mh"><input type="checkbox" class="chk" ${m.status==='done'?'checked':''} data-change="done" data-id="${m.id}" aria-label="done">
-    <button class="ic ${m.disliked?'on':''}" data-click="dislike" data-id="${m.id}" aria-label="dislike" title="${esc(t('dislikeT'))}">👎</button>
-    <button class="ic ${m.fav?'on':''}" data-click="fav" data-id="${m.id}" aria-label="favorite">⭐</button>
-    <span class="handle">⠿</span></div>
-   <div class="name">${esc(v.name)}</div>
-   <div class="desc">${esc(v.description)}${m.time_min?` · ${esc(m.time_min)} min`:''}${tags}</div>
-   <div class="row" style="flex-wrap:nowrap;justify-content:space-between">${chip}
-    <button class="srv" data-click="toggleSrv" data-id="${m.id}">👥 ${m.servings_eff} ${t('por')} ✎</button></div>
-   ${sOpen?`<div class="row"><span>👥 <button class="b" style="padding:5px 11px" data-click="srv" data-id="${m.id}" data-n="${m.servings_eff-1}">−</button> <b style="padding:0 6px">${m.servings_eff}</b> <button class="b" style="padding:5px 11px" data-click="srv" data-id="${m.id}" data-n="${m.servings_eff+1}">+</button>${m.servings?` <a href="#" data-click="srv" data-id="${m.id}" data-n="">↺</a>`:''}</span></div>`:''}
-   ${stuck?`<div class="row"><button class="b p" data-click="retryRec" data-id="${m.id}">✍ ${t('recWrite')}</button><span class="desc">${t('recNone')}</span></div>`:''}
-   ${panel}
-   <div class="row">
-    ${m.status==='planned'?`<button class="b" data-click="openAlt" data-id="${m.id}">🔄 ${t('swapBtn')}</button>`:''}
-    <select class="b" style="flex:1;min-width:150px" data-change="mv2" data-id="${m.id}"><option value="">${t('moveBtn')}</option>${D.map((d,k)=>k===m.day?'':`<option value="${k}">${d}</option>`).join('')}</select>
-    ${m.status==='planned'?`<button class="b" title="${esc(t('removeDay'))}" aria-label="${esc(t('removeDay'))}" data-click="removeDay" data-id="${m.id}">🗑</button>`:''}</div>
-   <div id="alt${m.id}">${showAlt?altsHtml(m):''}</div></div>`}
+/* --- tydzień: jeden wiersz na dzień (data, nazwa, kółko „zrobione”). Data jest uchwytem do przeciągania, dotknięcie
+   nazwy otwiera przepis, a rzadkie akcje są w arkuszu pod ⋯. Dzisiejszy dzień jest rozwinięty. */
+function mealState(m){   // dopisek pod nazwą, tylko gdy z daniem coś się dzieje
+  if(m.loading||(m.alts&&m.alts.length===0))return '⏳ '+t('bSwap');
+  if(m.alts&&m.alts.length)return t('readyT');
+  if(m.draft&&m.filling)return '⏳ '+t('recWait');
+  if(m.draft&&(m.draft_error||S.week.confirmed))return '⚠ '+t('recNone');
+  if(m.overdue&&m.status==='planned')return '⚠ '+t('overdueS');
+  return ''}
+function mealCard(m){const v=mv(m),id=m.id,isT=m.date===S.today,done=m.status==='done';
+  const d=`<span class="d handle"><small>${esc(isT?t('today'):t('daysS')[m.day])}</small><b>${m.date.slice(8)}</b></span>`;
+  const more=`<button class="mb" data-click="sheetMeal" data-id="${id}" aria-label="${esc(t('actions'))}">⋯</button>`;
+  if(m.status==='removed')return `<div class="meal off" data-id="${id}"><div class="dr">${d}
+   <button class="nmb" data-click="sheetMeal" data-id="${id}"><span class="name">${t('dayOffS')}</span><span class="desc"><s>${esc(v.name)}</s></span></button>
+   <button class="mb" data-click="st" data-id="${id}" data-s="planned" aria-label="${esc(t('restore'))}" title="${esc(t('restore'))}">↺</button></div></div>`;
+  const sub=[mealState(m),...(isT?[m.time_min?m.time_min+' min':'',m.servings_eff+' '+t('por'),m.is_fish?t('fish'):'']:[]),
+    m.status==='skipped'?t('tSkip'):'',m.owned?t('tCarry'):''].filter(Boolean).map(esc).join(' · ');
+  const ck=`<button class="ck ${done?'on':''}" data-click="toggleDone" data-id="${id}" aria-pressed="${done}" aria-label="${esc(t('markDoneA'))}"></button>`;
+  return `<div class="meal ${done?'done':''} ${m.overdue&&m.status==='planned'?'late':''}" data-id="${id}"><div class="dr">${d}
+   <button class="nmb" data-click="openMeal" data-id="${id}"><span class="name">${esc(v.name)}</span>${sub?`<span class="desc">${sub}</span>`:''}</button>
+   ${isT?'':more+ck}</div>
+   ${isT?`<div class="tr"><button class="b p" data-click="openMeal" data-id="${id}">📖 ${t('recipe')}</button>
+    <button class="b dn ${done?'on':''}" data-click="toggleDone" data-id="${id}" aria-pressed="${done}">${t('markDone')}</button><span class="sp"></span>${more}</div>`:''}</div>`}
 function plan(){
   if(!S.week)return `<div class="card">${t('noplan')}<div class="row"><button class="b p" data-click="goTab" data-t="fridge">${t('goPlanner')}</button></div></div>`;
-  const D=t('days');let h='';
-  if(S.week.id!==S.current_id)h+=`<div class="warn">${S.week.start>S.today?t('upcoming'):t('archBan')} <b>${dm(S.week.start)} – ${dm(S.week.end)}</b> <div class="row"><button class="b p" data-click="goWeek" data-id="">${t('backCur')}</button></div></div>`;
-  S.meals.filter(m=>m.overdue).forEach(m=>h+=`<div class="warn"><b>${D[m.day]}: ${esc(mv(m).name)}</b> ${t('overdue')}
-   <div class="row"><button class="b p" data-click="st" data-id="${m.id}" data-s="done">${t('markDone')}</button>
-   <button class="b" data-click="carry" data-id="${m.id}">${t('carry')}</button>
-   <button class="b" data-click="st" data-id="${m.id}" data-s="skipped">${t('skip')}</button></div></div>`);
+  let h='';
+  if(S.week.id!==S.current_id)h+=`<div class="strip"><span>${(S.week.start>S.today?t('upcoming'):t('archBan')).replace(':','')}</span><button class="b" data-click="goWeek" data-id="">${t('backCur')}</button></div>`;
   if(S.carry.length)h+=`<div class="warn">${t('waiting')} ${S.carry.map(esc).join(', ')}</div>`;
   if(S.week.confirmed===false)h+=`<div class="warn" style="background:var(--info);border-color:var(--infobd)"><b>${t('confTitle')}</b><div class="desc" style="margin-top:4px">${t('confTxt')}</div><div class="row"><button class="b p" data-click="confirmPlan">${t('confirmBtn')}</button></div></div>`;
-  h+=`<div class="desc" style="font-size:12px;margin:0 2px 8px">${t('dragHint')}</div>`;
-  S.meals.forEach(m=>{const isT=m.date===S.today,past=m.date<S.today;
-    h+=`<div class="slot ${isT?'today':''} ${past?'past':''} ${m.status==='removed'?'offday':''}" data-day="${m.day}"><div class="dayhead"><span class="dn">${D[m.day]}</span><span class="dd">${dm(m.date)}</span>${isT?`<span class="dt">${t('today')}</span>`:''}</div>${mealCard(m)}</div>`});
-  const later=(S.weeks||[]).some(w=>w.start>S.week.start);
-  if(!later)h+=`<div class="row"><button class="b" data-click="goTab" data-t="fridge">${t('goPlanner')}</button></div>`;
-  h+=`<div class="row" style="margin-top:18px"><button class="b" style="color:var(--bad);border-color:var(--badbd)" data-click="delWeek" data-id="${S.week.id}">${t('delWeek')}</button></div>`;
+  h+='<div class="week">'+S.meals.map(m=>`<div class="slot ${m.date===S.today?'today':''} ${m.date<S.today?'past':''} ${m.status==='removed'?'offday':''}" data-day="${m.day}">${mealCard(m)}</div>`).join('')+'</div>';
   return h}
+function openMeal(id){const m=gm(id);if(!m)return;
+  openSheet({kind:m.status==='removed'||m.overdue||m.loading||m.alts!=null?'meal':'rec',id})}   // gdy danie czeka na decyzję, od razu arkusz akcji
+// Podgląd przepisu (dotknięcie wiersza). Szkic bez przepisu pokazuje same nazwy składników i, gdy nikt go nie pisze, przycisk „Napisz przepis”.
+function recSheet(m){const v=mv(m),id=m.id;let body;
+  if(m.draft){
+    body=m.filling?`<div class="note">⏳ ${t('recWait')}</div>`
+     :(m.draft_error||S.week.confirmed)?`<div class="note">${t('recNone')}</div><div class="row"><button class="b p" data-click="retryRec" data-id="${id}">✍ ${t('recWrite')}</button></div>`:'';
+    body+=`<h3>${t('sectIng')}</h3>${ingList(m.ingredient_names||[])}`;
+  }else body=`<h3>${t('sectIng')}</h3><ul class="ings">${m.ingredients.map((i,k)=>`<li>${esc(m.qv[k]??'')} ${esc(i.unit)} ${esc(v.ing[k]||i.name)}</li>`).join('')}</ul>
+   <h3>${t('sectStp')}</h3><ol class="steps">${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>
+   ${okUrl(m.source)?`<a class="lnk" href="${esc(m.source)}" target="_blank" rel="noopener">${t('src')} ↗</a>`:''}`;
+  return `${sheetHead(esc(v.name))}<div class="desc">${[v.description,m.time_min?m.time_min+' min':'',m.servings_eff+' '+t('por'),m.is_fish?t('fish'):''].filter(Boolean).map(esc).join(' · ')}</div>
+   ${body}<div class="row"><button class="b" data-click="sheetMeal" data-id="${id}">⋯ ${t('actions')}</button></div>`}
+// Arkusz akcji dania: zamiana (podpowiedzi, własne życzenie, propozycje), przeniesienie, porcje, przepisy, 👎, usunięcie.
+function mealSheet(m){const v=mv(m),id=m.id,D=t('days');
+  const head=sheetHead(esc(v.name))+`<div class="desc">${esc(D[m.day])} ${dm(m.date)}</div>`;
+  const move=`<div class="lbl">${t('moveBtn')}</div><div class="chips">${t('daysS').map((x,k)=>k===m.day?'':`<button class="chip" data-click="mv2" data-id="${id}" data-d="${k}" aria-label="${esc(D[k])}">${esc(x)}</button>`).join('')}</div>`;
+  if(m.status==='removed')return `${sheetHead(t('dayOffS'))}<div class="desc">${esc(D[m.day])} ${dm(m.date)} · <s>${esc(v.name)}</s></div>
+   <button class="act" data-click="st" data-id="${id}" data-s="planned">↺ ${t('restore')}</button>
+   <button class="act" data-click="restoreSwap" data-id="${id}">🔄 ${t('otherDish')}</button>${move}`;
+  const dis=m.disliked?`<button class="act" data-click="dislikeOff" data-id="${id}" aria-label="dislike" aria-pressed="true">👎 ${t('dislikeT')} ✓ <span class="desc">${t('undo')}</span></button>`
+   :sheet.why?`<div class="alt"><b>👎 ${t('dislikeT')}</b><div class="desc">${t('dislikeQ')}</div>
+     <div class="inrow"><input id="why${id}" placeholder="${esc(t('dislikePh'))}" data-enter="dislikeSave" data-id="${id}"><button class="b p" data-click="dislikeSave" data-id="${id}">${t('save')}</button></div>
+     <div class="row"><button class="b" data-click="dislikeCancel">${t('cancel')}</button></div></div>`
+   :`<button class="act" data-click="dislikeAsk" aria-label="dislike" aria-pressed="false">👎 ${t('dislikeT')}</button>`;
+  // zaległe danie (dzień minął, a nie jest odhaczone): decyzja na górze arkusza
+  const late=m.overdue?`<div class="note"><b>${t('overdueQ')}</b><div class="row"><button class="b p" data-click="st" data-id="${id}" data-s="done">${t('markDone')}</button>
+    <button class="b" data-click="carry" data-id="${id}">${t('carry')}</button><button class="b" data-click="st" data-id="${id}" data-s="skipped">${t('skip')}</button></div></div>`:'';
+  return `${head}${late}<button class="act" data-click="openRec" data-id="${id}">📖 ${t('recipe')}</button>
+   ${m.status==='planned'||m.alts!=null||m.loading?`<div id="alt${id}">${altsHtml(m)}</div>`:''}${move}
+   <div class="mrow"><span>👥 ${t('porT')}</span><span class="stp"><button class="b" data-click="srv" data-id="${id}" data-n="${m.servings_eff-1}" aria-label="−">−</button><b>${m.servings_eff}</b><button class="b" data-click="srv" data-id="${id}" data-n="${m.servings_eff+1}" aria-label="+">+</button>${m.servings?`<button class="b" data-click="srv" data-id="${id}" data-n="" aria-label="${esc(t('restore'))}">↺</button>`:''}</span></div>
+   <button class="act" data-click="fav" data-id="${id}" aria-label="favorite" aria-pressed="${!!m.fav}">⭐ ${m.fav?t('favOn')+' ✓':t('favAdd')}</button>
+   ${dis}
+   ${m.status==='planned'?`<button class="act danger" data-click="removeDay" data-id="${id}">🗑 ${t('removeDayL')}</button>`:''}`}
+const SWAPS=['swRice','swLight','swQuick'];
 function altsHtml(m){const id=m.id;
-  if(m.loading||(m.alts&&m.alts.length===0))return `<div class="altwrap" id="aw${id}"><div class="finding"><div class="spinner"></div><div><div class="ft">🔄 ${t('bSwap')}</div><div class="fs">${t('findSub')}</div></div></div><div class="row"><button class="b" data-click="closeAlt" data-id="${id}">${t('cancel')}</button></div><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>`;
-  const ask=`<input id="hint${id}" placeholder="${esc(t('askPh'))}" style="margin-top:6px" value="${esc(m.hint||'')}" data-enter="findAlts" data-id="${id}">`;
-  if(!m.alts)return `<div class="altwrap" id="aw${id}"><div class="alt"><b>${t('askQ')}</b>${ask}<div class="row"><button class="b p" data-click="findAlts" data-id="${id}">${t('find')}</button><button class="b" data-click="closeAlt" data-id="${id}">${t('cancel')}</button></div></div></div>`;
-  return `<div class="altwrap ${m.justReady?'ready':''}" id="aw${id}">${m.justReady?`<div class="readyb">${t('readyT')} ↓</div>`:''}`+m.alts.map((o,i)=>{const k=id+':'+i,op=!!openAIng[k];return `<div class="alt"><b>${esc(o.name)}</b><div class="desc">${esc(o.description)}</div>
-  ${(o.ingredients||[]).length?`<a href="#" class="sec" data-click="toggleAIng" data-k="${k}">${op?t('hideIng')+' ▴':t('showIng')+' ▾'}</a>${op?ingList(o.ingredients):''}`:''}
+  if(m.loading||(m.alts&&m.alts.length===0))return `<div class="altwrap" id="aw${id}"><div class="finding"><div class="spinner"></div><div><div class="ft">🔄 ${t('bSwap')}</div><div class="fs">${t('findSub')}</div></div></div><div class="row"><button class="b" data-click="closeAlt" data-id="${id}">${t('cancel')}</button></div><div class="skel"></div><div class="skel"></div></div>`;
+  const ask=`<div class="inrow"><input id="hint${id}" placeholder="${esc(t('askPh'))}" value="${esc(m.hint||'')}" data-enter="findAlts" data-id="${id}"><button class="b p" data-click="findAlts" data-id="${id}">${t('find')}</button></div>`;
+  // jeszcze nic nie szukano: gotowe podpowiedzi jednym dotknięciem albo własne życzenie
+  if(!m.alts)return `<div class="swap"><div class="lbl">🔄 ${t('swapBtn')}</div><div class="chips">${SWAPS.map(k=>`<button class="chip" data-click="swapHint" data-id="${id}" data-h="${esc(t(k))}">${t(k)}</button>`).join('')}<button class="chip" data-click="swapHint" data-id="${id}" data-h="">✨ ${t('surprise')}</button></div>${ask}</div>`;
+  return `<div class="altwrap ${m.justReady?'ready':''}" id="aw${id}"><div class="${m.justReady?'readyb':'lbl'}">${t('readyT')}${m.justReady?' ↓':''}</div>`+m.alts.map((o,i)=>{const k=id+':'+i,op=!!openAIng[k];return `<div class="alt"><b>${esc(o.name)}</b><div class="desc">${esc(o.description)}</div>
+  ${(o.ingredients||[]).length?`<button class="lnk" data-click="toggleAIng" data-k="${k}">${op?t('hideIng')+' ▴':t('showIng')+' ▾'}</button>${op?ingList(o.ingredients):''}`:''}
   <div class="row"><button class="b p" ${m.choosing!=null?'disabled':''} data-click="choose" data-id="${id}" data-i="${i}">${m.choosing===i?'⏳':t('choose')}</button></div></div>`}).join('')+
-  `<div class="alt">${ask}<div class="row"><button class="b" data-click="findAlts" data-id="${id}">${t('search')}</button><button class="b" data-click="closeAlt" data-id="${id}">${t('cancel')}</button></div></div></div>`}
+  `<div class="alt">${ask}<div class="row"><button class="b" data-click="closeAlt" data-id="${id}">${t('cancel')}</button></div></div></div>`}
+// Propozycje gotowe: gdy arkusz dania jest otwarty, podświetlamy je w nim; gdy nie, komunikat z przyciskiem „Pokaż”.
 function attention(id){const m=gm(id);if(!m)return;m.justReady=true;render();
-  const el=document.getElementById('aw'+id);if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
-  toast(t('readyT'));try{navigator.vibrate&&navigator.vibrate(60)}catch(e){}
-  setTimeout(()=>{const mm=gm(id);if(mm)mm.justReady=false;const e=document.getElementById('aw'+id);if(e){e.classList.remove('ready');const b=e.querySelector('.readyb');if(b)b.remove()}},4500)}
+  const shown=sheet&&sheet.kind==='meal'&&sheet.id===id;
+  const el=document.getElementById('aw'+id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
+  toast(t('readyT'),shown?null:{label:t('show'),fn:()=>openSheet({kind:'meal',id})});try{navigator.vibrate&&navigator.vibrate(60)}catch(e){}
+  setTimeout(()=>{const mm=gm(id);if(mm)mm.justReady=false;render()},4500)}
 const usesOpen=new Set();
 function togUses(k){usesOpen.has(k)?usesOpen.delete(k):usesOpen.add(k);render()}
 function useLine(u,withQty){const m=(S.meals||[]).find(x=>x.id===u.meal);const q=withQty&&u.qty?` – ${esc(u.qty)} ${esc(u.unit)}`:'';
-  return `${esc(t('days')[u.day].slice(0,3))} · ${esc(m?rv(m).name:'')}${q}`}
+  return `${esc(t('daysS')[u.day])} · ${esc(m?rv(m).name:'')}${q}`}
 function usesHtml(i,k){const u=i.uses||[];if(!u.length)return '';
   if(u.length===1)return `<div class="use">${useLine(u[0])}</div>`;
   const open=usesOpen.has(k);
-  return `<button type="button" class="use" data-click="togUses" data-k="${esc(k)}">${t('usedIn').replace('{n}',u.length)}: ${u.map(x=>esc(t('days')[x.day].slice(0,3))).join(', ')} ${open?'▴':'▾'}</button>`+(open?u.map(x=>`<div class="use">${useLine(x,true)}</div>`).join(''):'')}
+  return `<button type="button" class="use" data-click="togUses" data-k="${esc(k)}">${t('usedIn').replace('{n}',u.length)}: ${u.map(x=>esc(t('daysS')[x.day])).join(', ')} ${open?'▴':'▾'}</button>`+(open?u.map(x=>`<div class="use">${useLine(x,true)}</div>`).join(''):'')}
 function headsTxt(i){if(!i.heads)return '';const w=t('heads');return ` <span class="use" style="text-decoration:none">(≈ ${i.heads} ${i.heads===1?w[0]:w[1]})</span>`}
 function shop(){
   if(!S.week)return '';
@@ -296,7 +307,6 @@ function shop(){
   if(S.have.length)h+=`<h3>${t('have')}</h3>`+S.have.map(i=>`<div style="color:var(--mu);padding:4px 0">${esc(i.qty)} ${esc(i.unit)} ${esc(nm(i.name))}${usesHtml(i,'have:'+i.key)}</div>`).join('');
   return h+`</div>`}
 function rv(r){const x=lang!=='no'&&r.tr&&r.tr[lang];return x?{name:x.name,description:x.description,ing:x.ingredients,steps:x.steps}:{name:r.name,description:r.description,ing:r.ingredients.map(i=>i.name),steps:r.steps}}
-function daySel(kind,id,cur){const D=t('days');return `<select class="b" style="padding:4px 6px;font-size:13px" data-change="setDay" data-kind="${kind}" data-id="${id}"><option value="">${t('noDayOpt')}</option>${D.map((d,k)=>`<option value="${k}" ${cur===k?'selected':''}>${d}</option>`).join('')}</select>`}
 let wizDraft=null,wizBusy=false;
 function latestWeek(){return (S.weeks||[]).reduce((a,w)=>!a||w.start>a.start?w:a,null)}
 async function wizSync(){const lw=latestWeek();
@@ -311,7 +321,7 @@ function shouldOpenWizard(s){if(!s)return false;
   const future=(s.weeks||[]).some(w=>w.start>s.today);
   const days=Math.round((new Date(s.next_start+'T12:00:00')-new Date((s.today||s.next_start)+'T12:00:00'))/864e5);
   return !future&&days<=2}
-function goTab(k){tab=k;scrolled=false;render();window.scrollTo(0,0)}
+function goTab(k){tab=k;render();window.scrollTo(0,0)}
 function fridge(){
   const D=t('days');
   const lw=latestWeek();const draft=lw&&!lw.confirmed?wizDraft:null;
@@ -342,14 +352,17 @@ function fridge(){
    <div class="row"><button class="b" style="margin-left:auto" data-click="delRec" data-id="${r.id}">${t('del')}</button></div></details></div>`}).join('')}</div>`:''}</div>
   ${draft?'':`<div class="row"><button class="b p" style="flex:1;padding:14px;font-size:16px" ${jobRunning?'disabled':''} data-click="gen">${t('goBtn')}</button></div>`}`;
   return h}
-async function delWeek(wid){if(!confirm(t('delWeekQ')))return;wizDraft=null;viewWeek=null;scrolled=false;
+// Usunięcie całego tygodnia: jedyna akcja z potwierdzeniem (nie da się jej cofnąć), ale we własnym arkuszu, nie w oknie systemowym.
+function delWeek(wid){const w=(S.weeks||[]).find(x=>x.id===wid);
+  sheet=null;openSheet({kind:'confirm',title:w?`${t('week')} ${isoWk(w.start)} · ${dm(w.start)}`:t('delWeek'),text:t('delWeekQ'),yes:t('delWeekYes'),fn:()=>doDelWeek(wid)})}
+async function doDelWeek(wid){wizDraft=null;viewWeek=null;
   const r=await api('/api/week/'+wid,'DELETE');if(r){adopt(r);render();ensureTr()}}
 async function confirmWeek(wid){wizDraft=null;const r=await api('/api/week/confirm','POST',{week:wid},t('jFill'));
   if(r){const jid=r.job;viewWeek=wid===r.current_id?null:wid;set(r);goTab('plan');if(jid){jobId=jid;clearTimeout(jobTimer);pollJob()}}}
 async function takeRec(rid,on){const ex=S.cravings.find(c=>!c.used&&c.recipe_id===rid);
   if(on&&!ex)set(await api('/api/cravings','POST',{recipe_id:rid}));
   else if(!on&&ex)set(await api('/api/cravings/'+ex.id,'DELETE'))}
-async function goWeek(id,keepTab){viewWeek=id;scrolled=false;if(!keepTab)tab='plan';await load()}
+async function goWeek(id,keepTab){viewWeek=id;if(!keepTab)tab='plan';await load()}
 let jobTimer=null,jobId=null;
 let jbBuilt=false;
 function jobBar(j){const b=$('#jobbar');if(!j){b.style.display='none';jbBuilt=false;return}
@@ -379,25 +392,26 @@ async function gen(){const r=await fetch('/api/week/generate',{method:'POST',hea
   if(!r.ok){const e=await r.json().catch(()=>({}));toast(t('err')+(e.detail||r.statusText));return}
   const d=await r.json();jobId=d.job;clearTimeout(jobTimer);pollJob()}
 async function st(id,s){set(await api(`/api/meal/${id}/status`,'POST',{status:s}))}
-async function removeDay(id){if(!confirm(t('removeDayQ')))return;await st(id,'removed')}
-async function dislike(id){const m=gm(id);if(!m)return;
-  if(m.disliked){set(await api(`/api/meal/${id}/dislike`,'POST',{reason:''}));toast(t('dislikeOff'));return}
-  const why=prompt(t('dislikeQ'),'');if(why===null)return;
-  const r=await api(`/api/meal/${id}/dislike`,'POST',{reason:why});if(!r)return;set(r);
-  const mm=gm(id);if(mm&&mm.status!=='removed'&&confirm(t('dislikeSwap')))openAlt(id)}
+// „Zrobione” zmienia się na ekranie od razu; gdy zapis się nie uda, wraca do poprzedniego stanu (komunikat pokazuje api()).
+async function toggleDone(id){const m=gm(id);if(!m)return;const was=m.status,s=was==='done'?'planned':'done';m.status=s;render();
+  const r=await api(`/api/meal/${id}/status`,'POST',{status:s});
+  if(r)set(r);else{const mm=gm(id);if(mm&&mm.status===s){mm.status=was;forceRender=true;render()}}}
+// Usunięcie obiadu z dnia bez pytania „czy na pewno”: status removed da się przywrócić, więc wystarczy „Cofnij” w komunikacie.
+async function removeDay(id){closeSheet();const r=await api(`/api/meal/${id}/status`,'POST',{status:'removed'});if(!r)return;set(r);
+  toast(t('removedT'),{label:t('undo'),fn:()=>st(id,'planned')})}
+async function dislikeSave(id){const why=(($('#why'+id)||{}).value||'').trim();
+  const r=await api(`/api/meal/${id}/dislike`,'POST',{reason:why});if(!r)return;
+  if(sheet)sheet.why=false;set(r);toast('👎 '+t('dislikeDone'));$('#panel').scrollTop=0}
+async function dislikeOff(id){const r=await api(`/api/meal/${id}/dislike`,'POST',{reason:''});if(r){set(r);toast(t('dislikeOff'))}}
 async function undislike(did){set(await api(`/api/dislikes/${did}`+(viewWeek?`?week=${viewWeek}`:''),'DELETE'))}
 async function fav(id){const r=await api(`/api/meal/${id}/favorite`);if(r){const m=r.meals.find(x=>x.id===id);set(r);if(m&&m.fav)toast('⭐ '+t('favOn'))}}
 async function carry(id){set(await api(`/api/meal/${id}/carry`))}
-function toggleIng(id){openIng[id]=!openIng[id];render()}
 function toggleAIng(k){openAIng[k]=!openAIng[k];render()}
-function toggleSec(w,id){const mm=w==='ing'?openIng:openStp;mm[id]=!(mm[id]??true);render()}
 async function confirmPlan(){const r=await api('/api/week/confirm','POST',W({}),t('jFill'));if(r){const jid=r.job;set(r);if(jid){jobId=jid;clearTimeout(jobTimer);pollJob()}}}
 async function retryRec(id){set(await api(`/api/meal/${id}/recipe`))}
-function toggleRec(id){const m=S.meals.find(x=>x.id===id);const cur=openRec[id]??(m.date===S.today&&m.status==='planned');openRec[id]=!cur;render()}
-function toggleSrv(id){openSrv[id]=!openSrv[id];render()}
 async function setDef(n){if(n<1||n>12)return;set(await api('/api/settings','POST',{servings:n}))}
 async function srv(id,n){if(n!==null&&(n<1||n>12))return;set(await api(`/api/meal/${id}/servings`,'POST',{servings:n}))}
-function openAlt(id){const m=gm(id);m.open=true;m.alts=null;m.loading=false;m.closing=false;render()}
+function openAlt(id){const m=gm(id);if(!m)return;m.open=true;m.alts=null;m.loading=false;m.closing=false;openSheet({kind:'meal',id})}
 const altReq={};let altSeq=0;   // numer trwającego szukania dla dania; „Anuluj” go kasuje, więc spóźniona odpowiedź nie otwiera propozycji z powrotem
 async function clearAlts(id){try{await fetch(`/api/meal/${id}/alts/clear`,{method:'POST'})}catch(e){}}
 async function closeAlt(id){const m=gm(id);if(!m)return;
@@ -407,8 +421,8 @@ async function closeAlt(id){const m=gm(id);if(!m)return;
   if(running)return;   // serwer jeszcze szuka i na koniec zapisze propozycje: posprząta po nich findAlts, gdy wróci odpowiedź
   const mm=gm(id);if(mm)mm.closing=false}
 const gm=id=>S.meals.find(x=>x.id===id);
-async function findAlts(id,surprise){let m=gm(id);if(!m)return;
-  const hint=(($('#hint'+id)||{}).value||'').trim();m.hint=hint;m.loading=true;m.justReady=false;m.alts=null;render();
+async function findAlts(id,hintOv){let m=gm(id);if(!m)return;   // hintOv: życzenie z gotowej podpowiedzi ('' = „zaskocz mnie”), bez niego tekst z pola
+  const hint=(typeof hintOv==='string'?hintOv:(($('#hint'+id)||{}).value||'')).trim();m.hint=hint;m.loading=true;m.justReady=false;m.alts=null;render();
   const lb=document.getElementById('aw'+id);if(lb)lb.scrollIntoView({behavior:'smooth',block:'nearest'});
   let good=false,opts=null;const tk=altReq[id]=++altSeq;
   try{const r=await fetch(`/api/meal/${id}/alternatives`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hint,count:3})});
@@ -424,19 +438,15 @@ async function choose(id,i){let m=gm(id);m.choosing=i;render();
   const nm=m.alts&&m.alts[i]?m.alts[i].name:null;
   try{const r=await fetch(`/api/meal/${id}/choose`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:i,name:nm})});
     if(!r.ok){const e=await r.json().catch(()=>({}));if(r.status===409){const mm=gm(id);if(mm){mm.choosing=null;mm.alts=null;mm.open=false}await refreshQuiet()}throw new Error(e.detail||r.statusText)}
-    const d=await r.json();const mm=gm(id);if(mm)mm.choosing=null;set(d)}catch(e){const mm=gm(id);if(mm)mm.choosing=null;toast(t('err')+e.message);render()}}
+    const d=await r.json();const mm=gm(id);if(mm)mm.choosing=null;set(d);if(sheet&&sheet.kind==='meal'&&sheet.id===id)closeSheet()}catch(e){const mm=gm(id);if(mm)mm.choosing=null;toast(t('err')+e.message);render()}}
 async function mv2(id,d){if(d==='')return;set(await api(`/api/meal/${id}/move`,'POST',{day:+d}))}
 async function addP(){const v=$('#pn').value;if(!v.trim())return;set(await api('/api/pantry','POST',{name:v}))}
 async function delP(id){set(await api('/api/pantry/'+id,'DELETE'))}
 async function addC(){const v=$('#cn').value.trim();if(!v)return;const isU=/^https?:\/\/\S+$/i.test(v);
   const r=await api('/api/cravings','POST',{text:v},isU?t('bImport'):undefined);if(r){set(r);if(isU)toast('⭐ '+t('favOn'))}}
-async function pickRec(id){if(!id)return;set(await api('/api/cravings','POST',{recipe_id:+id}));tab='fridge';render()}
 async function delC(id){set(await api('/api/cravings/'+id,'DELETE'))}
 async function delRec(id){set(await api('/api/recipes/'+id,'DELETE'))}
-async function useRec(id,d){if(d==='')return;const r=await api(`/api/recipes/${id}/use`,'POST',W({day:+d}));if(r){set(r);tab='plan';scrolled=true;render()}}
-async function setDay(kind,id,v){set(await api(`/api/${kind==='c'?'cravings':'pantry'}/${id}/day`,'POST',{day:v===''?null:+v}))}
-async function applyP(){const r=await api('/api/pantry/preview','POST',W({}),t('bFit'));if(r){preview=r;render()}}
-async function commitP(){const r=await api('/api/pantry/commit','POST',{proposal_id:preview.proposal_id});if(r){preview=null;set(r);tab='plan';scrolled=false;render()}}
+async function useRec(id,d){if(d==='')return;const r=await api(`/api/recipes/${id}/use`,'POST',W({day:+d}));if(r){set(r);tab='plan';render()}}
 async function addX(){const v=$('#xn').value;if(!v.trim())return;set(await api('/api/shop/extra','POST',W({name:v})))}
 async function delX(id){set(await api('/api/shop/extra/'+id,'DELETE'))}
 async function dismissG(k){set(await api('/api/shop/dismiss','POST',W({key:k})))}
@@ -457,27 +467,33 @@ async function chk(k,c){
     if(!pending)refreshQuiet()
   }finally{if(!--w.n)chkWait.delete(k)}}
 async function copyList(){const x=await (await fetch('/api/shop/text?lang='+lang+(viewWeek?'&week='+viewWeek:''))).text();
-  try{await navigator.clipboard.writeText(x);toast(t('copied'))}catch(e){prompt('Copy:',x)}}
-/* --- drag meal card between day slots --- */
+  try{await navigator.clipboard.writeText(x);toast(t('copied'))}
+  catch(e){openSheet({kind:'text',title:t('copy'),text:x})}}   // schowek niedostępny (np. bez HTTPS): lista do ręcznego skopiowania
+/* --- przeciąganie dania między dniami. Uchwytem jest data w wierszu; karta jedzie za palcem w obu osiach (na szerokim
+   ekranie dni leżą obok siebie). Dotknięcie daty bez ruchu działa jak dotknięcie nazwy: otwiera przepis. */
 let drag=null;
 function slotAt(x,y){if(!drag)return null;const c=drag.card;c.style.visibility='hidden';const el=document.elementFromPoint(x,y);c.style.visibility='';
   const sl=el&&el.closest('.slot[data-day]');return sl&&sl!==drag.slot?sl:null}
 function dragLoop(){if(!drag)return;
-  drag.card.style.transform=`translateY(${(drag.y-drag.y0)+(window.scrollY-drag.s0)}px)`;
-  if(drag.y<130)window.scrollBy(0,-10);else if(drag.y>innerHeight-90)window.scrollBy(0,10);
-  document.querySelectorAll('.slot.over').forEach(c=>c.classList.remove('over'));
-  const sl=slotAt(drag.x,drag.y);if(sl)sl.classList.add('over');
+  if(!drag.moved&&Math.hypot(drag.x-drag.x0,drag.y-drag.y0)>6){drag.moved=true;drag.card.classList.add('dragging')}
+  if(drag.moved){
+    drag.card.style.transform=`translate(${drag.x-drag.x0}px,${(drag.y-drag.y0)+(window.scrollY-drag.s0)}px)`;
+    if(drag.y<90)window.scrollBy(0,-10);else if(drag.y>innerHeight-110)window.scrollBy(0,10);
+    document.querySelectorAll('.slot.over').forEach(c=>c.classList.remove('over'));
+    const sl=slotAt(drag.x,drag.y);if(sl)sl.classList.add('over')}
   requestAnimationFrame(dragLoop)}
 document.addEventListener('pointerdown',e=>{const hd=e.target.closest&&e.target.closest('.handle');if(!hd||drag)return;
   e.preventDefault();const card=hd.closest('.meal');
-  drag={card,slot:card.closest('.slot'),id:+card.dataset.id,x:e.clientX,y:e.clientY,y0:e.clientY,s0:window.scrollY};
-  card.classList.add('dragging');try{hd.setPointerCapture(e.pointerId)}catch(_){}
+  drag={card,slot:card.closest('.slot'),id:+card.dataset.id,x:e.clientX,y:e.clientY,x0:e.clientX,y0:e.clientY,s0:window.scrollY,moved:false};
+  try{hd.setPointerCapture(e.pointerId)}catch(_){}
   requestAnimationFrame(dragLoop)});
 document.addEventListener('pointermove',e=>{if(drag){drag.x=e.clientX;drag.y=e.clientY;e.preventDefault()}},{passive:false});
-function endDrag(e,cancel){if(!drag)return;const d=drag;const sl=cancel?null:slotAt(e.clientX,e.clientY);drag=null;
+function endDrag(e,cancel){if(!drag)return;const d=drag;
+  if(!cancel&&!d.moved&&Math.hypot(e.clientX-d.x0,e.clientY-d.y0)>6){d.moved=true}
+  const sl=cancel||!d.moved?null:slotAt(e.clientX,e.clientY);drag=null;
   d.card.classList.remove('dragging');d.card.style.transform='';
   document.querySelectorAll('.slot.over').forEach(c=>c.classList.remove('over'));
-  if(sl)mv2(d.id,sl.dataset.day);else render()}
+  if(sl)mv2(d.id,sl.dataset.day);else if(!cancel&&!d.moved)openMeal(d.id);else render()}
 document.addEventListener('pointerup',e=>endDrag(e,false));
 document.addEventListener('pointercancel',e=>endDrag(e,true));
 function applyTheme(){const s=localStorage.getItem('theme');const d=s?s==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
@@ -512,7 +528,7 @@ const verOf=h=>(h.match(/\/static\/[\w.]+\?v=\w+/g)||[]).sort().join(' ');
 const myVer=verOf(document.documentElement.innerHTML);
 let verAt=0;
 async function checkVersion(){
-  if(document.hidden||busyUI()||custOpen||Date.now()-verAt<60000)return;verAt=Date.now();
+  if(document.hidden||busyUI()||custOpen||sheet||Date.now()-verAt<60000)return;verAt=Date.now();
   try{const r=await fetch('/',{cache:'no-store'});if(!r.ok)return;const v=verOf(await r.text());
     if(!v||v===myVer||sessionStorage.getItem('reloadedFor')===v)return;
     sessionStorage.setItem('reloadedFor',v);location.reload()}catch(e){}}

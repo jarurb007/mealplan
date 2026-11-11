@@ -106,18 +106,27 @@ async def main():
     # ---- 1) usuwanie dnia (A), potwierdzenie i lista zakupów
     shop_before = sum(len(v) for v in api(f"/api/state?week={wid}", "GET")["shopping"].values())
     shop_json_before = json.dumps(api(f"/api/state?week={wid}", "GET")["shopping"], sort_keys=True)
-    A.accept = False
-    await A.ev("Array.from(document.querySelectorAll('.slot[data-day=\"4\"] .meal button')).find(b=>b.textContent.trim()==='🗑').click()")
-    await asyncio.sleep(1)
-    ok(len(A.dialogs) == 1 and "shopping list" in A.dialogs[0], "🗑 pyta o potwierdzenie z opisem skutków")
-    ok(not (await A.ev(OFF))[4], "'Anuluj' nie usuwa dnia")
-    A.accept = True
-    await A.ev("Array.from(document.querySelectorAll('.slot[data-day=\"4\"] .meal button')).find(b=>b.textContent.trim()==='🗑').click()")
-    await asyncio.sleep(1.5)
+    REMOVE = ("document.querySelector('.slot[data-day=\"4\"] [data-click=sheetMeal]').click();"
+              "document.querySelector('#panel [data-click=removeDay]').click()")
+    TOAST = "document.getElementById('toast').style.display==='block'?document.getElementById('toast').textContent:''"
+    await A.ev(REMOVE); await asyncio.sleep(1.5)
     offA = await A.ev(OFF)
-    ok(offA[4] and sum(offA) == 1, "dzień 4 usunięty, pozostałe nietknięte")
+    ok(offA[4] and sum(offA) == 1, "„Usuń obiad” w arkuszu ⋯: dzień 4 usunięty, pozostałe nietknięte")
+    toast = await A.ev(TOAST)
+    ok(not A.dialogs and "Dinner removed" in toast and "Undo" in toast, f"zamiast okna „czy na pewno” jest komunikat z „Cofnij”: '{toast}' {A.dialogs}")
+    ok(await A.ev("!document.getElementById('sheet').classList.contains('open')"), "arkusz zamyka się po usunięciu")
+    await A.ev("document.querySelector('#toast button').click()"); await asyncio.sleep(1.5)
+    ok(not (await A.ev(OFF))[4] and json.dumps(api(f"/api/state?week={wid}", "GET")["shopping"], sort_keys=True) == shop_json_before,
+       "„Cofnij” przywraca obiad i listę zakupów")
+    await A.ev(REMOVE); await asyncio.sleep(1.5)
+    ok((await A.ev(OFF))[4], "dzień 4 usunięty ponownie")
     txt = await A.ev("document.querySelector('.slot[data-day=\"4\"]').innerText")
-    ok("No dinner this day" in txt and "Restore" in txt and "Pick another dish" in txt, "usunięty dzień: napis + Przywróć + Wstaw inne danie")
+    ok("No dinner" in txt and await A.ev("document.querySelector('.slot[data-day=\"4\"] [data-click=st]').getAttribute('aria-label')") == "Restore",
+       "usunięty dzień: napis „Bez obiadu” i przycisk ↺ Przywróć w wierszu")
+    await A.ev("document.querySelector('.slot[data-day=\"4\"] [data-click=sheetMeal]').click()"); await asyncio.sleep(0.4)
+    txt = await A.ev("document.getElementById('panel').innerText")
+    ok("Restore" in txt and "Pick another dish" in txt, "arkusz usuniętego dnia: Przywróć + Wstaw inne danie")
+    await A.ev("closeSheet()")
     st = api(f"/api/state?week={wid}", "GET")
     shop_after = sum(len(v) for v in st["shopping"].values())
     print(f"  pozycji na liście zakupów: {shop_before} -> {shop_after}")
@@ -135,7 +144,7 @@ async def main():
     ok(not B.errors, f"brak błędów JS u Idy {B.errors}")
 
     # ---- 3) przywrócenie (A)
-    await A.ev("Array.from(document.querySelectorAll('.slot[data-day=\"4\"] button')).find(b=>b.textContent.includes('Restore')).click()")
+    await A.ev("document.querySelector('.slot[data-day=\"4\"] [data-click=st]').click()")
     await asyncio.sleep(1.5)
     ok(not (await A.ev(OFF))[4], "Przywróć działa")
     ok(json.dumps(api(f"/api/state?week={wid}", "GET")["shopping"], sort_keys=True) == shop_json_before, "po przywróceniu lista zakupów wraca dokładnie do stanu sprzed")
