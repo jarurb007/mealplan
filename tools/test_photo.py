@@ -1,11 +1,11 @@
 """Własny przepis ze zdjęcia. Tryb 'real' - prawdziwy claude czyta wygenerowane zdjęcie; tryb 'ui' - atrapa modelu + interfejs."""
 import asyncio, base64, json, os, subprocess, sys, time, urllib.request
-sys.path.insert(0, "/home/jar/mealplan/tools")
 from test_two_users import Tab, api, ok
 import test_two_users as T
+TOOLS = os.path.dirname(os.path.abspath(__file__))  # ścieżki od położenia pliku: działa też w worktree
 
 MODE = sys.argv[1]
-IMG = "/home/jar/mealplan/tools/recipe_photo.png"
+IMG = os.path.join(T.HERE, "recipe_photo.png")
 
 
 def make_image():
@@ -58,8 +58,8 @@ async def real():
 async def ui():
     make_image()
     A = Tab(9411, "cust"); await A.open()
-    await A.ev("goTab('fridge')"); await asyncio.sleep(0.8)
-    ok(await A.ev("!!Array.from(document.querySelectorAll('button')).find(b=>b.textContent.includes('Own recipe'))"), "przycisk 'Własny przepis' w książce przepisów")
+    await A.ev("goTab('book')"); await asyncio.sleep(0.8)
+    ok(await A.ev("!!Array.from(document.querySelectorAll('#main button')).find(b=>b.textContent.includes('Own recipe'))"), "przycisk 'Własny przepis' w zakładce Przepisy")
     await A.ev("toggleCust()"); await asyncio.sleep(0.4)
     ok(await A.ev("!!document.getElementById('ct')"), "panel dodawania otwarty")
     # pusty formularz -> komunikat, bez wywołania serwera
@@ -84,8 +84,8 @@ async def ui():
     st = api("/api/state", "GET")
     ok(len(st["recipes"]) == 1 and st["recipes"][0]["name"] == "Test", f"przepis zapisany w książce ({[r['name'] for r in st['recipes']]})")
     ok(await A.ev("custImgs.length===0 && custOpen===false"), "formularz wyczyszczony i zamknięty")
-    await A.ev("goTab('fridge')"); await asyncio.sleep(0.6)
-    ok("Test" in await A.ev("document.getElementById('main').innerText"), "przepis widoczny na liście w książce")
+    await A.ev("goTab('book')"); await asyncio.sleep(0.6)
+    ok("Test" in await A.ev("document.getElementById('blist').innerText"), "przepis widoczny na liście w książce")
     prompt = open(os.getenv("FAKE_LOG", "/tmp/ukes-fake-prompts.log")).read()
     ok("photo1.jpg" in prompt and "podawać z dżemem" in prompt and "Read" not in prompt.split("TEKST")[0][:0], "model dostał ścieżkę zdjęcia i tekst użytkownika")
     ok(not A.errors, f"brak błędów JS {A.errors}")
