@@ -936,10 +936,21 @@ OFFER_BUSY = set()      # sieci w trakcie pobierania; "match" = trwa dopasowanie
 OFFER_MATCH_FAIL = [0.0]  # czas ostatniego nieudanego dopasowania (model nie odpowiedział): chwila przerwy przed kolejnym
 
 
+# Stan wyjściowy, dopóki nikt nie zmienił ustawień: obie sieci włączone, KIWI z kodem pocztowym domu.
+# OFFER_DEFAULT_CHAINS="" (testy) wyłącza to i aplikacja niczego sama nie pobiera.
+OFFER_DEFAULT_CHAINS = [x for x in os.getenv("OFFER_DEFAULT_CHAINS", "extra,kiwi").split(",") if x]
+KIWI_POSTCODE_DEFAULT = os.getenv("KIWI_POSTCODE", "1930")
+
+
+def kiwi_postcode(c) -> str:
+    r = c.execute("SELECT value FROM settings WHERE key='kiwi_postcode'").fetchone()
+    return (r["value"] or "") if r else (KIWI_POSTCODE_DEFAULT if "kiwi" in OFFER_DEFAULT_CHAINS else "")
+
+
 def offer_chains_on(c) -> list:
     r = c.execute("SELECT value FROM settings WHERE key='offer_chains'").fetchone()
     try:
-        on = json.loads(r["value"]) if r else []
+        on = json.loads(r["value"]) if r else OFFER_DEFAULT_CHAINS
     except ValueError:
         on = []
     return [k for k in OFFER_CHAINS if k in on]
@@ -1177,11 +1188,11 @@ def kiwi_load(src, wk: date):
         url = saved["url"]
     else:
         with db() as c:
-            r = c.execute("SELECT value FROM settings WHERE key='kiwi_postcode'").fetchone()
-        if not r or not re.fullmatch(r"\d{4}", r["value"] or ""):
+            code = kiwi_postcode(c)
+        if not re.fullmatch(r"\d{4}", code):
             raise ValueError("brak kodu pocztowego")
         head = {"User-Agent": OFFER_UA, "Accept-Language": "nb"}
-        rr = httpx.get(KIWI_API, params={"postCode": r["value"]}, timeout=30, headers=head)
+        rr = httpx.get(KIWI_API, params={"postCode": code}, timeout=30, headers=head)
         rr.raise_for_status()
         url = str((rr.json() or {}).get("url") or "")
         if not re.fullmatch(r"/filer/[0-9a-zA-Z]{16,80}", url):
@@ -1373,29 +1384,53 @@ Zasady:
 - Dania gotowe, przekąski, słodycze, napoje, przetwory i półprodukty nie pasują do surowych składników. Gdy jednak sama
   pozycja jest przekąską, napojem albo chemią, paruj ją z ofertą tego samego rodzaju („potetgull” to chipsy ziemniaczane,
   „havremelk” to havredrikk).
+- Nazwa pozycji bywa w ofercie tylko SMAKIEM albo dodatkiem: chipsy „Paprika Kick”, „Naan Bread Garlic”, dressing
+  czosnkowy, wędlina „Persille/Hvitløk”, orzeszki chili, ser z papryką, sos chili. To nie jest papryka, czosnek ani chili.
+  Takich par nie zwracaj wcale.
 - Oferta zbiorcza (kilka produktów po „|”): podaj numery tylko tych produktów, które pasują.
 - W razie wątpliwości nie paruj. Większość pozycji nie ma żadnej oferty i to jest poprawny wynik.
+- Dla każdej pary najpierw ustal, czym produkt z oferty naprawdę jest („kind”, np. „potetchips”, „fersk gulrot”,
+  „naanbrød”) i w którym dziale sklepu stoi („aisle”). Jeśli to inny rodzaj produktu albo inny dział niż pozycja, pary nie ma.
 Pozycje (numer: nazwa [dział sklepu]; nazwy bywają też po polsku lub angielsku):
 {lines_i}
 Oferty (numer: tytuł | produkty):
 {chr(10).join(lines_o)}
-Zwróć wyłącznie JSON: {{"offer_match": [{{"item": 1, "offer": 1, "products": [1]}}]}}
-„products” to numery pasujących produktów oferty; pusta lista oznacza całą ofertę. Bez dopasowań: {{"offer_match": []}}."""
+Zwróć wyłącznie JSON: {{"offer_match": [{{"item": 1, "offer": 1, "products": [1], "kind": "fersk gulrot",
+"aisle": "Frukt og grønt", "flavour": false}}]}}
+„products” to numery pasujących produktów oferty; pusta lista oznacza całą ofertę. „aisle” to dział produktu z oferty,
+dokładnie jeden z: {", ".join(AISLES)}, albo "Annet" (nie żywność). „flavour” = true, gdy nazwa pozycji jest w produkcie
+tylko smakiem lub dodatkiem. Bez dopasowań: {{"offer_match": []}}."""
 
 
 # Bezpiecznik po odpowiedzi modelu: para odpada, gdy produkt z oferty jest wyraźnie czymś innym niż pozycja listy.
 # Słowo z nazwy pozycji występuje w produkcie tylko jako początek złożenia ('potet' w 'potetchips', 'hvitløk' w
 # 'hvitløksnan') albo produkt ma w nazwie słowo z listy przetworów.
-OFFER_NOT = {fold(x) for x in "chips sjokolade snacks nudler ferdigrett syltet tørket nan godteri drops is iskrem brus".split()}
+# Trzecia kontrola to dział sklepu: model podaje dział produktu z oferty, a para zostaje tylko wtedy, gdy zgadza się
+# z działem pozycji listy (papryka z warzyw nie pasuje do chipsów paprykowych z przekąsek).
+OFFER_MATCH_VER = "2"   # zmiana promptu albo bezpieczników: pary zapisane przez model starszą wersją są kasowane
+OFFER_NOT = {fold(x) for x in """chips sjokolade snacks nudler ferdigrett syltet tørket nan naan bread godteri drops is iskrem brus
+    kick crunch sticks dressing sauce suppe gryte pizza baguette smak krydret marinert nøtter peanøtter pølse pølser
+    postei kaviar majones aioli dip salsa pesto""".split()}
+AISLE_NEAR = [{"Krydder og basis", "Tørrvarer og hermetikk"}, {"Frys", "Kjøtt og fisk"}, {"Frys", "Frukt og grønt"},
+              {"Frys", "Brød og deig"}, {"Meieri og kjøl", "Kjøtt og fisk"}]  # działy, między którymi ten sam produkt bywa różnie przypisany
+
+
+def offer_aisle_ok(item_aisle: str, offer_aisle) -> bool:
+    """Dział produktu z oferty (od modelu) kontra dział pozycji listy. Pozycja bez działu spożywczego: bez kontroli."""
+    if item_aisle not in AISLES:
+        return offer_aisle in AISLES or offer_aisle == "Annet"
+    return offer_aisle == item_aisle or {item_aisle, offer_aisle} in AISLE_NEAR
 OFFER_PLURAL = ("", "e", "r", "s", "a", "er", "en", "et", "ne", "ene", "ter")  # końcówki liczby i rodzajnika: to wciąż to samo słowo
 
 
-def offer_guard(item_name: str, prod_name: str) -> bool:
-    """True = para może zostać."""
+def offer_guard(item_name: str, prod_name: str, aisle: str | None = None) -> bool:
+    """True = para może zostać. aisle = dział pozycji listy (przekąski mogą pasować do przekąsek)."""
     iw, pw = fold(item_name).split(), fold(prod_name).split()
     if not iw or not pw:
         return False
-    if OFFER_NOT & set(pw) and not OFFER_NOT & set(iw):
+    # słowo z listy przetworów w produkcie, także jako końcówka złożenia ('rømmedressing', 'grillpølse'), a w pozycji go nie ma
+    made = lambda ws: any(w == n or (len(n) >= 4 and w.endswith(n)) for w in ws for n in OFFER_NOT)
+    if made(pw) and not made(iw) and aisle != "Snacks og godteri":
         return False
     for w in iw:
         if len(w) < 4:
@@ -1426,13 +1461,15 @@ def offer_match(chain: str, items: dict, todo: list) -> int:
             if not i or not o or i > len(todo) or o > len(offs):
                 continue
             key, off = todo[i - 1], offs[o - 1]
+            if m.get("flavour") is True or not offer_aisle_ok(items[key][1], m.get("aisle")):
+                continue  # nazwa pozycji jest tylko smakiem produktu albo produkt stoi w innym dziale
             prods = off["products"][:OFFER_PROD_CAP]
             picks = [prods[j - 1] for j in (m.get("products") or []) if isinstance(j, int) and 1 <= j <= len(prods)]
             if not picks and len(prods) == 1:
                 picks = prods
             if picks:
-                rows += [(key, prod_key(p), p["name"]) for p in picks if offer_guard(items[key][0], p["name"])]
-            elif offer_guard(items[key][0], off["title"]):
+                rows += [(key, prod_key(p), p["name"]) for p in picks if offer_guard(items[key][0], p["name"], items[key][1])]
+            elif offer_guard(items[key][0], off["title"], items[key][1]):
                 rows.append((key, title_key(off["title"]), off["title"]))
     saved = 0
     with db() as c:
@@ -1453,6 +1490,12 @@ def offer_match_all():
     if not OFFER_LLM:
         return
     with db() as c:
+        ver = c.execute("SELECT value FROM settings WHERE key='offer_match_ver'").fetchone()
+        if not ver or ver["value"] != OFFER_MATCH_VER:
+            # pary od modelu sprzed zmiany zasad znikają i lista jest zestawiana od nowa; decyzje właściciela zostają
+            c.execute("DELETE FROM product_map WHERE source='llm'")
+            c.execute("DELETE FROM settings WHERE key='offer_judged'")
+            c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('offer_match_ver', ?)", (OFFER_MATCH_VER,))
         chains = offer_chains_on(c)
         items = offer_items(c) if chains else {}
         pend = offer_pending(c, chains, list(items))
@@ -1520,7 +1563,7 @@ def offers_info(c) -> dict:
     on = offer_chains_on(c)
     srcs = {r["chain"]: r for r in c.execute("SELECT * FROM offer_sources")}
     today = str(date.today())
-    post = c.execute("SELECT value FROM settings WHERE key='kiwi_postcode'").fetchone()
+    post = kiwi_postcode(c)
     chains = []
     for k, (name, _) in OFFER_CHAINS.items():
         s = srcs.get(k)
@@ -1528,7 +1571,7 @@ def offers_info(c) -> dict:
         chains.append({"id": k, "name": name, "on": k in on, "n": (s["n"] if s and to else 0), "at": s["ok_at"] if s else None,
                        "to": to, "error": bool(s and s["error"] and s["error"] != "unchanged"), "busy": k in OFFER_BUSY})
         if k == "kiwi":  # gazetka KIWI zależy od regionu
-            chains[-1]["postcode"] = post["value"] if post else ""
+            chains[-1]["postcode"] = post
     return {"chains": chains, "busy": bool(OFFER_BUSY)}
 
 
