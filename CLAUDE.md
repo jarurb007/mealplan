@@ -39,4 +39,5 @@ DB_PATH=/tmp/moja-kopia.db BACKUP_DIR=/tmp/moje-kopie \
   Prawdziwa gazetka KIWI to PDF: do jej odczytu potrzebny jest pakiet `pypdf` (jest w `deploy/ukesmeny/requirements.txt`,
   w lokalnym `.venv` może go nie być; testy go nie potrzebują).
   `tools/test_offers.py` (bez argumentów) ustawia to sam; tryb `ui` wymaga serwera uruchomionego z tymi zmiennymi.
-  Dopóki w ustawieniach nie jest włączona żadna sieć, aplikacja niczego nie pobiera.
+  Domyślnie włączone są Extra i KIWI (kod pocztowy z `KIWI_POSTCODE`, domyślnie 1930). Serwer do testów uruchamiaj
+  z `OFFER_DEFAULT_CHAINS=` (puste): wtedy żadna sieć nie jest włączona i aplikacja niczego sama nie pobiera.
