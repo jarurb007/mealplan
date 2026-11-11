@@ -150,3 +150,31 @@ body.modal{overflow:hidden}
 .cnav{flex:none;display:flex;gap:10px;padding:10px 14px calc(14px + env(safe-area-inset-bottom))}
 .cnav .b{flex:1;min-height:56px;font-size:18px}.cnav .b.p{flex:2}
 .cbar,.cing,.cbody,.cnav{width:100%;max-width:720px;align-self:center}.cing{width:calc(100% - 28px)}
+/* szeroki ekran: zakładki w nagłówku, tydzień w siatce 7 dni, zakupy w bocznej kolumnie, arkusz jako okno na środku */
+@media (min-width:900px){
+ header{justify-content:flex-end;padding:0 12px 0 470px}
+ #range{flex:none;min-width:230px}
+ nav{top:0;bottom:auto;left:8px;right:auto;z-index:7;height:var(--hdrh);padding:0;border:0;background:var(--hd)}
+ nav button{flex:none;flex-direction:row;gap:7px;height:var(--hdrh);padding:0 14px;color:#fff;font-size:15px}
+ nav button.on{color:#fff;box-shadow:inset 0 -3px 0 #fff}
+ nav .ni{font-size:17px;filter:none}
+ #n_cnt{position:static;background:#fff;color:#1f4a31}#n_cnt.alert{background:#fff;color:#9a3412}
+ main{padding:16px 16px 24px}main.w{max-width:1400px}
+ .wide{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+ /* siedem dni obok siebie, gdy się mieszczą (od ok. 1230 px); na węższym ekranie siatka łamie się na dwa rzędy */
+ .wide .week{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+ .wide .slot,.wide .meal{height:100%}
+ .wide .dr{display:grid;grid-template-columns:minmax(0,1fr) 44px;grid-template-rows:auto 1fr auto;grid-template-areas:"d mb" "n n" "ck ck";align-items:start;min-height:0}
+ .wide .meal:not(:has(.tr)) .dr{height:100%;min-height:190px}
+ .wide .d{grid-area:d;flex-direction:row;justify-content:flex-start;align-items:baseline;align-self:center;gap:6px;width:auto;min-height:44px;padding:12px 0 0 9px}
+ .wide .mb{grid-area:mb}.wide .ck{grid-area:ck;margin:0 0 4px 4px}
+ .wide .nmb{grid-area:n;justify-content:flex-start;min-height:60px;padding:2px 9px 8px}
+ .wide .name{-webkit-line-clamp:6;font-size:14px;overflow-wrap:anywhere}.wide .desc{overflow-wrap:anywhere}
+ .wide .tr{flex-wrap:wrap;gap:6px;padding:0 8px 8px}.wide .tr .b{flex:1 1 100%;padding:8px 6px}.wide .tr .sp{display:none}
+ .side{position:sticky;top:calc(var(--hdrh) + 16px);max-height:calc(100vh - var(--hdrh) - 48px);overflow-y:auto;padding:12px 14px 0;border:1px solid var(--bd);border-radius:12px;background:var(--card)}
+ .side .shop{min-height:0}.side .shead b{font-size:17px}
+ .side .addbar{bottom:0;background:var(--card)}
+ #toast{bottom:24px}#jobbar{left:auto;right:16px;bottom:16px;width:400px}#trbar{bottom:0}
+ @keyframes pop{from{opacity:.4;transform:translateY(-47%)}}
+ .panel{top:50%;bottom:auto;transform:translateY(-50%);border-radius:16px;max-height:86vh;padding-bottom:16px;animation:pop .16s ease-out}
+}

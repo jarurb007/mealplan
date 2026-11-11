@@ -203,12 +203,17 @@ function navRender(){
     if(tab===k)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
   const n=shopLeft(),c=$('#n_cnt');c.textContent=n||'';c.hidden=!n;c.classList.toggle('alert',!!(S&&S.shop_alert>0))}
 let forceRender=false;
+const wideMq=matchMedia('(min-width:900px)');
+wideMq.addEventListener('change',()=>{if(S)render()});
 function render(){
   headRender();navRender();
   // Listę przebudowujemy tylko wtedy, gdy jej treść się zmieniła (patrz paint). Odświeżenie w tle, które nic nie zmienia,
   // nie podmienia więc elementu pod palcem (dotknięcie trwające w chwili podmiany przepadało). forceRender wymusza
   // przebudowę, gdy trzeba cofnąć coś, co zmieniło się tylko na ekranie (zaznaczone pole po nieudanym zapisie).
-  paint($('#main'),tab==='plan'?plan():tab==='shop'?shop():tab==='book'?book():fridge(),forceRender);forceRender=false;
+  // szeroki ekran (od 900 px): tydzień w siatce siedmiu dni, a lista zakupów w bocznej kolumnie; ten sam HTML co na telefonie
+  const wide=wideMq.matches&&tab==='plan'&&!!S.week,main=$('#main');main.classList.toggle('w',wide);
+  paint(main,wide?`<div class="wide"><div class="wcol">${plan()}</div><aside class="side">${shop()}</aside></div>`
+    :tab==='plan'?plan():tab==='shop'?shop():tab==='book'?book():fridge(),forceRender);forceRender=false;
   renderCook();renderSheet();
   if(tab==='fridge')wizSync();
   schedulePoll()}
