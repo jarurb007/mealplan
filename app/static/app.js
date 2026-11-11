@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s);
-let S=null,sheet=null,tab='plan',viewWeek=null,openAIng={},pollT=null,
+let S=null,sheet=null,cook=null,tab='plan',viewWeek=null,openAIng={},pollT=null,
   lang=localStorage.getItem('lang')||(/^(nb|no|nn)/i.test(navigator.language)?'no':/^pl/i.test(navigator.language)?'pl':(/^en/i.test(navigator.language)?'en':'no'));
 const t=k=>(L[lang][k]??L.no[k]??k);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -106,6 +106,8 @@ const ACT={
   foldSec:d=>foldSec(d.k),toggleCust:()=>toggleCust(),sendCust:()=>sendCust(),custCancel:()=>{custOpen=false;render()},rmImg:d=>rmImg(+d.i),
   setDef:d=>setDef(+d.n),undislike:byId(undislike),weekStep:d=>weekStep(+d.d),
   openMenu:()=>openSheet({kind:'menu'}),closeSheet:()=>closeSheet(),setLang:d=>setLang(d.l),setTheme:d=>setTheme(d.th),
+  openCook:d=>openCook(d.rid?{rid:+d.rid}:{id:+d.id}),closeCook:()=>closeCook(),cookStep:d=>{cook.i+=+d.d;render();const b=$('#cook .cbody');if(b)b.scrollTop=0},
+  cookIng:()=>{cook.ing=!cook.ing;render()},cookDone:()=>cookDone(),rateDislike:d=>{sheet={kind:'meal',id:+d.id,why:true};render()},
   toastAct:()=>toastAct(),confirmYes:()=>{const f=sheet&&sheet.fn;closeSheet();if(f)f()},
   openMeal:byId(openMeal),openRec:d=>openSheet({kind:'rec',id:+d.id}),sheetMeal:d=>openSheet({kind:'meal',id:+d.id}),toggleDone:byId(toggleDone),
   st:d=>{if(sheet&&d.s!=='planned')closeSheet();st(+d.id,d.s)},restoreSwap:d=>st(+d.id,'planned'),retryRec:byId(retryRec),
@@ -137,11 +139,23 @@ function ovPush(){if(!(history.state&&history.state.ov))history.pushState({ov:1}
 function ovPop(){if(history.state&&history.state.ov)history.back()}
 function openSheet(x){sheet=x;ovPush();render()}
 function closeSheet(){if(!sheet)return;sheet=null;render();ovPop()}
-window.addEventListener('popstate',()=>{if(sheet){sheet=null;if(S)render()}});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&sheet)closeSheet()});
+window.addEventListener('popstate',()=>{
+  if(cook&&cook.ing){cook.ing=false;ovPush();render();return}   // „wstecz” przy otwartej liście składników tylko ją zwija
+  if(cook){cook=null;wakeOff()}else if(sheet)sheet=null;else return;
+  if(S)render()});
+document.addEventListener('keydown',e=>{
+  if(cook){if(e.key==='Escape'){if(cook.ing){cook.ing=false;render()}else closeCook()}
+    else if(e.key==='ArrowRight'||e.key==='ArrowLeft'){const b=$(`#cook [data-click=cookStep][data-d="${e.key==='ArrowRight'?1:-1}"]`);if(b&&!b.disabled)b.click()}
+    return}
+  if(e.key==='Escape'&&sheet)closeSheet()});
 function sheetHead(title){return `<div class="phead"><h2>${title}</h2><button class="hb" data-click="closeSheet" aria-label="${esc(t('close'))}">✕</button></div>`}
 function sheetBody(){
   if(sheet.kind==='menu')return menuHtml();
+  if(sheet.kind==='rate'){const m=gm(sheet.id);   // po „Zrobione” w trybie gotowania: od razu ocena, póki ktoś o niej pamięta
+    return `${sheetHead('✓ '+esc(mv(m).name))}<p class="ptxt">${t('rateQ')}</p>
+     <button class="act" data-click="fav" data-id="${m.id}" aria-pressed="${!!m.fav}">⭐ ${m.fav?t('favOn')+' ✓':t('favAdd')}</button>
+     ${m.disliked?'':`<button class="act" data-click="rateDislike" data-id="${m.id}">👎 ${t('dislikeT')}</button>`}
+     <div class="row"><button class="b" data-click="closeSheet">${t('close')}</button></div>`}
   if(sheet.kind==='confirm')return `${sheetHead(esc(sheet.title))}<p class="ptxt">${esc(sheet.text)}</p>
    <div class="row"><button class="b danger" data-click="confirmYes">${esc(sheet.yes)}</button><button class="b" data-click="closeSheet">${t('cancel')}</button></div>`;
   if(sheet.kind==='book')return bookSheet(S.recipes.find(r=>r.id===sheet.id));
@@ -158,8 +172,8 @@ function paint(el,html,force){
   if(aid){const e=document.getElementById(aid);if(e){e.focus();try{e.setSelectionRange(as,as)}catch(_){}}}
   el.scrollTop=top}
 function renderSheet(){const box=$('#sheet');
-  if(sheet&&(!S||((sheet.kind==='rec'||sheet.kind==='meal')&&!gm(sheet.id))||(sheet.kind==='book'&&!(S.recipes||[]).some(r=>r.id===sheet.id))))sheet=null;   // danie zniknęło (np. inny tydzień): arkusz nie ma czego pokazać
-  box.classList.toggle('open',!!sheet);document.body.classList.toggle('modal',!!sheet);
+  if(sheet&&(!S||((sheet.kind==='rec'||sheet.kind==='meal'||sheet.kind==='rate')&&!gm(sheet.id))||(sheet.kind==='book'&&!(S.recipes||[]).some(r=>r.id===sheet.id))))sheet=null;   // danie zniknęło (np. inny tydzień): arkusz nie ma czego pokazać
+  box.classList.toggle('open',!!sheet);document.body.classList.toggle('modal',!!(sheet||cook));
   paint($('#panel'),sheet?sheetBody():'')}
 function menuHtml(){const dl=S.dislikes||[],dark=document.documentElement.getAttribute('data-theme')==='dark';
   return `${sheetHead(t('menuT'))}<div id="gearbox">
@@ -195,7 +209,7 @@ function render(){
   // nie podmienia więc elementu pod palcem (dotknięcie trwające w chwili podmiany przepadało). forceRender wymusza
   // przebudowę, gdy trzeba cofnąć coś, co zmieniło się tylko na ekranie (zaznaczone pole po nieudanym zapisie).
   paint($('#main'),tab==='plan'?plan():tab==='shop'?shop():tab==='book'?book():fridge(),forceRender);forceRender=false;
-  renderSheet();
+  renderCook();renderSheet();
   if(tab==='fridge')wizSync();
   schedulePoll()}
 function needPoll(){return S&&S.meals&&S.meals.some(m=>m.filling||(m.alts&&m.alts.length===0&&!m.loading))}
@@ -228,7 +242,7 @@ function mealCard(m){const v=mv(m),id=m.id,isT=m.date===S.today,done=m.status===
   return `<div class="meal ${done?'done':''} ${m.overdue&&m.status==='planned'?'late':''}" data-id="${id}"><div class="dr">${d}
    <button class="nmb" data-click="openMeal" data-id="${id}"><span class="name">${esc(v.name)}</span>${sub?`<span class="desc">${sub}</span>`:''}</button>
    ${isT?'':more+ck}</div>
-   ${isT?`<div class="tr"><button class="b p" data-click="openMeal" data-id="${id}">📖 ${t('recipe')}</button>
+   ${isT?`<div class="tr">${m.draft?`<button class="b p" data-click="openMeal" data-id="${id}">📖 ${t('recipe')}</button>`:`<button class="b p" data-click="openCook" data-id="${id}">👩‍🍳 ${t('cookBtn')}</button>`}
     <button class="b dn ${done?'on':''}" data-click="toggleDone" data-id="${id}" aria-pressed="${done}">${t('markDone')}</button><span class="sp"></span>${more}</div>`:''}</div>`}
 function plan(){
   if(!S.week)return `<div class="card">${t('noplan')}<div class="row"><button class="b p" data-click="goTab" data-t="fridge">${t('goPlanner')}</button></div></div>`;
@@ -238,6 +252,43 @@ function plan(){
   if(S.week.confirmed===false)h+=`<div class="warn" style="background:var(--info);border-color:var(--infobd)"><b>${t('confTitle')}</b><div class="desc" style="margin-top:4px">${t('confTxt')}</div><div class="row"><button class="b p" data-click="confirmPlan">${t('confirmBtn')}</button></div></div>`;
   h+='<div class="week">'+S.meals.map(m=>`<div class="slot ${m.date===S.today?'today':''} ${m.date<S.today?'past':''} ${m.status==='removed'?'offday':''}" data-day="${m.day}">${mealCard(m)}</div>`).join('')+'</div>';
   return h}
+/* --- tryb gotowania: pełny ekran, jeden krok dużym tekstem, „Wstecz / Dalej”. Przycisk „Wszystkie składniki” jest na
+   każdym kroku i rozwija pełną listę z ilościami nad krokiem, bez wychodzenia z niego. Ekran nie gaśnie (Wake Lock),
+   o ile przeglądarka na to pozwala; odmowa albo brak API niczego nie psuje. cook = {id dania | rid przepisu, i, ing}. */
+let wakeLock=null;
+async function wakeOn(){
+  try{if(wakeLock||!cook||!('wakeLock' in navigator))return;
+    const w=await navigator.wakeLock.request('screen');
+    if(!cook){w.release().catch(()=>{});return}
+    wakeLock=w;w.addEventListener('release',()=>{if(wakeLock===w){wakeLock=null;if(cook)renderCook()}});renderCook()}
+  catch(e){wakeLock=null}}
+function wakeOff(){const w=wakeLock;wakeLock=null;if(w)w.release().catch(()=>{})}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&cook)wakeOn()});   // system zwalnia blokadę, gdy karta znika z ekranu
+function cookSrc(){
+  if(cook.rid!=null){const r=(S.recipes||[]).find(x=>x.id===cook.rid);if(!r)return null;const v=rv(r);
+    return {name:v.name,steps:v.steps,ings:r.ingredients.map((i,k)=>`${i.qty??''} ${i.unit} ${v.ing[k]||i.name}`),por:null,meal:null}}
+  const m=gm(cook.id);if(!m||m.draft)return null;const v=mv(m);
+  return {name:v.name,steps:v.steps,ings:m.ingredients.map((i,k)=>`${m.qv[k]??''} ${i.unit} ${v.ing[k]||i.name}`),por:m.servings_eff,meal:m}}
+function openCook(x){sheet=null;cook={...x,i:0,ing:false};ovPush();render();wakeOn()}
+function closeCook(){if(!cook)return;cook=null;wakeOff();render();ovPop()}
+function renderCook(){const el=$('#cook'),c=cook&&S?cookSrc():null;
+  if(cook&&(!c||!c.steps.length)){cook=null;wakeOff()}
+  el.classList.toggle('open',!!cook);
+  if(!cook){paint(el,'');return}
+  const n=c.steps.length,i=cook.i=Math.max(0,Math.min(cook.i,n-1)),last=i===n-1;
+  paint(el,`<div class="chead"><button class="hb" data-click="closeCook" aria-label="${esc(t('close'))}">✕</button><b>${esc(c.name)}</b>${c.por?`<span>${c.por} ${t('por')}</span>`:''}</div>
+   <div class="pbar"><i style="width:${Math.round(100*(i+1)/n)}%"></i></div>
+   <div class="cbar"><button class="b p" data-click="cookIng" aria-expanded="${cook.ing}">🧾 ${t('allIng')} ${cook.ing?'▴':'▾'}</button><span class="sp"></span>${wakeLock?`<span class="desc awake">☀ ${t('awake')}</span>`:''}</div>
+   ${cook.ing?`<div class="cing"><ul class="ings">${c.ings.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
+   <div class="cbody"><div class="cstepn">${t('stepN').replace('{a}',i+1).replace('{b}',n)}</div><div class="cstep">${esc(c.steps[i])}</div>
+    ${last?'':`<div class="cnext desc">${t('nextS')}: ${esc(c.steps[i+1])}</div>`}</div>
+   <div class="cnav"><button class="b" data-click="cookStep" data-d="-1" ${i?'':'disabled'}>‹ ${t('back')}</button>
+    ${!last?`<button class="b p" data-click="cookStep" data-d="1">${t('next')} ›</button>`
+     :c.meal&&c.meal.status!=='done'?`<button class="b p" data-click="cookDone">${t('markDone')}</button>`:`<button class="b p" data-click="closeCook">${t('close')}</button>`}</div>`)}
+// Ostatni krok: „Zrobione” odhacza dzień i od razu pyta o ocenę (⭐ albo 👎).
+async function cookDone(){const id=cook&&cook.id;closeCook();if(id==null)return;
+  const r=await api(`/api/meal/${id}/status`,'POST',{status:'done'});if(!r)return;set(r);
+  if(gm(id))openSheet({kind:'rate',id});else toast('✓ '+t('doneT'))}
 function openMeal(id){const m=gm(id);if(!m)return;
   openSheet({kind:m.status==='removed'||m.overdue||m.loading||m.alts!=null?'meal':'rec',id})}   // gdy danie czeka na decyzję, od razu arkusz akcji
 // Podgląd przepisu (dotknięcie wiersza). Szkic bez przepisu pokazuje same nazwy składników i, gdy nikt go nie pisze, przycisk „Napisz przepis”.
@@ -250,7 +301,8 @@ function recSheet(m){const v=mv(m),id=m.id;let body;
    <h3>${t('sectStp')}</h3><ol class="steps">${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>
    ${okUrl(m.source)?`<a class="lnk" href="${esc(m.source)}" target="_blank" rel="noopener">${t('src')} ↗</a>`:''}`;
   return `${sheetHead(esc(v.name))}<div class="desc">${[v.description,m.time_min?m.time_min+' min':'',m.servings_eff+' '+t('por'),m.is_fish?t('fish'):''].filter(Boolean).map(esc).join(' · ')}</div>
-   ${body}<div class="row"><button class="b" data-click="sheetMeal" data-id="${id}">⋯ ${t('actions')}</button></div>`}
+   <div class="row">${m.draft?'':`<button class="b p" data-click="openCook" data-id="${id}">👩‍🍳 ${t('cookBtn')}</button>`}<button class="b" data-click="sheetMeal" data-id="${id}">⋯ ${t('actions')}</button></div>
+   ${body}`}
 // Arkusz akcji dania: zamiana (podpowiedzi, własne życzenie, propozycje), przeniesienie, porcje, przepisy, 👎, usunięcie.
 function mealSheet(m){const v=mv(m),id=m.id,D=t('days');
   const head=sheetHead(esc(v.name))+`<div class="desc">${esc(D[m.day])} ${dm(m.date)}</div>`;
@@ -334,6 +386,7 @@ function bookSheet(r){const v=rv(r),on=bookPicked().has(r.id),D=t('days');let us
      +(m?`<div class="alt"><b>${esc(D[k])} ${dm(m.date)}</b><div class="desc">${m.status==='removed'?t('dayOffS'):esc(t('useNow').replace('{x}',mv(m).name))}</div>
       <div class="row"><button class="b p" data-click="useRec" data-id="${r.id}" data-d="${k}">${t('useGo')}</button></div></div>`:'')}
   return `${sheetHead(esc(v.name))}<div class="desc">${esc([v.description,r.time_min?r.time_min+' min':''].filter(Boolean).join(' · '))}</div>
+   ${v.steps.length?`<div class="row"><button class="b p" data-click="openCook" data-rid="${r.id}">👩‍🍳 ${t('cookBtn')}</button></div>`:''}
    ${use}<button class="act" data-click="togglePick" data-id="${r.id}" aria-pressed="${on}">${on?'✓ '+t('inPlan'):'＋ '+t('toPlan')}</button>
    <h3>${t('sectIng')}</h3><ul class="ings">${r.ingredients.map((i,k)=>`<li>${esc(i.qty??'')} ${esc(i.unit)} ${esc(v.ing[k]||i.name)}</li>`).join('')}</ul>
    <h3>${t('sectStp')}</h3><ol class="steps">${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>
@@ -563,7 +616,7 @@ const verOf=h=>(h.match(/\/static\/[\w.]+\?v=\w+/g)||[]).sort().join(' ');
 const myVer=verOf(document.documentElement.innerHTML);
 let verAt=0;
 async function checkVersion(){
-  if(document.hidden||busyUI()||custOpen||sheet||Date.now()-verAt<60000)return;verAt=Date.now();
+  if(document.hidden||busyUI()||custOpen||sheet||cook||Date.now()-verAt<60000)return;verAt=Date.now();
   try{const r=await fetch('/',{cache:'no-store'});if(!r.ok)return;const v=verOf(await r.text());
     if(!v||v===myVer||sessionStorage.getItem('reloadedFor')===v)return;
     sessionStorage.setItem('reloadedFor',v);location.reload()}catch(e){}}
