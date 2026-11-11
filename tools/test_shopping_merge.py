@@ -347,7 +347,8 @@ def aisles_part(wid):
     with app.db() as c:
         idx = app.aisle_history(c)
         for name, want in (("Havre melk", "Meieri og kjøl"), ("Mleko", "Meieri og kjøl"), ("mleko owsiane", "Meieri og kjøl"),
-                           ("Brød", "Brød og deig"), ("chleb tostowy", "Brød og deig"), ("Bananer", "Frukt og grønt"), ("Rødbeter", "Frukt og grønt"),
+                           ("Brød", "Brød og deig"), ("chleb tostowy", "Brød og deig"), ("Bananer", "Frukt og grønt"), ("Rødbeter", "Frukt og grønt"), ("3 flakslodd", None), ("Protein joghurt", "Meieri og kjøl"),
+                           ("Grønnsakspostei", "Kjøtt og fisk"), ("Makrell i tomat", "Tørrvarer og hermetikk"), ("Salatost", "Meieri og kjøl"),
                            ("pomidory", "Frukt og grønt"), ("Kyllingfilet", "Kjøtt og fisk"), ("tunfisk", "Tørrvarer og hermetikk"),
                            ("potetgull", "Snacks og godteri"), ("czekolada mleczna", "Snacks og godteri"), ("Grandiosa", "Frys"), ("lody", "Frys"),
                            ("Toalettpapir", app.MINE), ("pasta do zębów", app.MINE), ("płyn do naczyń", app.MINE),
