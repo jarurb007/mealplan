@@ -6,7 +6,8 @@ FAKE_PLAN_FILE=plik -> jeśli plik istnieje, plan tygodnia ma nazwy dań z tego 
 FAKE_TR=1 -> prompt tłumaczenia dostaje prawdziwą odpowiedź (każdy tekst z przedrostkiem "PL ").
 FAKE_TIMES=plik -> po każdym wywołaniu dopisuje wiersz "rodzaj początek koniec" (do liczenia równoległości).
 FAKE_FAIL_FILE=plik -> jeśli plik istnieje, a prompt zawiera jego treść, atrapa kończy się błędem (model zawiódł).
-Prompt dopasowania gazetek ("offer_match") dostaje pary wyliczone prostą regułą wspólnych słów."""
+Prompt dopasowania gazetek ("offer_match") dostaje pary wyliczone prostą regułą wspólnych słów,
+prompt odczytu gazetki KIWI ("leaflet_offers") kilka stałych ofert."""
 import json, os, re, sys, time
 t0 = time.time()
 p = sys.stdin.read()
@@ -25,6 +26,15 @@ if os.environ.get("FAKE_TR") == "1" and p.startswith("Przetłumacz poniższe dan
     out = {"meals": [{"i": m["i"], "name": "PL " + m["name"], "description": "PL " + m["description"],
                       "ingredients": ["PL " + x for x in m["ingredients"]], "steps": ["PL " + x for x in m["steps"]]}
                      for m in todo]}
+elif '"leaflet_offers"' in p:
+    kind = "leaflet"
+    # odczyt gazetki KIWI: stałe oferty dla stron, na których są te nazwy; KINAKÅL celowo ze złym rachunkiem
+    # (16,90 za 500 g to nie 99,00/kg), żeby było widać, że serwer taką ofertę ukrywa
+    fixed = [("GULROT", {"info": "750 g, Gartner", "price": 19.90, "per": "stk", "unit_price": 26.53, "unit": "kg"}),
+             ("PURRE", {"info": "Gartner", "price": 27.90, "per": "kg"}),
+             ("KÅLROT", {"info": "Gartner", "price": 9.90, "per": "kg", "member": True}),
+             ("KINAKÅL", {"info": "500 g, Gartner", "price": 16.90, "per": "stk", "unit_price": 99.00, "unit": "kg"})]
+    out = {"leaflet_offers": [{"page": 3, "name": n, **o} for n, o in fixed if "| " + n + "\n" in p]}
 elif '"offer_match"' in p:
     kind = "offers"
     # gazetki: para, gdy wszystkie słowa pozycji listy są całymi słowami w nazwie produktu (albo tytule) oferty.

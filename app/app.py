@@ -914,9 +914,12 @@ def shopping(c, week, meals=None):
 # sieć i tydzień, plus jedno, gdy na liście pojawią się nowe pozycje. Wynik i ręczne „to nie to” pamięta product_map.
 # product_map(canon, product) ma służyć także cenom regularnym: canon to klucz z canon() (własny produkt: 'x:' +
 # fold(nazwa)), product to kod EAN ('n:' + fold(nazwa), gdy go brak; 't:' + fold(tytuł), gdy pasuje cała oferta).
-OFFER_CHAINS = {"extra": ("Extra", "extra"), "obs": ("Obs", "obs"),
-                "prix": ("Coop Prix", "coop-prix"), "mega": ("Coop Mega", "coop-mega")}  # klucz: (nazwa, parametr strony)
+# klucz: (nazwa, parametr strony coop.no albo None). Strona Coop tak samo oddaje Obs ("obs"), Prix ("coop-prix")
+# i Mega ("coop-mega"); właściciel chce tylko Extra i KIWI. KIWI ma własną drogę: PDF czytany modelem (kiwi_load).
+OFFER_CHAINS = {"extra": ("Extra", "extra"), "kiwi": ("KIWI", None)}
 OFFER_URL = "https://www.coop.no/minkundeavis?chain={}"
+KIWI_API = "https://kiwi.no/api/kundeavis"   # ?postCode=NNNN -> {"url": "/filer/<skrót>"}: gazetka (PDF) dla regionu
+KIWI_PAGES = 8          # tyle stron gazetki KIWI idzie w jednym wywołaniu modelu (32 strony = 4 wywołania na tydzień)
 # przedstawiamy się wprost i bez danych właściciela (nagłówek HTTP: tylko ASCII)
 OFFER_UA = "handleliste-hjemme/1.0 (privat husholdningsverktoy; henter kundeavisen en gang i uken)"
 OFFER_LLM = os.getenv("OFFER_LLM", "1") == "1"
@@ -1051,36 +1054,192 @@ def offer_batch(offs: list) -> str:
     return hashlib.sha1(json.dumps(sig).encode()).hexdigest()[:12]
 
 
+# --- KIWI: gazetka to PDF z warstwą tekstu. Nazwy i ceny leżą w niej osobno, więc model dostaje każdy wiersz z położeniem
+# na stronie i sam łączy cenę z najbliższą nazwą. Tam, gdzie gazetka podaje cenę za kg/l, wynik sprawdza rachunek.
+def pdf_lines(data: bytes) -> list:
+    """PDF -> strony, każda jako lista [x, y, wielkość pisma, tekst]. Wymaga pakietu pypdf (requirements.txt)."""
+    import io
+    import logging
+    import pypdf
+    logging.getLogger("pypdf").setLevel(logging.ERROR)  # ostrzeżenia o czcionkach ozdobnych nic tu nie zmieniają
+    pages = []
+    for pg in pypdf.PdfReader(io.BytesIO(data)).pages:
+        out = []
+
+        def visit(text, cm, tm, font, size, out=out):
+            if text.strip():
+                out.append([round(tm[4]), round(tm[5]), round(abs(tm[0]) * (size or 1)), " ".join(text.split())])
+        pg.extract_text(visitor_text=visit)
+        pages.append(out)
+    return pages
+
+
+NO_MONTHS = ["januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "desember"]
+
+
+def kiwi_valid_to(pages: list, wk: date):
+    """'Gjelder til og med 15. november' -> data; None, gdy gazetka nie podaje terminu."""
+    text = " ".join(ln[3] for pg in pages for ln in pg)
+    m = re.search(r"til og med (\d{1,2})\.\s*(" + "|".join(NO_MONTHS) + ")", text, re.I)
+    if not m:
+        return None
+    for year in (wk.year, wk.year + 1):
+        try:
+            d = date(year, NO_MONTHS.index(m[2].lower()) + 1, int(m[1]))
+        except ValueError:
+            return None
+        if d >= wk:
+            return d if d - wk <= timedelta(days=45) else None
+    return None
+
+
+def kiwi_prompt(pages: list, first: int) -> str:
+    blocks = "\n".join(f"--- strona {first + n} ---\n" + "\n".join(f"{x} {y} {sz} | {t}" for x, y, sz, t in pg)
+                       for n, pg in enumerate(pages))
+    return f"""Strony gazetki promocyjnej sieci KIWI (Norwegia) jako tekst z położeniem. Każdy wiersz to: x y wielkość | tekst
+(x rośnie w prawo, y w górę, strona ma 720×1080). Wypisz oferty produktów.
+Zasady:
+- Nazwa produktu jest pisana WERSALIKAMI. Tuż pod nią stoi opis: gramatura, marka i czasem cena za kg/l („pr. kg 26,53”).
+- Cena to duża liczba bez przecinka, dwie ostatnie cyfry to øre: „1690” = 16.90, „990” = 9.90, „17900” = 179.00.
+  Przy cenie stoi jej jednostka („Pr. stk.”, „Pr. kg”, „750 g”) i czasem „Før 19,90” (cena sprzed promocji, pomiń ją).
+- Cena należy do produktu, którego nazwa leży najbliżej (zwykle tuż pod ceną, w tej samej kolumnie). Jeśli opis podaje
+  cenę za kg/l i gramaturę, sprawdź rachunkiem, czy para się zgadza.
+- „per”: "kg" albo "l", gdy cena jest za kilogram/litr („Pr. kg”), w pozostałych przypadkach "stk" (cena za opakowanie).
+- „3 for 2” -> multi 3, pay 2, price null. „2 for 50” -> multi 2, price 50. „-40 %” -> percent 40, price null.
+- member true tylko wtedy, gdy cena jest wyraźnie dla klientów KIWI PLUSS.
+- Nie zgaduj. Produkt, którego ceny nie da się pewnie wskazać, pomiń. Hasła reklamowe i przepisy to nie oferty.
+{blocks}
+Zwróć wyłącznie JSON: {{"leaflet_offers": [{{"page": 3, "name": "GULROT", "info": "750 g, Gartner", "price": 19.90, "per": "stk",
+"unit_price": 26.53, "unit": "kg", "multi": null, "pay": null, "percent": null, "member": false}}]}}
+„unit_price” i „unit” to cena za kg/l wydrukowana w opisie (null, gdy jej nie ma)."""
+
+
+def _num(v):
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else None
+
+
+def kiwi_offer(m: dict):
+    """Jedna oferta z odpowiedzi modelu -> wiersz jak z parse_coop; None, gdy brakuje nazwy albo jakiejkolwiek ceny."""
+    name = " ".join(str(m.get("name") or "").split())
+    info = " ".join(str(m.get("info") or "").split())
+    price, up, per = _num(m.get("price")), _num(m.get("unit_price")), str(m.get("per") or "stk").lower()
+    unit = str(m.get("unit") or "").lower()
+    multi, pay, percent = _int(m.get("multi")), _int(m.get("pay")), _int(m.get("percent"))
+    if not name or (price is None and not percent and not (multi and pay)):
+        return None
+    title = (name.capitalize() + (" " + info if info else "")).strip()
+    kr = lambda v: f"{v:.2f}".replace(".", ",")
+    if per in ("kg", "l") and price is not None:
+        detail, unsure = f"Pr {per} {kr(price / (multi or 1))}", ""  # cena już jest za kg/l: nie ma czego sprawdzać
+    else:
+        detail = f"Pr {unit} {kr(up)}" if up and unit in ("kg", "l", "stk") else ""
+        unsure = offer_unsure(price, multi, pay, percent, [{"name": title, "detail": detail}])
+        if unsure == "info" and price is not None:
+            unsure = ""  # cena za opakowanie bez ceny za kg to w tej gazetce pełna informacja
+    return {"ext_id": "", "title": title, "price": price, "multi": multi, "pay": pay, "percent": percent,
+            "member": int(bool(m.get("member"))), "pant": 0, "products": [{"ean": "", "name": title, "detail": detail}],
+            "unsure": unsure}
+
+
+def kiwi_read(pages: list) -> list:
+    """Wszystkie strony gazetki -> oferty. Jedno wywołanie modelu na KIWI_PAGES stron; błąd któregokolwiek przerywa odczyt
+    (zostają oferty z poprzedniej gazetki)."""
+    out, seen = [], set()
+    for i in range(0, len(pages), KIWI_PAGES):
+        part = pages[i:i + KIWI_PAGES]
+        if not any(part):
+            continue
+        res = llm.ask_json(kiwi_prompt(part, i + 1), big=True)
+        got = res.get("leaflet_offers") if isinstance(res, dict) else None
+        if not isinstance(got, list):
+            raise llm.LLMError("odpowiedź bez leaflet_offers")
+        for m in got:
+            o = kiwi_offer(m) if isinstance(m, dict) else None
+            if o and fold(o["title"]) not in seen:
+                seen.add(fold(o["title"]))
+                out.append(o)
+    if not out:
+        raise ValueError("gazetka bez ofert")
+    return out
+
+
+def kiwi_load(src, wk: date):
+    """-> (oferty, znacznik gazetki, ważna do). Oferty None = to wciąż ta sama gazetka, którą już mamy: wtedy nie
+    pobieramy PDF-a i nie pytamy modelu. Dwa zapytania do kiwi.no na nową gazetkę, jedno małe na sprawdzenie."""
+    import hashlib
+    test = os.getenv("OFFERS_SRC_DIR")  # testy bez sieci: {"url": ..., "pages": [...]} zapisane z prawdziwej gazetki
+    if test:
+        saved = json.loads((Path(test) / "kiwi.json").read_text(encoding="utf-8"))
+        url = saved["url"]
+    else:
+        with db() as c:
+            r = c.execute("SELECT value FROM settings WHERE key='kiwi_postcode'").fetchone()
+        if not r or not re.fullmatch(r"\d{4}", r["value"] or ""):
+            raise ValueError("brak kodu pocztowego")
+        head = {"User-Agent": OFFER_UA, "Accept-Language": "nb"}
+        rr = httpx.get(KIWI_API, params={"postCode": r["value"]}, timeout=30, headers=head)
+        rr.raise_for_status()
+        url = str((rr.json() or {}).get("url") or "")
+        if not re.fullmatch(r"/filer/[0-9a-zA-Z]{16,80}", url):
+            raise ValueError("nieoczekiwany adres gazetki")
+    batch = hashlib.sha1(url.encode()).hexdigest()[:12]
+    if src and src["batch"] == batch and src["n"]:
+        return None, batch, None
+    if test:
+        pages = saved["pages"]
+    else:
+        pr = httpx.get("https://kiwi.no" + url, timeout=120, headers=head)
+        pr.raise_for_status()
+        if len(pr.content) > 60_000_000:
+            raise ValueError("gazetka jest za duża")
+        pages = pdf_lines(pr.content)
+    return kiwi_read(pages), batch, kiwi_valid_to(pages, wk)
+
+
 def offer_refresh(chain: str, force: bool = False, now: datetime | None = None):
     """Jedno pobranie gazetki sieci. Udane podmienia jej oferty w jednej transakcji; nieudane zapisuje tylko błąd,
     a dotychczasowe oferty zostają do końca swojej ważności."""
     now = now or datetime.now()
     wk = offer_week(now)
-    try:
-        offs, err = parse_coop(offer_fetch(chain), chain), None
-    except Exception as e:
-        offs, err = None, f"{type(e).__name__}: {e}"[:200]
-        print(f"gazetka {chain}: {err}", flush=True)
     with db() as c:
         src = c.execute("SELECT * FROM offer_sources WHERE chain=?", (chain,)).fetchone()
-        c.execute("INSERT OR IGNORE INTO offer_sources(chain) VALUES(?)", (chain,))
-        if offs is not None:
+    offs = batch = to = None
+    try:
+        if chain == "kiwi":
+            offs, batch, to = kiwi_load(src, wk)
+        else:
+            offs = parse_coop(offer_fetch(chain), chain)
             batch = offer_batch(offs)
-            if not force and src and src["batch"] == batch and src["week"] != str(wk) and now.weekday() < 3:
+        err = None
+    except Exception as e:
+        err = f"{type(e).__name__}: {e}"[:200]
+        print(f"gazetka {chain}: {err}", flush=True)
+    with db() as c:
+        c.execute("INSERT OR IGNORE INTO offer_sources(chain) VALUES(?)", (chain,))
+        stamp = now.isoformat(timespec="seconds")
+        if err is None and offs is None:
+            # KIWI: ta sama gazetka co zapisana. Jeśli jeszcze obowiązuje, tydzień jest załatwiony; jeśli nie, czekamy na nową.
+            live = c.execute("SELECT MAX(valid_to) AS t FROM offers WHERE chain=?", (chain,)).fetchone()["t"]
+            if live and live >= str(now.date()):
+                c.execute("UPDATE offer_sources SET week=? WHERE chain=?", (str(wk), chain))
+            else:
+                err = "unchanged"
+        elif err is None:
+            if not force and to is None and src and src["batch"] == batch and src["week"] != str(wk) and now.weekday() < 3:
                 # początek tygodnia, a strona pokazuje jeszcze zeszłotygodniową gazetkę: nie przedłużamy jej, próbujemy później
                 err = "unchanged"
             else:
-                # Coop nie podaje dat ważności: przyjmujemy bieżący tydzień od poniedziałku do niedzieli (assumed=1)
+                # gazetka bez daty ważności (Coop): przyjmujemy bieżący tydzień od poniedziałku do niedzieli (assumed=1)
                 c.execute("DELETE FROM offers WHERE chain=?", (chain,))
                 c.executemany(
                     "INSERT INTO offers(chain, ext_id, title, price, multi, pay, percent, member, pant, products, unsure,"
-                    " valid_from, valid_to, assumed) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
+                    " valid_from, valid_to, assumed) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     [(chain, o["ext_id"], o["title"], o["price"], o["multi"], o["pay"], o["percent"], o["member"], o["pant"],
-                      json.dumps(o["products"], ensure_ascii=False), o["unsure"], str(wk), str(wk + timedelta(days=6)))
-                     for o in offs])
+                      json.dumps(o["products"], ensure_ascii=False), o["unsure"], str(wk), str(to or wk + timedelta(days=6)),
+                      int(to is None)) for o in offs])
                 c.execute("UPDATE offer_sources SET ok_at=?, batch=?, week=?, n=? WHERE chain=?",
-                          (now.isoformat(timespec="seconds"), batch, str(wk), len(offs), chain))
-        c.execute("UPDATE offer_sources SET tried_at=?, error=? WHERE chain=?", (now.isoformat(timespec="seconds"), err, chain))
+                          (stamp, batch, str(wk), len(offs), chain))
+        c.execute("UPDATE offer_sources SET tried_at=?, error=? WHERE chain=?", (stamp, err, chain))
 
 
 def offer_due(src, now: datetime) -> bool:
@@ -1357,12 +1516,15 @@ def offers_info(c) -> dict:
     on = offer_chains_on(c)
     srcs = {r["chain"]: r for r in c.execute("SELECT * FROM offer_sources")}
     today = str(date.today())
+    post = c.execute("SELECT value FROM settings WHERE key='kiwi_postcode'").fetchone()
     chains = []
     for k, (name, _) in OFFER_CHAINS.items():
         s = srcs.get(k)
         to = c.execute("SELECT MAX(valid_to) AS t FROM offers WHERE chain=? AND valid_to>=?", (k, today)).fetchone()["t"] if s else None
         chains.append({"id": k, "name": name, "on": k in on, "n": (s["n"] if s and to else 0), "at": s["ok_at"] if s else None,
                        "to": to, "error": bool(s and s["error"] and s["error"] != "unchanged"), "busy": k in OFFER_BUSY})
+        if k == "kiwi":  # gazetka KIWI zależy od regionu
+            chains[-1]["postcode"] = post["value"] if post else ""
     return {"chains": chains, "busy": bool(OFFER_BUSY)}
 
 
@@ -1413,6 +1575,26 @@ def offers_refresh(req: WeekReq):
     if not todo:
         raise HTTPException(429, "odświeżone przed chwilą")
     offer_start(todo, force=True)
+    return build_state(req.week)
+
+
+class PostcodeReq(BaseModel):
+    code: str
+    week: int | None = None
+
+
+@app.post("/api/offers/postcode")
+def offers_postcode(req: PostcodeReq):
+    """Kod pocztowy do gazetki KIWI (zostaje w bazie, w zapytaniu idzie tylko do kiwi.no)."""
+    code = req.code.strip()
+    if not re.fullmatch(r"\d{4}", code):
+        raise HTTPException(400, "kod pocztowy to cztery cyfry")
+    with db() as c:
+        c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('kiwi_postcode', ?)", (code,))
+        on = "kiwi" in offer_chains_on(c)
+        c.execute("UPDATE offer_sources SET tried_at=NULL WHERE chain='kiwi' AND error IS NOT NULL")
+    if on:
+        offer_start(["kiwi"])
     return build_state(req.week)
 
 
