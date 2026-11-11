@@ -132,30 +132,32 @@ async def ui(A, wid, ids, herb, other_week):
        "przycisk „Kopiuj listę” jest w zakładce zakupów")
     await A.ev("document.querySelector('.shop [data-click=copyList]').click()"); await asyncio.sleep(1); await A.ev("1")
     toast = await A.ev("document.getElementById('toast').textContent")
-    ok(await A.ev("__n('/api/shop/text')") == 1 and ("Copied" in toast or any(x.startswith("Copy:") for x in A.dialogs)),
+    manual = await A.ev("(document.querySelector('#panel textarea')||{}).value||''")   # schowek niedostępny: lista w arkuszu, do skopiowania ręcznie
+    ok(await A.ev("__n('/api/shop/text')") == 1 and ("Copied" in toast or "chleb" in manual),
        "kopiowanie pobiera listę i wkłada ją do schowka (albo pokazuje do skopiowania ręcznie)")
+    await A.ev("closeSheet()")
 
     # ---- 7) dwa szybkie „zrobione” na dwóch daniach
     await A.ev("goTab('plan')"); await asyncio.sleep(0.6)
     await A.ev("__calls.length=0")
-    r = await A.ev(f"(()=>{{[{ids[1]},{ids[2]}].forEach(i=>document.querySelector('.meal[data-id=\"'+i+'\"] .chk').click());"
+    r = await A.ev(f"(()=>{{[{ids[1]},{ids[2]}].forEach(i=>document.querySelector('.meal[data-id=\"'+i+'\"]  [data-click=toggleDone]').click());"
                    "return document.body.classList.contains('spin')||document.getElementById('busybar').style.display==='block'})()")
     ok(r is False, "krótka akcja nie przygasza ekranu ani nie pokazuje żółtego paska")
     await asyncio.sleep(1.5)
     st = api(f"/api/state?week={wid}", "GET")
     ok(meal(st, ids[1])["status"] == "done" and meal(st, ids[2])["status"] == "done", "dwa szybkie „zrobione”: oba zapisane na serwerze")
-    ok(await A.ev(f"[{ids[1]},{ids[2]}].every(i=>{{const c=document.querySelector('.meal[data-id=\"'+i+'\"]');return c.classList.contains('done')&&c.querySelector('.chk').checked}})"),
+    ok(await A.ev(f"[{ids[1]},{ids[2]}].every(i=>{{const c=document.querySelector('.meal[data-id=\"'+i+'\"]');return c.classList.contains('done')&&c.querySelector('[data-click=toggleDone]').getAttribute('aria-pressed')==='true'}})"),
        "dwa szybkie „zrobione”: oba zaznaczone na ekranie")
     ok(await A.ev("__n('/status')") == 2, "dwie akcje = dwa zapytania, po kolei")
     # zaznacz -> odznacz -> zaznacz na jednym daniu: liczy się ostatnie kliknięcie
-    await A.ev(f"(()=>{{for(let k=0;k<3;k++)document.querySelector('.meal[data-id=\"{ids[3]}\"] .chk').click()}})()"); await asyncio.sleep(1.5)
-    ok(meal(api(f"/api/state?week={wid}", "GET"), ids[3])["status"] == "done" and await A.ev(f"document.querySelector('.meal[data-id=\"{ids[3]}\"] .chk').checked"),
+    await A.ev(f"(()=>{{for(let k=0;k<3;k++)document.querySelector('.meal[data-id=\"{ids[3]}\"]  [data-click=toggleDone]').click()}})()"); await asyncio.sleep(1.5)
+    ok(meal(api(f"/api/state?week={wid}", "GET"), ids[3])["status"] == "done" and await A.ev(f"document.querySelector('.meal[data-id=\"{ids[3]}\"] [data-click=toggleDone]').getAttribute('aria-pressed')==='true'"),
        "trzy kliknięcia w to samo pole: stan na serwerze zgadza się z ekranem")
     # nieudane „zrobione”: pole nie zostaje zaznaczone na niby
     await A.ev("__mode='statusnet'")
-    await A.ev(f"document.querySelector('.meal[data-id=\"{ids[4]}\"] .chk').click()"); await asyncio.sleep(1.2)
+    await A.ev(f"document.querySelector('.meal[data-id=\"{ids[4]}\"]  [data-click=toggleDone]').click()"); await asyncio.sleep(1.2)
     toast = await A.ev("document.getElementById('toast').style.display==='block'?document.getElementById('toast').textContent:''")
-    ok(await A.ev(f"!document.querySelector('.meal[data-id=\"{ids[4]}\"] .chk').checked") and "Error" in toast,
+    ok(await A.ev(f"document.querySelector('.meal[data-id=\"{ids[4]}\"] [data-click=toggleDone]').getAttribute('aria-pressed')==='false'") and "Error" in toast,
        f"nieudane „zrobione”: pole wraca i jest komunikat '{toast}'")
     await A.ev("__mode=''")
     # długa operacja z modelem nadal blokuje ekran
@@ -174,12 +176,15 @@ async def ui(A, wid, ids, herb, other_week):
     db.execute("UPDATE meals SET data=?, tr=NULL, pre=NULL WHERE id=?", (json.dumps(d6, ensure_ascii=False), ids[6]))
     db.commit(); db.close()
     card = f"document.querySelector('.meal[data-id=\"{ids[6]}\"]')"
-    await A.ev(f"Array.from({card}.querySelectorAll('button')).find(b=>b.textContent.includes('Restore')).click()"); await asyncio.sleep(1.2)
+    ok(await A.ev(f"{card}.classList.contains('off') && {card}.querySelector('[data-click=st]').getAttribute('aria-label')==='Restore'"), "usunięty dzień ma w wierszu przycisk ↺ „Przywróć”")
+    await A.ev(f"{card}.querySelector('[data-click=st]').click()"); await asyncio.sleep(1.2)
     m6 = meal(api(f"/api/state?week={wid}", "GET"), ids[6])
     ok(m6["draft"] and not m6["filling"] and not m6.get("draft_error"), "przywrócony dzień to szkic, którego nikt nie pisze (stan zawieszony)")
-    ok(await A.ev(f"!!{card}.querySelector('[data-click=retryRec]') && {card}.querySelector('[data-click=retryRec]').textContent.includes('Write recipe')"),
-       "karta takiego dania ma przycisk „Napisz przepis”")
-    await A.ev(f"{card}.querySelector('[data-click=retryRec]').click()")
+    ok("⚠" in (await A.ev(f"{card}.querySelector('.desc').textContent")), "wiersz takiego dania pokazuje ostrzeżenie o braku przepisu")
+    await A.ev(f"openSheet({{kind:'rec',id:{ids[6]}}})"); await asyncio.sleep(0.4)
+    ok(await A.ev("!!document.querySelector('#panel [data-click=retryRec]') && document.querySelector('#panel [data-click=retryRec]').textContent.includes('Write recipe')"),
+       "podgląd przepisu takiego dania ma przycisk „Napisz przepis”")
+    await A.ev("document.querySelector('#panel [data-click=retryRec]').click()")
     for _ in range(12):
         await asyncio.sleep(1)
         m6 = meal(api(f"/api/state?week={wid}", "GET"), ids[6])
@@ -187,7 +192,9 @@ async def ui(A, wid, ids, herb, other_week):
             break
     await asyncio.sleep(3)
     ok(not m6["draft"] and len(m6["steps"]) > 0, "po kliknięciu przepis zostaje napisany")
-    ok(await A.ev(f"!{card}.querySelector('[data-click=retryRec]') && !!{card}.querySelector('[data-click=toggleRec]')"), "karta sama przechodzi na gotowy przepis")
+    ok(await A.ev("!document.querySelector('#panel [data-click=retryRec]') && document.querySelectorAll('#panel .steps li').length>0"), "otwarty podgląd sam przechodzi na gotowy przepis")
+    ok(await A.ev(f"!{card}.querySelector('.desc')"), "ostrzeżenie znika z wiersza")
+    await A.ev("closeSheet()"); await asyncio.sleep(0.3)
 
     # ---- 9) „szukam zamienników” ma „Anuluj”
     mid = ids[5]
@@ -203,11 +210,15 @@ async def ui(A, wid, ids, herb, other_week):
     # znacznik „szukam” zostawiony przez serwer (np. restart w trakcie): kręciołek bez końca też da się zamknąć
     db = sqlite3.connect(DB); db.execute("UPDATE meals SET alts='[]' WHERE id=?", (ids[1],)); db.commit(); db.close()
     await A.ev("sync()"); await asyncio.sleep(1.2)
-    ok(await A.ev(f"!!document.querySelector('#aw{ids[1]} .spinner')"), "osierocony znacznik szukania pokazuje kręciołek")
+    ok("⏳" in (await A.ev(f"document.querySelector('.meal[data-id=\"{ids[1]}\"] .desc').textContent")), "osierocony znacznik szukania widać w wierszu dnia")
+    await A.ev(f"document.querySelector('.meal[data-id=\"{ids[1]}\"] [data-click=openMeal]').click()"); await asyncio.sleep(0.4)
+    ok(await A.ev(f"!!document.querySelector('#panel #aw{ids[1]} .spinner')"), "dotknięcie wiersza otwiera arkusz z kręciołkiem")
     await A.ev(f"document.querySelector('#aw{ids[1]} [data-click=closeAlt]').click()"); await asyncio.sleep(1)
     ok(await A.ev(f"!document.querySelector('#aw{ids[1]}')") and meal(api(f"/api/state?week={wid}", "GET"), ids[1])["alts"] is None,
        "„Anuluj” zdejmuje osierocony kręciołek")
 
+    await A.ev("closeSheet()"); await asyncio.sleep(0.3)
+    ok(not A.dialogs, f"żadna akcja nie otworzyła okna systemowego {A.dialogs}")
     ok(not A.errors, f"brak błędów JS {A.errors}")
 
     # ---- 10) nowa wersja po wdrożeniu: otwarta karta sama się przeładowuje, ale tylko raz na wersję
