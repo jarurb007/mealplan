@@ -384,6 +384,57 @@ async def touch_and_drag(A, wid):
     ok(nm[6] == a["name"] and nm[5] == b["name"] and not await A.ev(OPEN), f"przeciągnięcie palcem za datę zamienia dni 5 <-> 6 ({nm[5]} / {nm[6]})")
 
 
+async def wide(A, wid):
+    """Szeroki ekran: od ok. 900 px siatka dni i lista zakupów w bocznej kolumnie; 7 dni w jednym rzędzie na 1280 px."""
+    await A.cmd("Emulation.setTouchEmulationEnabled", enabled=False)
+    await A.cmd("Emulation.setDeviceMetricsOverride", width=1280, height=800, deviceScaleFactor=1, mobile=False)
+    await A.ev("sec.bought=false;goTab('plan');window.scrollTo(0,0)"); await asyncio.sleep(0.8)
+    GEO = ("(()=>{const r=e=>{const b=e.getBoundingClientRect();return {t:Math.round(b.top),l:Math.round(b.left),r:Math.round(b.right),b:Math.round(b.bottom)}};"
+           "const side=document.querySelector('#main .side');return {slots:[...document.querySelectorAll('.week .slot')].map(r),side:side?r(side):null,"
+           "rows:document.querySelectorAll('.side .shop label').length,bar:!!document.querySelector('.side .pbar'),add:!!document.querySelector('.side #xn'),"
+           "nav:r(document.querySelector('nav')),hdr:r(document.querySelector('header')),sw:document.documentElement.scrollWidth,iw:innerWidth,ih:innerHeight}})()")
+    g = await A.ev(GEO); s = g["slots"]
+    ok(len(s) == 7 and len({x["t"] for x in s}) == 1 and all(s[k]["l"] >= s[k - 1]["r"] for k in range(1, 7)), f"1280 px: siedem dni obok siebie w jednym rzędzie {[x['l'] for x in s]}")
+    left = sum(1 for v in api(f"/api/state?week={wid}", "GET")["shopping"].values() for i in v if not i["checked"])
+    ok(g["side"] and g["side"]["l"] >= s[6]["r"] and g["rows"] == left and g["bar"] and g["add"], f"lista zakupów w bocznej kolumnie: postęp, {g['rows']} pozycji do kupienia, pole dopisywania")
+    ok(g["nav"]["t"] == 0 and g["nav"]["b"] <= g["hdr"]["b"] and g["sw"] <= g["iw"], "zakładki w nagłówku, bez przewijania w poziomie")
+    await shot(A, "wide")
+    # odhaczenie w bocznej kolumnie działa jak w zakładce zakupów
+    head = await A.ev("document.querySelector('.side .shead b').textContent")
+    await A.ev("document.querySelector('.side .shop label input').click()"); await asyncio.sleep(1)
+    head2 = await A.ev("document.querySelector('.side .shead b').textContent")
+    ok(head != head2 and await A.ev("document.querySelectorAll('.side .shop>label').length") == left - 1, f"odhaczenie w bocznej kolumnie: postęp {head} -> {head2}")
+    await A.ev("document.querySelector('.side .bhead').click();document.querySelector('.side .bought input').click()"); await asyncio.sleep(1)
+    await A.ev("sec.bought=false;render()")
+    # przeciąganie w poziomie: dzień 1 -> dzień 2
+    st = api(f"/api/state?week={wid}", "GET")
+    a, b = st["meals"][1], st["meals"][2]
+    p = await A.ev(center(f".meal[data-id=\"{a['id']}\"] .handle")); q = await A.ev(center(".slot[data-day=\"2\"]"))
+    await A.cmd("Input.dispatchMouseEvent", type="mousePressed", x=p[0], y=p[1], button="left", clickCount=1)
+    for k in range(1, 9):
+        await A.cmd("Input.dispatchMouseEvent", type="mouseMoved", x=p[0] + (q[0] - p[0]) * k / 8, y=p[1] + (q[1] - p[1]) * k / 8, button="left"); await asyncio.sleep(0.05)
+    await A.cmd("Input.dispatchMouseEvent", type="mouseReleased", x=q[0], y=q[1], button="left", clickCount=1); await asyncio.sleep(1.5)
+    nm = names(api(f"/api/state?week={wid}", "GET"))
+    ok(nm[2] == a["name"] and nm[1] == b["name"], f"przeciągnięcie myszą w poziomie zamienia dni 1 <-> 2 ({nm[1]} / {nm[2]})")
+    # arkusz jako okno na środku ekranu
+    await A.ev(f"openSheet({{kind:'meal',id:{a['id']}}})"); await asyncio.sleep(0.5)
+    r = await A.ev("(()=>{const b=document.getElementById('panel').getBoundingClientRect();return [Math.round(b.left),Math.round(innerWidth-b.right),b.top>0,b.bottom<innerHeight]})()")
+    ok(abs(r[0] - r[1]) <= 16 and r[0] > 200 and r[2] and r[3], f"arkusz akcji otwiera się jako okno na środku {r}")
+    await shot(A, "wide_sheet")
+    await A.ev(AUDIT); bad = await A.ev("(()=>{const a=__audit();closeSheet();const b=__audit();return {contrast:a.contrast.concat(b.contrast),targets:a.targets.concat(b.targets)}})()")
+    ok(not bad["contrast"] and not bad["targets"], f"szeroki ekran: kontrast i cele dotyku w normie {bad}")
+    # ok. 900 px: nadal siatka z boczną kolumną (dni w dwóch rzędach), poniżej układ telefonu
+    await A.cmd("Emulation.setDeviceMetricsOverride", width=920, height=700, deviceScaleFactor=1, mobile=False); await asyncio.sleep(0.6)
+    g = await A.ev(GEO); s = g["slots"]
+    ok(g["side"] and len({x["t"] for x in s}) == 2 and g["side"]["l"] >= max(x["r"] for x in s) and g["sw"] <= g["iw"], f"920 px: siatka dni (dwa rzędy) i zakupy obok {sorted({x['t'] for x in s})}")
+    await shot(A, "wide_920")
+    await A.cmd("Emulation.setDeviceMetricsOverride", width=880, height=700, deviceScaleFactor=1, mobile=False); await asyncio.sleep(0.6)
+    g = await A.ev(GEO); s = g["slots"]
+    ok(not g["side"] and len({x["l"] for x in s}) == 1 and g["nav"]["b"] == g["ih"], "880 px: układ telefonu (dni jeden pod drugim, zakładki na dole)")
+    await A.cmd("Emulation.setDeviceMetricsOverride", width=390, height=844, deviceScaleFactor=2, mobile=True); await asyncio.sleep(0.6)
+    ok(await A.ev("!document.querySelector('#main .side') && innerWidth===390"), "powrót do 390×844: jedna kolumna")
+
+
 async def audit(A, wid):
     st = api(f"/api/state?week={wid}", "GET")
     api("/api/pantry", body={"name": "aubergine"}); api("/api/cravings", body={"text": "suppe"})
@@ -449,6 +500,7 @@ async def main():
         await cooking(A, wid)
         await touch_and_drag(A, wid)
         await recipes_tab(A, wid)
+        await wide(A, wid)
         await audit(A, wid)
         await delete_week(A, wid)
         ok(not A.dialogs, f"żadnego okna systemowego prompt/confirm {A.dialogs}")
