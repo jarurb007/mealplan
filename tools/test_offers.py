@@ -110,8 +110,19 @@ def backend():
                              ("melk", "Änglamark Helmelk Økologisk 1l", True), ("løk", "Rødløk i Strømpe 600g", True),
                              ("gulrot", "Gulrøtter 1kg", True), ("tomat", "Hverdagstomat 400g", True),
                              ("tomat", "Tomater 500g", True), ("revet ost", "Norvegia Lett Revet 170g", True),
-                             ("potetgull", "Sørlandschips Rifla Havsalt 170g", True), ("kjøttdeig", "Coop Kjøttdeig 14% 400g", True)):
+                             ("kjøttdeig", "Coop Kjøttdeig 14% 400g", True)):
         ok(app.offer_guard(item, prod) is want, f"bezpiecznik: „{item}” kontra „{prod}” -> {'zostaje' if want else 'odpada'}")
+
+    for item, prod in (("paprika", "Salt crunch, paprika kick, mexican fiesta 200 g, Kims"), ("hvitløk", "Naan bread 260 g, garlic, Santa Maria"),
+                       ("hvitløk", "Bjerke Hvitløk Rømmedressing 450g"), ("chili", "Sweet Chili Sauce 300ml"),
+                       ("chili", "Polly Peanøtter Chili 150g"), ("paprika", "Gilde Grillpølse Paprika 600g")):
+        ok(not app.offer_guard(item, prod), f"bezpiecznik: „{item}” jako smak w „{prod}” -> odpada")
+    FGr, SN = "Frukt og grønt", "Snacks og godteri"
+    ok(app.offer_guard("potetgull", "Sørlandschips Rifla Havsalt 170g", SN) and not app.offer_guard("potet", "Sørlandschips Rifla Havsalt 170g", FGr),
+       "bezpiecznik: przekąska z listy pasuje do chipsów, warzywo nie")
+    ok(app.offer_aisle_ok(FGr, FGr) and not app.offer_aisle_ok(FGr, SN) and not app.offer_aisle_ok(FGr, None)
+       and app.offer_aisle_ok("Krydder og basis", "Tørrvarer og hermetikk") and app.offer_aisle_ok("Moje produkty", SN)
+       and not app.offer_aisle_ok("Moje produkty", "cokolwiek"), "kontrola działu: papryka (warzywa) kontra chipsy (przekąski) odpada")
 
     # ---- kiedy pobierać
     mon = datetime(2026, 11, 9, 5, 0)
@@ -166,10 +177,9 @@ def backend():
     ok([x["title"] for x in ro] == ["Norvegia Lett Revet 170g", "Coop 4 Oster Revet 150g"] and ro[0]["unit"] == ["kg", 132.35],
        "revet ost: dwie zapamiętane oferty, tańsza za kg na górze")
     ok("offers" not in r["potet"], "potet: bez ofert")
-    # naiwna atrapa paruje też „hvitløk” z wędliną „Svinekam Persille/Hvitløk”; takiej pary reguła nie wyłapie,
-    # od tego jest prawdziwy model i ręczne „to nie to” (sprawdzane niżej na innej pozycji)
-    ok([x["names"] for x in r["hvitløk"].get("offers", [])] == [["Coop Svinekam Persille/Hvitløk 150g"]],
-       "oferta zbiorcza „3 for 2”: przy pozycji tylko wskazany produkt")
+    # naiwna atrapa paruje „hvitløk” z wędliną „Svinekam Persille/Hvitløk” i podaje jej dział (mięso): serwer parę odrzuca
+    ok("offers" not in r["hvitløk"] and "Coop Svinekam Persille/Hvitløk 150g" in calls()[0],
+       "hvitløk: produkt z czosnkiem tylko w nazwie stoi w innym dziale, pary nie ma")
     first = calls()
     ok(len(first) == 1 and "Coop Syltet Ingefær 100g" in first[0] and "ingefær [" in first[0] and "offers" not in r["ingefær"],
        "ingefær: atrapa modelu sparowała z „Syltet Ingefær”, bezpiecznik serwera parę odrzucił")
@@ -279,6 +289,16 @@ def backend():
            "gazetka KIWI po terminie, a nowej jeszcze nie ma: czekamy, bez pytania modelu")
     code, st = post("/api/offers/chain", chain="extra", on=False)
     ok(code == 200 and "offers" not in rows(st)["kjøttdeig"], "wyłączenie sieci: jej oferty znikają z listy")
+
+    # ---- zmiana zasad dopasowania: stare pary od modelu znikają, decyzje właściciela zostają
+    with app.db() as c:
+        c.execute("INSERT OR REPLACE INTO product_map(canon, product, name, verdict, source) VALUES('paprika','n:stare chipsy','Stare chipsy','yes','llm')")
+        c.execute("INSERT OR REPLACE INTO product_map(canon, product, name, verdict, source) VALUES('paprika','n:moja decyzja','Moja','no','user')")
+        c.execute("UPDATE settings SET value='0' WHERE key='offer_match_ver'")
+    app.offer_match_all()
+    with app.db() as c:
+        left = {r["product"] for r in c.execute("SELECT product FROM product_map WHERE canon='paprika'")}
+    ok(left == {"n:moja decyzja"}, f"nowa wersja zasad: pary od modelu skasowane, „to nie to” właściciela zostaje {left}")
 
     # ---- model nie odpowiada: lista działa, ofert po prostu nie ma
     with app.db() as c:
