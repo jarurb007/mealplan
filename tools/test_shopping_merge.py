@@ -349,7 +349,7 @@ def aisles_part(wid):
         for name, want in (("Havre melk", "Meieri og kjøl"), ("Mleko", "Meieri og kjøl"), ("mleko owsiane", "Meieri og kjøl"),
                            ("Brød", "Brød og deig"), ("chleb tostowy", "Brød og deig"), ("Bananer", "Frukt og grønt"),
                            ("pomidory", "Frukt og grønt"), ("Kyllingfilet", "Kjøtt og fisk"), ("tunfisk", "Tørrvarer og hermetikk"),
-                           ("potetgull", "Tørrvarer og hermetikk"), ("Grandiosa", "Frys"), ("lody", "Frys"),
+                           ("potetgull", "Snacks og godteri"), ("czekolada mleczna", "Snacks og godteri"), ("Grandiosa", "Frys"), ("lody", "Frys"),
                            ("Toalettpapir", app.MINE), ("pasta do zębów", app.MINE), ("płyn do naczyń", app.MINE),
                            ("makaron", "Tørrvarer og hermetikk"), ("ketchup", "Krydder og basis"), ("qwertyx", None)):
             got = app.guess_aisle(c, name, idx)
@@ -366,6 +366,9 @@ def aisles_part(wid):
         eid = next(i["extra_id"] for i in st["shopping"][app.MINE] if i["name"] == "qwertyx")
         st = cl.post(f"/api/shop/extra/{eid}/aisle", json={"aisle": "Frys"}).json()
         ok(where(st, "qwertyx") == "Frys", "ręczna zmiana działu")
+        cl.post("/api/shop/extra", json={"name": "sjokolade", "week": wid})
+        order = [a for a in cl.get(f"/api/state?week={wid}").json()["shopping"] if a != app.MINE]
+        ok(order == [a for a in app.SHOP_ORDER if a in order] and order[-1] == "Snacks og godteri", f"działy w kolejności sklepu ({order})")
         ok(cl.post(f"/api/shop/extra/{eid}/aisle", json={"aisle": "Nie ma"}).status_code == 400, "nieznany dział odrzucony")
         cl.delete(f"/api/shop/extra/{eid}")
         st = cl.post("/api/shop/extra", json={"name": "QWERTYX", "week": wid}).json()

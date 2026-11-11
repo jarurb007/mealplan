@@ -31,7 +31,10 @@ DB_PATH = os.getenv("DB_PATH", str(BASE / "data.db"))
 PREFS_PATH = Path(os.getenv("PREFS_PATH", str(BASE.parent / "preferences.md")))
 
 AISLES = ["Frukt og grønt", "Kjøtt og fisk", "Meieri og kjøl", "Tørrvarer og hermetikk",
-          "Brød og deig", "Frys", "Krydder og basis"]
+          "Brød og deig", "Frys", "Krydder og basis", "Snacks og godteri"]
+# kolejność na liście zakupów = droga właściciela przez sklep
+SHOP_ORDER = ["Frukt og grønt", "Tørrvarer og hermetikk", "Krydder og basis", "Brød og deig", "Kjøtt og fisk",
+              "Frys", "Meieri og kjøl", "Snacks og godteri"]
 
 class WeekReq(BaseModel):
     week: int | None = None
@@ -759,7 +762,7 @@ def shop_rows(c, week, agg, have):
                      "checked": k in checks, "topup": False, "extra_id": r["id"]})
     for row in sorted(rows, key=lambda x: x["name"].lower()):
         groups.setdefault(row["aisle"], []).append(row)
-    out = {a: groups[a] for a in [MINE] + AISLES if a in groups}
+    out = {a: groups[a] for a in [MINE] + SHOP_ORDER if a in groups}
     present = {f'{e["canon"]}|{e["fam"]}' for e in list(agg.values()) + list(have.values())}
     gone = [{"key": k, "label": r["label"]} for k, r in checks.items()
             if r["label"] and k not in present and not re.fullmatch(r"x\d+", k)]
@@ -789,11 +792,11 @@ AISLE_WORDS = {
         mlek smietan ser sera serek twarog maslo masla maslank jajk jajek jaja sok
         milk cream cheese butter yogurt""",
     "Tørrvarer og hermetikk": """pasta spaghetti ris mel sukker havregryn musli cornflakes frokostblanding bonner
-        linser kikerter hermetisk nudler kaffe te kakao sjokolade kjeks notter rosin knekkebrod chips potetgull
-        godteri brus cola vann ol vin syltetoy honning peanott tunfisk kokosmelk
-        makaron ryz ryzu maka maki cukier cukr platki fasol soczewic ciecierzyc puszk kawa kawy herbat czekolad
-        ciastk orzech rodzynk slodycz woda wody piwo wino dzem miod tunczyk kasza kaszy napoj
-        rice flour sugar oats cereal beans lentils coffee tea chocolate cookies biscuit nuts crisps candy soda water
+        linser kikerter hermetisk nudler kaffe te kakao notter rosin knekkebrod 
+        brus cola vann ol vin syltetoy honning peanott tunfisk kokosmelk
+        makaron ryz ryzu maka maki cukier cukr platki fasol soczewic ciecierzyc puszk kawa kawy herbat 
+        orzech rodzynk woda wody piwo wino dzem miod tunczyk kasza kaszy napoj
+        rice flour sugar oats cereal beans lentils coffee tea nuts soda water
         beer wine jam honey tuna noodle""",
     "Brød og deig": """brod rundstykk lompe lefse tortilla pita baguett boller bolle croissant pizzabunn polsebrod
         chleb bulka bulki bulek bagiet rogal tortill ciasto
@@ -806,6 +809,9 @@ AISLE_WORDS = {
         sol pieprz przypraw olej oliwa oliwy ocet octu bulion keczup musztard majonez sos sosu cynamon curry
         proszek_do_pieczenia
         oil vinegar stock mustard mayo sauce spice cinnamon""",
+    "Snacks og godteri": """sjokolade kjeks chips potetgull godteri smagodt lakris popcorn snacks kake kaker
+        czekolad ciastk slodycz cukierk baton zelk chrupk paluszk wafel wafl
+        chocolate cookies biscuit crisps candy sweets snack""",
     MINE: """toalettpapir dopapir papir torkerull oppvask vaskemiddel zalo sape sjampo tannkrem tannbors bleie
         soppelpose pose poser bakepapir aluminiumsfolie folie batteri lys serviett deodorant
         papier recznik plyn prania mydl szampon pasta_do_zebow worki workow pieluch folia bateri swiec serwetk
