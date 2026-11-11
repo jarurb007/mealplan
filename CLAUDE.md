@@ -30,6 +30,9 @@ DB_PATH=/tmp/moja-kopia.db BACKUP_DIR=/tmp/moje-kopie \
 - Testy czytają z otoczenia: `UKES_PORT` (port serwera, domyślnie 8088), `UKES_CDP_OFFSET` (przesunięcie portów
   debugowania Chromium, żeby równoległe sesje się nie zderzały) i `FAKE_LOG` (plik, do którego atrapa zapisuje prompty;
   ta sama wartość musi być ustawiona dla serwera i dla testu).
+- Ceny orientacyjne (Kassalapp) działają tylko z kluczem w `KASSAL_API_KEY` (lokalnie i na NUC-u w `.env`, nigdy w repo).
+  `tools/test_prices.py` nie dotyka sieci: `tools/fake_kassal.py` udaje Kassalapp (`KASSAL_BASE`, `KASSAL_GAP=0`), a tryb
+  `nokey` sprawdza aplikację bez klucza. `tools/probe_prices.py` to sonda na prawdziwym API (pyta naprawdę, używaj rzadko).
 - Port 8099 jest zarezerwowany dla wersji podglądowej. Nie zajmuj go w testach.
 - Gazetki (promocje na liście zakupów) w testach nie sięgają do sieci: `OFFERS_SRC_DIR=<repo>/tools/testdata/offers`
   każe czytać zapisane próbki zamiast `coop.no` i `kiwi.no`, a `OFFER_MATCH_WAIT=0` wyłącza zwłokę przed pytaniem modelu.

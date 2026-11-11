@@ -173,6 +173,13 @@ body.modal{overflow:hidden}
 .tstep .ck{margin-left:-10px}.tstep>span{flex:1;min-width:0;overflow-wrap:anywhere}.tstep.c>span{color:var(--tx2);text-decoration:line-through}
 .tdue{display:flex;align-items:center;gap:6px}
 .tdue input{min-height:44px;padding:8px;border:1px solid var(--bd);border-radius:6px;font-size:16px;font-family:inherit;background:var(--card);color:var(--tx)}
+/* ceny orientacyjne: kolumna w karcie szkicu planu, suma tygodnia, arkusz wyboru produktu */
+.drow{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.drow>span:first-child{min-width:0}
+.pr{flex:none;color:var(--tx);font-variant-numeric:tabular-nums;white-space:nowrap}.pr.mu{color:var(--tx2)}
+.wsum{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:10px}
+.wsum i{font:italic 500 18px var(--fh)}.wsum b{font:600 21px var(--fh);font-variant-numeric:lining-nums}.wsub{font-size:13px}
+.act .li{flex:1;min-width:0;padding:6px 0}.act .li .desc{font-size:13px}
+.rb{flex:none;width:24px;height:24px;margin-right:4px;border:1.5px solid var(--mu);border-radius:50%}.rb.on{border:7px solid var(--ac)}
 /* zakładka Przepisy */
 .bhint{margin:8px 2px}
 .brow{display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:0 8px 0 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card)}

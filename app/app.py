@@ -49,6 +49,7 @@ async def lifespan(_app):
     stop = threading.Event()
     threading.Thread(target=backup_loop, args=(stop,), daemon=True, name="kopia-dzienna").start()
     threading.Thread(target=offers_loop, args=(stop,), daemon=True, name="gazetki").start()
+    threading.Thread(target=price_loop, args=(stop,), daemon=True, name="ceny-piatek").start()
     resume_recipes()  # przy lifespan FastAPI pomija @app.on_event("startup"), więc wznawianie przepisów wołamy tutaj
     yield
     stop.set()
@@ -98,6 +99,9 @@ def init_db():
                                           valid_from TEXT, valid_to TEXT, assumed INTEGER DEFAULT 0);
         CREATE TABLE IF NOT EXISTS product_map(canon TEXT, product TEXT, name TEXT, verdict TEXT, source TEXT,
                                                updated TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(canon, product));
+        CREATE TABLE IF NOT EXISTS price_map(canon TEXT PRIMARY KEY, ean TEXT, name TEXT, pack REAL, fam TEXT,
+                                             price REAL, pdate TEXT, chain TEXT, source TEXT, cands TEXT,
+                                             checked TEXT);
         """)
 
     for table, col in (("meals", "tr TEXT"), ("meals", "servings INTEGER"),
@@ -1627,6 +1631,361 @@ def offers_verdict(req: OfferVerdictReq):
             c.execute("INSERT OR REPLACE INTO product_map(canon, product, name, verdict, source) VALUES(?,?,?,?,'user')",
                       (key, p, names[p], "yes" if req.ok else "no"))
     return build_state(req.week)
+# ---------- ceny orientacyjne (Kassalapp) ----------
+# Ceny dań widać tylko w szkicu planu, przed zatwierdzeniem tygodnia. Kassalapp nie ma bieżących cen KIWI, Remy ani
+# Coop, dlatego bierzemy najniższą świeżą cenę produktu w sieciach, które je mają (Oda, Meny, Spar, Joker, Bunnpris),
+# i pokazujemy ją jako orientacyjną. Sama Oda nie wystarcza: wyszukiwarka zwraca z niej za mało podstawowych produktów.
+# Bez klucza KASSAL_API_KEY nic tutaj nie działa i aplikacja wygląda jak przed tą funkcją.
+KASSAL_KEY = os.getenv("KASSAL_API_KEY", "").strip()
+KASSAL_BASE = os.getenv("KASSAL_BASE", "https://kassal.app/api/v1").rstrip("/")
+KASSAL_UA = "Ukesmeny-hjemmebruk/1.0 (privat husholdningsverktoy)"
+PRICE_CHAINS = {"ODA_NO": "Oda", "MENY_NO": "Meny", "SPAR_NO": "Spar", "JOKER_NO": "Joker", "BUNNPRIS": "Bunnpris"}
+PRICE_PAGES = 2                                       # stron wyników na składnik (po 100 produktów)
+PRICE_MAX_AGE = 30                                    # dni: starszej ceny nie bierzemy
+PRICE_GAP = float(os.getenv("KASSAL_GAP", "1.1"))     # przerwa między zapytaniami (plan Hobby: 60 na minutę)
+PRICE_LLM = os.getenv("PRICE_LLM", "1") == "1"        # model wybiera typowy produkt spośród kandydatów
+PRICE_CANDS = 8
+PRICE_Q: dict = {}                                    # nazwa kanoniczna -> (rodzina jednostki, dział), czeka na wyszukanie
+PRICE_LOCK = threading.Lock()
+PRICE_STATE = {"busy": False, "retry_at": 0.0}
+PACK_UNITS = {"kg": (1000, "g"), "hg": (100, "g"), "g": (1, "g"), "l": (1000, "ml"), "dl": (100, "ml"),
+              "cl": (10, "ml"), "ml": (1, "ml"), "piece": (1, "stk"), "stk": (1, "stk")}
+PRICE_PACK_RE = re.compile(r"(?:(\d+)\s*(?:x|×)\s*)?(\d+(?:[.,]\d+)?)\s*(kg|hg|g|l|dl|cl|ml|stk)\b", re.I)
+# przybliżona waga jednej sztuki (g): przepis mówi '3 stk gulrot', sklep sprzedaje na wagę
+PIECE_G = {"gulrot": 80, "løk": 150, "rødløk": 130, "potet": 120, "søtpotet": 300, "tomat": 110, "paprika": 170,
+           "agurk": 350, "aubergine": 300, "squash": 300, "sitron": 120, "lime": 70, "avokado": 200, "chili": 15,
+           "pastinakk": 150, "brokkoli": 400, "blomkål": 700, "eple": 170, "purre": 200, "selleri": 500,
+           "ingefær": 50, "isbergsalat": 400, "salat": 300, "appelsin": 200, "fennikel": 300, "kålrot": 800,
+           "rødbete": 150, "vårløk": 20, "sjalottløk": 40, "egg": 60, "tortillalefse": 40, "tacoskjell": 13}
+# kategorie Kassalapp pasujące do działu składnika; produkt z listy BAD_CATS prawie nigdy nie jest składnikiem obiadu
+GOOD_CATS = {"Frukt og grønt": ("Frukt & grønt",), "Meieri og kjøl": ("Meieri & egg", "Ost"),
+             "Kjøtt og fisk": ("Fisk & skalldyr", "Kjøtt", "Kylling og fjærkre"),
+             "Brød og deig": ("Bakeri", "Bakevarer og kjeks"), "Frys": ("Frysevarer",)}
+BAD_CATS = ("Barneprodukter", "Snacks & godteri", "Drikke", "Dessert", "Kioskvarer", "Dyr", "Hus & hjem",
+            "Personlige artikler", "Middag > Ferdigmåltider", "Middag > Ferdigretter")
+SPECIAL_WORDS = {"okologisk", "okologiske", "oko", "glutenfri", "laktosefri", "laktosefritt", "vegansk", "mini"}
+PIECE_FAMS = ("stk", "bunt", "boks", "pose", "pk", "pakke", "glass", "hode", "terning", "skive")
+
+
+def prices_on(c) -> bool:
+    r = c.execute("SELECT value FROM settings WHERE key='prices'").fetchone()
+    return bool(KASSAL_KEY) and not (r and r["value"] == "0")
+
+
+def kassal(method: str, path: str, **kw):
+    r = httpx.request(method, KASSAL_BASE + path, timeout=15, headers={
+        "Authorization": f"Bearer {KASSAL_KEY}", "Accept": "application/json", "User-Agent": KASSAL_UA}, **kw)
+    r.raise_for_status()
+    return r.json()
+
+
+def pack_of(name, weight=None, unit=None, price=None, unit_price=None):
+    """Wielkość opakowania (ilość, rodzina g/ml/stk). Najpierw z nazwy ('Spaghetti 400 g', '3x160g, 480 g'), bo pole
+    wagi bywa zerem albo wagą jednej porcji. Towar na wagę ('Ingefær Frisk', 'Løk Gul pr Kg') nie ma wielkości w nazwie:
+    tam ilość wynika z ceny i ceny za kilogram. Reszta to jedna sztuka."""
+    ms = list(PRICE_PACK_RE.finditer(str(name or "")))
+    if ms:
+        m = ms[-1]
+        k = PACK_UNITS[m[3].lower()]
+        return float(m[2].replace(",", ".")) * k[0] * int(m[1] or 1), k[1]
+    k = PACK_UNITS.get(str(unit or "").lower())
+    fam = k[1] if k else "g" if re.search(r"\bpr\.? ?kg\b", str(name or ""), re.I) else None
+    if fam in ("g", "ml") and isinstance(price, (int, float)) and isinstance(unit_price, (int, float)) and unit_price > 0:
+        return round(price / unit_price * 1000), fam
+    if k and isinstance(weight, (int, float)) and weight > 0:
+        return weight * k[0], k[1]
+    return (1000, "g") if fam == "g" else (1, "stk")
+
+
+def price_day(p: dict) -> str:
+    ds = [str(h.get("date") or "")[:10] for h in p.get("price_history") or [] if isinstance(h, dict)]
+    return max([d for d in ds if d] or [""])
+
+
+def kassal_products(data) -> list:
+    """Wyniki wyszukiwania -> jeden wpis na EAN: najniższa świeża cena w sieciach z PRICE_CHAINS."""
+    best, today = {}, date.today()
+    for p in data or []:
+        st = p.get("store")
+        st = st[0] if isinstance(st, list) and st else st
+        ean, price = str(p.get("ean") or ""), p.get("current_price")
+        if not isinstance(st, dict) or st.get("code") not in PRICE_CHAINS or not ean:
+            continue
+        try:
+            price = float(price)
+            if price <= 0 or (today - date.fromisoformat(price_day(p))).days > PRICE_MAX_AGE:
+                continue
+        except (TypeError, ValueError):
+            continue
+        if ean in best and best[ean]["price"] <= price:
+            continue
+        pack, fam = pack_of(p.get("name"), p.get("weight"), p.get("weight_unit"), price, p.get("current_unit_price"))
+        cat = " > ".join(str(x.get("name") or "") for x in p.get("category") or [] if isinstance(x, dict))
+        if fam == "g" and cat.startswith("Frukt & grønt") and price / pack > 0.6 and not PRICE_PACK_RE.search(str(p.get("name"))):
+            pack = 1000  # 'Ingefær Frisk' 139 kr z wagą sztuki 100 g: to cena za kilogram, nie za sztukę
+        best[ean] = {"ean": ean, "name": str(p.get("name") or "")[:90], "pack": pack, "fam": fam,
+                     "price": round(price, 2), "pdate": price_day(p), "cat": cat, "chain": PRICE_CHAINS[st["code"]]}
+    return list(best.values())
+
+
+def kassal_search(text: str) -> list:
+    data = []
+    for page in range(1, PRICE_PAGES + 1):
+        got = kassal("GET", "/products", params={"search": text, "size": 100, "page": page}).get("data") or []
+        data += got
+        time.sleep(PRICE_GAP)
+        if len(got) < 100:
+            break
+    return kassal_products(data)
+
+
+def fam_fit(need: str, have: str) -> int:
+    """Jak dobrze opakowanie pasuje do jednostki składnika: 2 = przelicza się wprost, 1 = w przybliżeniu."""
+    if need == have:
+        return 2
+    return 1 if {need, have} <= {"g", "ml"} or have in ("g", "ml") or need in PIECE_FAMS + ("fedd",) else 0
+
+
+def word_hit(w: str, x: str) -> bool:
+    """'gulrot' pasuje do 'gulrot' i 'gulrøtter', ale nie do 'gulrotkake'; 'løk' nie pasuje do 'hvitløk'."""
+    return x == w or (x.startswith(w) and len(x) - len(w) <= 3)
+
+
+def rank_cands(prods: list, text: str, fam: str, aisle=None) -> list:
+    """Najlepsi kandydaci: kategoria zgodna z działem składnika, nazwa zaczyna się od składnika ('Gulrot 750g' przed
+    'Juice eple gulrot'), jednostka do przeliczenia, cena za jednostkę bliska medianie (ani worek 5 kg, ani luksus)."""
+    words = fold(text).split()
+    scored = []
+    for p in prods:
+        n = fold(p["name"]).split()
+        if not words or not n or not all(any(word_hit(w, x) for x in n) for w in words):
+            continue
+        cat = 1 if p["cat"].startswith(GOOD_CATS.get(aisle, ("\0",))) else -1 if any(b in p["cat"] for b in BAD_CATS) else 0
+        plain = 0 if any(x in SPECIAL_WORDS for x in n) and not any(w in SPECIAL_WORDS for w in words) else 1
+        scored.append((cat, 1 if word_hit(words[0], n[0]) else 0, fam_fit(fam, p["fam"]), plain, p))
+    if not scored:
+        return []
+    top = max(x[:4] for x in scored)
+    unit = sorted(x[4]["price"] / x[4]["pack"] for x in scored if x[:4] == top)
+    med = unit[len(unit) // 2]
+    scored.sort(key=lambda x: (-x[0], -x[1], -x[2], -x[3], abs(x[4]["price"] / x[4]["pack"] - med)))
+    return [x[4] for x in scored[:PRICE_CANDS]]
+
+
+def pick_prompt(items: dict) -> str:
+    data = [{"ingredient": shop_name(cn), "products": [{"n": n, "name": p["name"], "category": p["cat"], "price": p["price"]}
+                                            for n, p in enumerate(cs)]} for cn, cs in items.items()]
+    return ("Dopasuj składniki domowych przepisów do produktów z norweskiego sklepu spożywczego. Dla każdego składnika "
+            "wybierz numer produktu, który jest zwykłą, typową wersją tego składnika: nie gotowe danie, nie przekąska, "
+            "nie napój, nie wersja specjalna (eko, bezglutenowa, dla dzieci), jeśli jest zwykła. Gdy żaden produkt "
+            "nie jest tym składnikiem, podaj -1.\n"
+            f"Dane: {json.dumps(data, ensure_ascii=False)}\n"
+            'Zwróć WYŁĄCZNIE JSON: {"price_pick": {"<składnik>": numer}}')
+
+
+def price_enqueue(need: dict):
+    """need: {nazwa kanoniczna: (rodzina jednostki, dział)}. Szukanie idzie w tle; /api/state nigdy nie czeka na Kassalapp."""
+    if not KASSAL_KEY or not need or time.time() < PRICE_STATE["retry_at"]:
+        return
+    with PRICE_LOCK:
+        PRICE_Q.update(need)
+        if PRICE_STATE["busy"]:
+            return
+        PRICE_STATE["busy"] = True
+    threading.Thread(target=price_worker, daemon=True, name="ceny-szukanie").start()
+
+
+def price_worker():
+    while True:
+        with PRICE_LOCK:
+            batch = dict(PRICE_Q)
+            if not batch:
+                PRICE_STATE["busy"] = False
+                return
+        found = {}
+        for cn, (fam, aisle) in batch.items():
+            try:
+                found[cn] = rank_cands(kassal_search(shop_name(cn)), shop_name(cn), fam, aisle)
+            except Exception as e:  # brak sieci, limit, błąd serwera: próbujemy ponownie najwcześniej za 10 minut
+                print(f"ceny: wyszukiwanie '{cn}' nieudane: {type(e).__name__}", flush=True)
+                PRICE_STATE["retry_at"] = time.time() + 600
+                break
+        picks = {}
+        ask = {cn: cs for cn, cs in found.items() if len(cs) > 1}
+        if PRICE_LLM and ask:
+            try:
+                got = llm.ask_json(pick_prompt(ask)).get("price_pick") or {}
+                picks = {cn: got.get(shop_name(cn)) for cn in ask}
+            except Exception as e:  # bez modelu zostaje pierwszy kandydat z rankingu
+                print(f"ceny: model nie wybrał produktów: {e}", flush=True)
+        now = datetime.now().isoformat(timespec="seconds")
+        with db() as c:
+            for cn, cs in found.items():
+                n, src = picks.get(cn), "auto"
+                if isinstance(n, int) and not isinstance(n, bool) and -1 <= n < len(cs):
+                    src = "model"
+                else:
+                    n = 0 if cs else -1
+                p = cs[n] if n >= 0 else None
+                old = c.execute("SELECT source FROM price_map WHERE canon=?", (cn,)).fetchone()
+                if old and old["source"] in ("manual", "off"):
+                    continue  # ręczny wybór jest ostateczny
+                c.execute("INSERT OR REPLACE INTO price_map(canon, ean, name, pack, fam, price, pdate, chain, source, cands, "
+                          "checked) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                          (cn, p and p["ean"], p and p["name"], p and p["pack"], p and p["fam"], p and p["price"],
+                           p and p["pdate"], p and p["chain"], src if p else "none", json.dumps(cs, ensure_ascii=False), now))
+        with PRICE_LOCK:
+            for cn in batch:
+                PRICE_Q.pop(cn, None)
+            if time.time() < PRICE_STATE["retry_at"]:
+                PRICE_Q.clear()
+                PRICE_STATE["busy"] = False
+                return
+
+
+def ing_cost(cn, q, fam, aisle, row):
+    """(kwota, stan) dla zużytej ilości. Stan: ok, approx (przeliczenie ze sztuk lub łyżek), skip (przyprawa, brak
+    ilości, wyłączony ręcznie), none (brak produktu), wait (jeszcze szukamy)."""
+    if not isinstance(q, (int, float)) or q <= 0 or (fam == "ts" and aisle == "Krydder og basis"):
+        return None, "skip"
+    if row is None:
+        return None, "wait"
+    if row["source"] == "off":
+        return None, "skip"
+    if not row["ean"] or not row["price"] or not row["pack"]:
+        return None, "none"
+    pack, pf, approx = row["pack"], row["fam"], True
+    if fam == pf:
+        n, approx = q / pack, False
+    elif {fam, pf} <= {"g", "ml"}:
+        n = q / pack
+    elif pf == "stk":
+        n = q / 10 / pack if fam == "fedd" else q / pack if fam in PIECE_FAMS else \
+            q / PIECE_G[cn] / pack if fam == "g" and cn in PIECE_G else 1
+    elif fam == "ts":
+        n = q * 5 / pack
+    elif fam == "fedd":
+        n = q * 5 / pack
+    elif fam == "stk" and cn in PIECE_G:
+        n = q * PIECE_G[cn] / pack
+    else:
+        n = q  # 'boks', 'bunt', sztuka bez znanej wagi: jedno opakowanie na sztukę
+    return round(n * row["price"], 2), "approx" if approx else "ok"
+
+
+def meal_price(m, ings, dflt, pm, need):
+    f = scale_factor(m, dflt)
+    total, got, miss, wait = 0.0, 0, 0, 0
+    for i in ings:
+        if not isinstance(i, dict) or not i.get("name"):
+            continue
+        qty = scale_qty(i.get("qty"), i.get("unit"), f)
+        cn = canon(i["name"], i.get("unit"), i.get("aisle"))
+        q, fam = shop_qty(cn, qty if isinstance(qty, (int, float)) else None, i.get("unit"))
+        kr, st = ing_cost(cn, q, fam, i.get("aisle"), pm.get(cn))
+        if st == "wait":
+            need[cn] = (fam, i.get("aisle"))
+            wait += 1
+        elif st == "none":
+            miss += 1
+        elif kr is not None:
+            total += kr
+            got += 1
+    srv = m.get("servings") or dflt
+    return {"kr": round(total), "pp": round(total / srv) if srv else None, "missing": miss,
+            "pending": wait > 0, "few": got == 0 or miss * 3 > got + miss}
+
+
+def price_cfg(c) -> dict:
+    """Stan funkcji cen dla ustawień. Bez klucza frontend pokazuje tylko jeden szary wiersz."""
+    if not KASSAL_KEY:
+        return {"key": False, "on": False}
+    rows = c.execute("SELECT source, COUNT(*) n FROM price_map GROUP BY source").fetchall()
+    n = {r["source"]: r["n"] for r in rows}
+    ref = c.execute("SELECT value FROM settings WHERE key='price_refresh'").fetchone()
+    return {"key": True, "on": prices_on(c), "refreshed": ref["value"] if ref else None,
+            "mapped": sum(v for k, v in n.items() if k in ("auto", "model", "manual")),
+            "total": sum(n.values()), "check": n.get("none", 0) + n.get("auto", 0)}
+
+
+def week_prices(c, w, meals, dflt):
+    """Ceny dań szkicu tygodnia. Danie-szkic nie ma jeszcze ilości, więc liczymy z przepisu napisanego na zapas (pre);
+    dopóki go nie ma, danie jest 'w toku'. Zatwierdzony tydzień cen nie pokazuje."""
+    if w["confirmed"] or not prices_on(c):
+        return None
+    pm = {r["canon"]: r for r in c.execute("SELECT * FROM price_map")}
+    pre = {r["id"]: r["pre"] for r in c.execute("SELECT id, pre FROM meals WHERE week_id=?", (w["id"],))}
+    names, need, out = pantry_names(c, w["id"]), {}, {}
+    for m in meals:
+        if m["status"] == "removed":
+            continue
+        ings, base = m["ingredients"], m
+        if m.get("draft"):
+            p = ready_pre(pre.get(m["id"]), m["name"], pantry_for(m, names))
+            if not p:
+                out[m["id"]] = {"pending": True}
+                continue
+            ings = p["meal"].get("ingredients") or []
+            base = {**m, "servings_base": p["meal"].get("servings_base")}
+        out[m["id"]] = meal_price(base, ings, dflt, pm, need)
+    price_enqueue(need)
+    done = [x for x in out.values() if not x.get("pending") and not x.get("few")]
+    kr = sum(x["kr"] for x in done)
+    srv = sum((m.get("servings") or dflt) for m in meals if m["id"] in out and out[m["id"]] in done)
+    return {"meals": out, "kr": kr, "pp": round(kr / srv) if srv else None,
+            "counted": len(done), "total": len(out), "pending": any(x.get("pending") for x in out.values())}
+
+
+def refresh_prices() -> int:
+    """Jedno zapytanie prices-bulk na 100 EAN: aktualne ceny wszystkich dopasowanych produktów. Zwraca liczbę zmian."""
+    with db() as c:
+        rows = c.execute("SELECT canon, ean FROM price_map WHERE ean IS NOT NULL AND source != 'off'").fetchall()
+    eans, changed = sorted({r["ean"] for r in rows}), 0
+    for k in range(0, len(eans), 100):
+        data = kassal("POST", "/products/prices-bulk", json={"eans": eans[k:k + 100], "days": 7}).get("data") or []
+        with db() as c:
+            for item in data:
+                best = None
+                for st in item.get("stores") or []:
+                    try:
+                        price, day = float(st["current_price"]), str(st.get("last_checked") or "")[:10]
+                        ok = st.get("store") in PRICE_CHAINS and price > 0 and \
+                            (date.today() - date.fromisoformat(day)).days <= PRICE_MAX_AGE
+                    except (TypeError, ValueError, KeyError):
+                        continue
+                    if ok and (best is None or price < best[0]):
+                        best = (round(price, 2), day, PRICE_CHAINS[st["store"]])
+                if best:  # bez świeżej ceny zostaje poprzednia, z jej datą
+                    changed += c.execute("UPDATE price_map SET price=?, pdate=?, chain=? WHERE ean=?",
+                                         (*best, str(item.get("ean")))).rowcount
+        time.sleep(PRICE_GAP)
+    with db() as c:
+        c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('price_refresh', ?)", (str(date.today()),))
+    return changed
+
+
+def price_refresh_due(now: datetime, last: str | None) -> bool:
+    """Ceny odświeżamy w piątek rano (zakupy są w piątek albo w sobotę); awaryjnie, gdy minął ponad tydzień."""
+    if last == str(now.date()):
+        return False
+    if now.weekday() == 4 and (now.hour, now.minute) >= (9, 30):
+        return True
+    try:
+        return (now.date() - date.fromisoformat(last)).days > 7 if last else False
+    except ValueError:
+        return True
+
+
+def price_loop(stop: threading.Event):
+    while not stop.wait(1800 if KASSAL_KEY else 86400):
+        try:
+            with db() as c:
+                on = prices_on(c)
+                ref = c.execute("SELECT value FROM settings WHERE key='price_refresh'").fetchone()
+            if on and price_refresh_due(datetime.now(), ref["value"] if ref else None):
+                print(f"ceny: odświeżone, zmian: {refresh_prices()}", flush=True)
+        except Exception as e:  # brak sieci nie może zatrzymać aplikacji; następna próba za pół godziny
+            print(f"ceny: odświeżanie nieudane: {type(e).__name__}", flush=True)
 
 
 init_db()  # tutaj, bo migracja odhaczeń korzysta z canon() i shop_qty()
@@ -1671,7 +2030,7 @@ def build_state(week=None, meals=None, shop=None):
             return {"week": None, "meals": [], "pantry": pantry, "carry": carry, "cravings": cravings,
                     "recipes": recipes, "weeks": [], "current_id": None, "dislikes": dislikes, "todo": todo,
                     "offers": offers_info(c),
-                    "servings_default": dflt,
+                    "servings_default": dflt, "price_cfg": price_cfg(c),
                     "next_start": str(saturday_on_or_before(today))}
         start = date.fromisoformat(w["start"])
         meals = load_meals(c, w["id"], bad) if meals is None else meals
@@ -1695,7 +2054,7 @@ def build_state(week=None, meals=None, shop=None):
                          "confirmed": bool(w["confirmed"])},
                 "meals": meals, "pantry": pantry, "carry": carry, "cravings": cravings, "recipes": recipes,
                 "dislikes": dislikes, "todo": todo, "offers": offers,
-                "servings_default": dflt,
+                "servings_default": dflt, "price_cfg": price_cfg(c), "prices": week_prices(c, w, meals, dflt),
                 "trmap": build_trmap(meals), "shopping": groups, "gone": gone,
                 "shop_alert": len(gone) + sum(1 for g in groups.values() for i in g if i.get("topup")),
                 "have": have, "today": str(today),
@@ -3185,3 +3544,82 @@ def todo_step_del(sid: int):
         if r:
             todo_sync_steps(c, r["item_id"])
         return todo_reply(c)
+
+
+# ---------- ceny: ustawienia i ręczna poprawka dopasowania ----------
+class PriceOnReq(BaseModel):
+    on: bool
+
+
+class PriceMapReq(BaseModel):
+    canon: str
+    ean: str | None = None
+    off: bool = False
+
+
+class PriceSearchReq(BaseModel):
+    canon: str
+    q: str
+
+
+def price_map_reply(c) -> dict:
+    order = {"none": 0, "auto": 1, "model": 2, "manual": 3, "off": 4}
+    items = []
+    for r in c.execute("SELECT * FROM price_map"):
+        items.append({"canon": r["canon"], "label": shop_name(r["canon"]), "source": r["source"], "ean": r["ean"],
+                      "name": r["name"], "pack": r["pack"], "fam": r["fam"], "price": r["price"], "pdate": r["pdate"],
+                      "chain": r["chain"], "cands": json.loads(r["cands"] or "[]")})
+    items.sort(key=lambda x: (order.get(x["source"], 9), x["label"]))
+    return {"items": items}
+
+
+@app.post("/api/prices/on")
+def prices_set_on(req: PriceOnReq):
+    with db() as c:
+        c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('prices', ?)", ("1" if req.on else "0",))
+    return state()
+
+
+@app.get("/api/prices/map")
+def prices_map():
+    with db() as c:
+        return price_map_reply(c)
+
+
+@app.post("/api/prices/map")
+def prices_map_set(req: PriceMapReq):
+    """Ręczny wybór produktu (spośród zapisanych kandydatów) albo wyłączenie składnika z liczenia. Automat go nie zmienia."""
+    with db() as c:
+        r = c.execute("SELECT * FROM price_map WHERE canon=?", (req.canon,)).fetchone()
+        if not r:
+            raise HTTPException(404, "brak składnika")
+        if req.off:
+            c.execute("UPDATE price_map SET source='off' WHERE canon=?", (req.canon,))
+        else:
+            p = next((x for x in json.loads(r["cands"] or "[]") if x["ean"] == req.ean), None)
+            if not p:
+                raise HTTPException(400, "nieznany produkt")
+            c.execute("UPDATE price_map SET ean=?, name=?, pack=?, fam=?, price=?, pdate=?, chain=?, source='manual' "
+                      "WHERE canon=?", (p["ean"], p["name"], p["pack"], p["fam"], p["price"], p["pdate"], p.get("chain"),
+                                        req.canon))
+        return price_map_reply(c)
+
+
+@app.post("/api/prices/search")
+def prices_search(req: PriceSearchReq):
+    """Własne wyszukiwanie w arkuszu poprawki: jedna fraza = jedno zapytanie do Kassalapp. Wynik zastępuje kandydatów."""
+    q = " ".join(req.q.split())[:60]
+    if not KASSAL_KEY or len(q) < 2:
+        raise HTTPException(400, "brak frazy")
+    try:
+        prods = kassal_search(q)
+    except Exception as e:
+        raise HTTPException(502, f"Kassalapp nie odpowiada ({type(e).__name__})")
+    with db() as c:
+        r = c.execute("SELECT * FROM price_map WHERE canon=?", (req.canon,)).fetchone()
+        if not r:
+            raise HTTPException(404, "brak składnika")
+        cs = rank_cands(prods, q, r["fam"] or "g") or prods[:PRICE_CANDS]
+        keep = [x for x in json.loads(r["cands"] or "[]") if x["ean"] == r["ean"] and all(x["ean"] != y["ean"] for y in cs)]
+        c.execute("UPDATE price_map SET cands=? WHERE canon=?", (json.dumps(keep + cs, ensure_ascii=False), req.canon))
+        return price_map_reply(c)
