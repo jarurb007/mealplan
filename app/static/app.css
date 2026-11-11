@@ -121,7 +121,7 @@ body.modal{overflow:hidden}
 .seg button{min-width:48px;height:44px;padding:0 12px;border:0;background:var(--card);color:var(--tx);font-size:14px;font-family:inherit}
 .seg button+button{border-left:1px solid var(--bd)}.seg button.on{background:var(--ac);color:var(--onac);font-weight:700}
 .stp{display:flex;flex:none;align-items:center;gap:4px}.stp b{min-width:30px;text-align:center;font-size:17px}
-.stp button.b,.mrow>button.b{min-width:44px;font-size:17px}
+.stp button.b{font-size:17px}.mrow>button{flex:none;white-space:nowrap}
 .act{display:flex;align-items:center;gap:8px;width:100%;min-height:52px;padding:0 2px;border:0;border-bottom:1px solid var(--line);background:none;color:var(--tx);font-size:16px;font-family:inherit;text-align:left}
 .act.danger{color:var(--bad);border-bottom:0}
 .lbl{margin-top:12px;font-size:14px;font-weight:700;color:var(--tx2)}
@@ -129,3 +129,10 @@ body.modal{overflow:hidden}
 .chip{min-width:44px;min-height:44px;padding:0 14px;border:0;border-radius:22px;background:var(--chip);color:var(--chiptx);font-size:15px;font-weight:600;font-family:inherit}
 .inrow{display:flex;gap:8px;align-items:center;margin-top:6px}.inrow input{flex:1;min-width:0}.inrow button{flex:none}
 .lnk{display:inline-flex;align-items:center;min-height:44px;padding:0;border:0;background:none;color:var(--ac);font-size:15px;font-family:inherit;text-decoration:none}
+/* zakładka Przepisy */
+.bhint{margin:8px 2px}
+.brow{display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:0 8px 0 10px;border:1px solid var(--bd);border-radius:12px;background:var(--card)}
+.brow .desc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brow .chip{flex:none}
+.chip.on{background:var(--ac);color:var(--onac)}
+.card .cnt{background:var(--soft2);color:var(--tx2);border-radius:10px;padding:1px 8px;font-size:12px;font-weight:700}

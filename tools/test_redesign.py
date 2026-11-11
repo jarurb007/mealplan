@@ -107,7 +107,7 @@ async def week_view(A, wid, st):
                    "title:document.getElementById('range').textContent,weekbar:!!document.getElementById('weekbar')}})()")
     ok(g["hdr"] <= 56 and not g["weekbar"], f"nagłówek w jednej linii ({g['hdr']} px), bez paska chipów tygodni")
     ok("Uke" in g["title"] and "–" in g["title"], f"nagłówek pokazuje tydzień i zakres dat: '{g['title']}'")
-    ok(g["navBottom"] == g["ih"] and g["tabs"] >= 3, f"zakładki na dolnym pasku ({g['tabs']})")
+    ok(g["navBottom"] == g["ih"] and g["tabs"] == 4, f"zakładki na dolnym pasku ({g['tabs']})")
     left = sum(1 for v in st["shopping"].values() for i in v if not i["checked"])
     ok(await A.ev("document.getElementById('n_cnt').textContent") == str(left), f"przy zakładce zakupów licznik pozycji do kupienia ({left})")
     # ---- cały tydzień na jednym ekranie
@@ -225,6 +225,60 @@ async def shopping(A, wid):
     await A.ev("goTab('plan')"); await asyncio.sleep(0.4)
 
 
+async def recipes_tab(A, wid):
+    st = api(f"/api/state?week={wid}", "GET")
+    for m in st["meals"][:3]:
+        api(f"/api/meal/{m['id']}/favorite")
+    st = api(f"/api/state?week={wid}", "GET")
+    recs = st["recipes"]
+    await A.ev("sync()"); await asyncio.sleep(1)
+    ok(await A.ev("document.querySelectorAll('nav button').length") == 4, "czwarta zakładka na dolnym pasku")
+    await A.ev("document.getElementById('n_book').click()"); await asyncio.sleep(0.5)
+    g = await A.ev("[document.getElementById('range').textContent,document.querySelectorAll('#blist .brow').length,!!document.getElementById('bq'),"
+                   "!!document.querySelector('#main [data-click=toggleCust]'),document.getElementById('wkPrev').hidden]")
+    ok(g == ["Oppskrifter", len(recs), True, True, True] and len(recs) == 3, f"zakładka Przepisy: książka ({len(recs)}), wyszukiwanie i „Własny przepis” {g}")
+    await shot(A, "book")
+    # wyszukiwanie po nazwie i po składniku, bez przebudowy pola (pisanie nie traci fokusu)
+    target = next(r for r in recs if r["name"] == LONG[1])
+    TYPE = "(()=>{const i=document.getElementById('bq');i.value=%s;i.dispatchEvent(new Event('input',{bubbles:true}))})()"
+    await A.ev("document.getElementById('bq').focus()")
+    await A.cmd("Input.insertText", text="LINSEBOL"); await asyncio.sleep(0.3)
+    r = await A.ev("[[...document.querySelectorAll('#blist .brow .name')].map(e=>e.textContent),document.activeElement.id,document.getElementById('bq').value]")
+    ok(r == [[LONG[1]], "bq", "LINSEBOL"], f"wyszukiwanie zawęża listę w trakcie pisania {r}")
+    await A.ev(TYPE % json.dumps("zzzz")); await asyncio.sleep(0.2)
+    ok(await A.ev("document.querySelectorAll('#blist .brow').length") == 0 and "Ingen treff" in await A.ev("document.getElementById('blist').textContent"), "brak trafień: komunikat zamiast pustej listy")
+    ing = target["ingredients"][0]["name"]
+    await A.ev(TYPE % json.dumps(ing)); await asyncio.sleep(0.2)
+    ok(await A.ev("document.querySelectorAll('#blist .brow').length") >= 1, f"wyszukiwanie działa też po składniku („{ing}”)")
+    await A.ev(TYPE % json.dumps("")); await A.ev("document.getElementById('bq').blur()"); await asyncio.sleep(0.2)
+    # podgląd przepisu
+    await A.ev(f"document.querySelector('#blist .brow[data-rid=\"{target['id']}\"] [data-click=openBook]').click()"); await asyncio.sleep(0.4)
+    r = await A.ev("[document.querySelector('#panel h2').textContent,document.querySelectorAll('#panel .ings li').length,document.querySelectorAll('#panel .steps li').length,"
+                   "document.querySelectorAll('#panel [data-click=useDay]').length,!!document.querySelector('#panel [data-click=useRec]')]")
+    ok(r == [target["name"], len(target["ingredients"]), len(target["steps"]), 7, False], f"podgląd przepisu: składniki, kroki i 7 dni do wstawienia {r}")
+    # „Wstaw na dzień”: wybór dnia pokazuje, co zostanie zastąpione; dopiero „Wstaw tutaj” zapisuje
+    day = 6; was = next(m for m in st["meals"] if m["day"] == day)
+    await A.ev(f"document.querySelector('#panel [data-click=useDay][data-d=\"{day}\"]').click()"); await asyncio.sleep(0.3)
+    txt = await A.ev("document.querySelector('#panel .alt').innerText")
+    ok(was["name"] in txt and next(m for m in api(f"/api/state?week={wid}", "GET")["meals"] if m["day"] == day)["name"] == was["name"],
+       f"wybór dnia pokazuje zastępowane danie i jeszcze niczego nie zmienia ({txt[:60]!r})")
+    await shot(A, "book_use")
+    await A.ev("document.querySelector('#panel [data-click=useRec]').click()"); await asyncio.sleep(1.5)
+    now = next(m for m in api(f"/api/state?week={wid}", "GET")["meals"] if m["day"] == day)
+    toast = await A.ev("document.getElementById('toast').textContent")
+    ok(now["name"] == target["name"] and len(now["steps"]) == len(target["steps"]) and await A.ev("tab") == "plan" and not await A.ev(OPEN) and target["name"] in toast,
+       f"„Wstaw tutaj” wstawia przepis na dzień {day} i wraca do tygodnia ({now['name']})")
+    ok(await A.ev(f"document.querySelector('.slot[data-day=\"{day}\"] .name').textContent") == target["name"], "wiersz dnia pokazuje wstawione danie")
+    # planer nie ma już zwijanej książki, tylko przejście do zakładki
+    await A.ev("goTab('fridge')"); await asyncio.sleep(0.4)
+    ok(await A.ev("!!document.querySelector('#main [data-click=goTab][data-t=book]') && !document.querySelector('#main [data-click=toggleCust]')"),
+       "planer: przejście do zakładki Przepisy, dodawanie własnego przepisu przeniesione")
+    await A.ev("goTab('book');toggleCust()"); await asyncio.sleep(0.3)
+    ok(await A.ev("!!document.getElementById('ct') && !!document.getElementById('camIn') && !!document.getElementById('galIn')"), "własny przepis (tekst, aparat, galeria) dodaje się w zakładce Przepisy")
+    await shot(A, "book_custom")
+    await A.ev("toggleCust();goTab('plan')"); await asyncio.sleep(0.4)
+
+
 async def touch_and_drag(A, wid):
     st = api(f"/api/state?week={wid}", "GET")
     await A.cmd("Emulation.setTouchEmulationEnabled", enabled=True)
@@ -246,7 +300,7 @@ async def touch_and_drag(A, wid):
 async def audit(A, wid):
     st = api(f"/api/state?week={wid}", "GET")
     api("/api/pantry", body={"name": "aubergine"}); api("/api/cravings", body={"text": "suppe"})
-    api(f"/api/meal/{st['meals'][2]['id']}/favorite")
+    api(f"/api/cravings", body={"recipe_id": st["recipes"][0]["id"]})
     api(f"/api/meal/{st['meals'][0]['id']}/status", body={"status": "removed"})
     api(f"/api/meal/{st['meals'][1]['id']}/status", body={"status": "done"})
     await A.ev("sync()"); await asyncio.sleep(1.2)
@@ -258,8 +312,9 @@ async def audit(A, wid):
                ("przepis", f"openSheet({{kind:'rec',id:{mid}}})"), ("szukanie zamiany", f"openSheet({{kind:'meal',id:{mid}}});findAlts({mid},'');1"),
                ("propozycje", "new Promise(r=>setTimeout(r,4000))"), ("potwierdzenie", f"closeAlt({mid});delWeek({wid})"),
                ("toast z Cofnij", "closeSheet();toast('Middagen er fjernet',{label:'Angre',fn:()=>0})"),
-               ("zakupy", "sec.bought=true;goTab('shop')"), ("planuj", "sec.pantry=sec.crav=sec.book=true;goTab('fridge')"),
-               ("własny przepis", f"custOpen=true;custImgs=['{gif}'];render()")]
+               ("zakupy", "sec.bought=true;goTab('shop')"), ("planuj", "sec.pantry=sec.crav=true;goTab('fridge')"),
+               ("przepisy", "goTab('book')"), ("własny przepis", f"custOpen=true;custImgs=['{gif}'];render()"),
+               ("podgląd z książki", "custOpen=false;custImgs=[];openSheet({kind:'book',id:S.recipes[0].id,day:2})")]
     bad = {"contrast": [], "targets": [], "faded": []}
     for th in ("light", "dark"):
         await A.ev(f"setTheme('{th}')")
@@ -303,6 +358,7 @@ async def main():
         await week_view(A, wid, st)
         await shopping(A, wid)
         await touch_and_drag(A, wid)
+        await recipes_tab(A, wid)
         await audit(A, wid)
         await delete_week(A, wid)
         ok(not A.dialogs, f"żadnego okna systemowego prompt/confirm {A.dialogs}")

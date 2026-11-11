@@ -47,7 +47,7 @@ let custOpen=false,custText='',custImgs=[];
 let sec={};try{sec=JSON.parse(localStorage.getItem('sec')||'{}')}catch(e){}
 function foldSec(k){sec[k]=!sec[k];localStorage.setItem('sec',JSON.stringify(sec));render()}
 function secHead(k,icon,title,cnt,sub,extra){return `<div class="sechead" data-click="foldSec" data-k="${k}"><b>${icon} ${title}</b>${cnt?`<span class="cnt">${cnt}</span>`:''}<span class="sub">${sec[k]?'':esc(sub||'')}</span>${extra||''}<span class="chev">${sec[k]?'▾':'▸'}</span></div>`}
-function toggleCust(){custOpen=!custOpen;if(custOpen){sec.book=true;localStorage.setItem('sec',JSON.stringify(sec))}render()}
+function toggleCust(){custOpen=!custOpen;render()}
 function custPanel(){return `<div class="alt" style="margin-top:8px"><b>${t('custTitle')}</b><div class="desc">${t('custHint')}</div>
   <textarea id="ct" rows="5" placeholder="${esc(t('custPh'))}" data-input="custText" style="margin-top:6px">${esc(custText)}</textarea>
   <div class="row"><label class="b">📷 ${t('custTake')}<input id="camIn" type="file" accept="image/*" capture="environment" style="display:none" data-change="addImgs"></label>
@@ -115,11 +115,13 @@ const ACT={
   goTab:d=>goTab(d.t),goWeek:d=>goWeek(numOrNull(d.id)),confirmPlan:()=>confirmPlan(),delWeek:byId(delWeek),confirmWeek:byId(confirmWeek),
   findAlts:d=>findAlts(+d.id),swapHint:d=>findAlts(+d.id,d.h),closeAlt:byId(closeAlt),toggleAIng:d=>toggleAIng(d.k),choose:d=>choose(+d.id,+d.i),
   togUses:d=>togUses(d.k),addX:()=>addX(),delX:byId(delX),dismissG:d=>dismissG(d.k),
-  copyList:()=>copyList(),addP:()=>addP(),delP:byId(delP),addC:()=>addC(),delC:byId(delC),delRec:byId(delRec),gen:()=>gen(),jbAdd:()=>jbAdd()},
+  copyList:()=>copyList(),addP:()=>addP(),delP:byId(delP),addC:()=>addC(),delC:byId(delC),gen:()=>gen(),jbAdd:()=>jbAdd(),
+  openBook:d=>openSheet({kind:'book',id:+d.id}),togglePick:d=>takeRec(+d.id,!bookPicked().has(+d.id)),useDay:d=>{sheet.day=+d.d;render()},
+  useRec:d=>useRec(+d.id,+d.d),delRecAsk:byId(delRecAsk)},
  change:{
-  chk:(d,el)=>chk(d.k,el.checked),takeRec:(d,el)=>takeRec(+d.id,el.checked),addImgs:(d,el)=>{addImgs(el.files);el.value=''}},
+  chk:(d,el)=>chk(d.k,el.checked),addImgs:(d,el)=>{addImgs(el.files);el.value=''}},
  enter:{findAlts:d=>findAlts(+d.id),dislikeSave:byId(dislikeSave),addX:()=>addX(),addP:()=>addP(),addC:()=>addC(),jbAdd:()=>jbAdd()},
- input:{custText:(d,el)=>{custText=el.value}}};
+ input:{custText:(d,el)=>{custText=el.value},bookQ:(d,el)=>{bookQ=el.value;const b=$('#blist');if(b)b.innerHTML=bookList()}}};
 function dispatch(kind,e){
   const el=e.target&&e.target.closest?e.target.closest('[data-'+kind+']'):null;if(!el)return;
   const name=el.dataset[kind];if(!Object.prototype.hasOwnProperty.call(ACT[kind],name))return;
@@ -142,6 +144,7 @@ function sheetBody(){
   if(sheet.kind==='menu')return menuHtml();
   if(sheet.kind==='confirm')return `${sheetHead(esc(sheet.title))}<p class="ptxt">${esc(sheet.text)}</p>
    <div class="row"><button class="b danger" data-click="confirmYes">${esc(sheet.yes)}</button><button class="b" data-click="closeSheet">${t('cancel')}</button></div>`;
+  if(sheet.kind==='book')return bookSheet(S.recipes.find(r=>r.id===sheet.id));
   if(sheet.kind==='text')return `${sheetHead(esc(sheet.title))}<textarea rows="12" readonly>${esc(sheet.text)}</textarea>`;
   const m=gm(sheet.id);
   return sheet.kind==='rec'?recSheet(m):mealSheet(m)}
@@ -155,7 +158,7 @@ function paint(el,html,force){
   if(aid){const e=document.getElementById(aid);if(e){e.focus();try{e.setSelectionRange(as,as)}catch(_){}}}
   el.scrollTop=top}
 function renderSheet(){const box=$('#sheet');
-  if(sheet&&(!S||((sheet.kind==='rec'||sheet.kind==='meal')&&!gm(sheet.id))))sheet=null;   // danie zniknęło (np. inny tydzień): arkusz nie ma czego pokazać
+  if(sheet&&(!S||((sheet.kind==='rec'||sheet.kind==='meal')&&!gm(sheet.id))||(sheet.kind==='book'&&!(S.recipes||[]).some(r=>r.id===sheet.id))))sheet=null;   // danie zniknęło (np. inny tydzień): arkusz nie ma czego pokazać
   box.classList.toggle('open',!!sheet);document.body.classList.toggle('modal',!!sheet);
   paint($('#panel'),sheet?sheetBody():'')}
 function menuHtml(){const dl=S.dislikes||[],dark=document.documentElement.getAttribute('data-theme')==='dark';
@@ -174,12 +177,12 @@ function headRender(){
   const w=S&&S.week,wk=(tab==='plan'||tab==='shop')&&w;let h;
   if(wk){const tag=w.id!==S.current_id?(w.start>S.today?t('upcoming'):t('archBan')).replace(':',''):'';
     h=`<b>${t('week')} ${isoWk(w.start)} · ${dm(w.start)}–${dm(w.end)}</b>${tag?`<small>${tag}</small>`:''}`}
-  else h=`<b>${tab==='fridge'?t('tabW'):'Ukesmeny'}</b>`;
+  else h=`<b>${tab==='fridge'?t('tabW'):tab==='book'?t('tabB'):'Ukesmeny'}</b>`;
   const r=$('#range');if(r._h!==h){r._h=h;r.innerHTML=h}
   [['#wkPrev',-1,'prevWk'],['#wkNext',1,'nextWkA']].forEach(([q,d,k])=>{const b=$(q);b.hidden=!wk;b.disabled=!weekNb(d);b.setAttribute('aria-label',t(k))});
   $('#gear').setAttribute('aria-label',t('menuA'))}
 /* --- dolny pasek zakładek; przy zakupach licznik pozycji, które zostały do kupienia */
-const TABS=[['plan','tabWk'],['shop','tabS'],['fridge','tabW']];
+const TABS=[['plan','tabWk'],['shop','tabS'],['fridge','tabW'],['book','tabB']];
 function shopLeft(){let n=0;for(const g of Object.values((S&&S.shopping)||{}))for(const i of g)if(!i.checked)n++;return n}
 function navRender(){
   TABS.forEach(([k,l])=>{const b=$('#n_'+k);b.querySelector('span').textContent=t(l);b.classList.toggle('on',tab===k);
@@ -191,7 +194,7 @@ function render(){
   // Listę przebudowujemy tylko wtedy, gdy jej treść się zmieniła (patrz paint). Odświeżenie w tle, które nic nie zmienia,
   // nie podmienia więc elementu pod palcem (dotknięcie trwające w chwili podmiany przepadało). forceRender wymusza
   // przebudowę, gdy trzeba cofnąć coś, co zmieniło się tylko na ekranie (zaznaczone pole po nieudanym zapisie).
-  paint($('#main'),tab==='plan'?plan():tab==='shop'?shop():fridge(),forceRender);forceRender=false;
+  paint($('#main'),tab==='plan'?plan():tab==='shop'?shop():tab==='book'?book():fridge(),forceRender);forceRender=false;
   renderSheet();
   if(tab==='fridge')wizSync();
   schedulePoll()}
@@ -313,6 +316,31 @@ function shop(){
   if(done.length)h+=`<button type="button" class="bhead" data-click="foldSec" data-k="bought" aria-expanded="${!!sec.bought}"><span>${t('bought')} (${done.length})</span><span>${sec.bought?'▾':'▸'}</span></button>`+(sec.bought?`<div class="bought">${done.map(shopRow).join('')}</div>`:'');
   if(S.have.length)h+=`<h3>${t('have')}</h3>`+S.have.map(i=>`<div class="haverow"><div class="li">${esc(i.qty)} ${esc(i.unit)} ${esc(nm(i.name))}${usesHtml(i,'have:'+i.key)}</div>${usesBtn(i,'have:'+i.key)}</div>`).join('');
   return h+`<div class="addbar"><input id="xn" placeholder="${esc(t('addPh'))}" data-enter="addX"><button class="b p" data-click="addX" aria-label="${esc(t('add'))}">+</button></div></div>`}
+/* --- zakładka Przepisy: książka z wyszukiwaniem, podgląd przepisu, „Wstaw na dzień”, własny przepis */
+let bookQ='';
+function bookPicked(){return new Map(S.cravings.filter(c=>!c.used&&c.recipe_id).map(c=>[c.recipe_id,c.id]))}
+function bookList(){const rs=S.recipes||[],q=bookQ.trim().toLowerCase(),picked=bookPicked();
+  if(!rs.length)return `<div class="card">${t('bookEmpty')}</div>`;
+  const list=rs.filter(r=>{if(!q)return true;const v=rv(r);return [v.name,v.description,r.name,...v.ing,...r.ingredients.map(i=>i.name)].join(' ').toLowerCase().includes(q)});
+  if(!list.length)return `<div class="card">${t('bookNone')}</div>`;
+  return list.map(r=>{const v=rv(r),on=picked.has(r.id);return `<div class="brow" data-rid="${r.id}"><button class="nmb" data-click="openBook" data-id="${r.id}"><span class="name">${esc(v.name)}</span><span class="desc">${esc([r.time_min?r.time_min+' min':'',v.description].filter(Boolean).join(' · '))}</span></button>
+   <button class="chip ${on?'on':''}" data-click="togglePick" data-id="${r.id}" aria-pressed="${on}">${on?'✓ '+t('inPlan'):'＋ '+t('toPlan')}</button></div>`}).join('')}
+function book(){return `<div class="book"><div class="inrow"><input id="bq" placeholder="${esc(t('bookSearch'))}" value="${esc(bookQ)}" data-input="bookQ" autocomplete="off"><button class="b" data-click="toggleCust">➕ ${t('custBtn')}</button></div>
+  ${custOpen?custPanel():''}<div class="desc bhint">${t('bookHint')}</div><div id="blist">${bookList()}</div></div>`}
+// Podgląd przepisu z książki. „Wstaw na dzień” ma dwa kroki: wybór dnia pokazuje, jakie danie zostanie zastąpione, dopiero „Wstaw tutaj” zapisuje.
+function bookSheet(r){const v=rv(r),on=bookPicked().has(r.id),D=t('days');let use='';
+  if(S.week){const k=sheet.day,m=k!=null?S.meals.find(x=>x.day===k):null;
+    use=`<div class="lbl">${t('useT')} · ${t('wk')}${isoWk(S.week.start)}</div><div class="chips">${t('daysS').map((x,i)=>`<button class="chip ${i===k?'on':''}" data-click="useDay" data-d="${i}" aria-label="${esc(D[i])}" aria-pressed="${i===k}">${esc(x)}</button>`).join('')}</div>`
+     +(m?`<div class="alt"><b>${esc(D[k])} ${dm(m.date)}</b><div class="desc">${m.status==='removed'?t('dayOffS'):esc(t('useNow').replace('{x}',mv(m).name))}</div>
+      <div class="row"><button class="b p" data-click="useRec" data-id="${r.id}" data-d="${k}">${t('useGo')}</button></div></div>`:'')}
+  return `${sheetHead(esc(v.name))}<div class="desc">${esc([v.description,r.time_min?r.time_min+' min':''].filter(Boolean).join(' · '))}</div>
+   ${use}<button class="act" data-click="togglePick" data-id="${r.id}" aria-pressed="${on}">${on?'✓ '+t('inPlan'):'＋ '+t('toPlan')}</button>
+   <h3>${t('sectIng')}</h3><ul class="ings">${r.ingredients.map((i,k)=>`<li>${esc(i.qty??'')} ${esc(i.unit)} ${esc(v.ing[k]||i.name)}</li>`).join('')}</ul>
+   <h3>${t('sectStp')}</h3><ol class="steps">${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>
+   ${okUrl(r.source)?`<a class="lnk" href="${esc(r.source)}" target="_blank" rel="noopener">${t('src')} ↗</a>`:''}
+   <button class="act danger" data-click="delRecAsk" data-id="${r.id}">🗑 ${t('delRecL')}</button>`}
+function delRecAsk(id){const r=(S.recipes||[]).find(x=>x.id===id);if(!r)return;
+  sheet=null;openSheet({kind:'confirm',title:rv(r).name,text:t('delRecQ'),yes:t('del'),fn:()=>delRec(id)})}
 function rv(r){const x=lang!=='no'&&r.tr&&r.tr[lang];return x?{name:x.name,description:x.description,ing:x.ingredients,steps:x.steps}:{name:r.name,description:r.description,ing:r.ingredients.map(i=>i.name),steps:r.steps}}
 let wizDraft=null,wizBusy=false;
 function latestWeek(){return (S.weeks||[]).reduce((a,w)=>!a||w.start>a.start?w:a,null)}
@@ -352,11 +380,8 @@ function fridge(){
   <div class="card">${secHead('crav','😋',t('cTitle'),free.filter(c=>!c.recipe_id).length+picked.size,[...free.filter(c=>!c.recipe_id).map(c=>c.text),...(S.recipes||[]).filter(r=>picked.has(r.id)).map(r=>rv(r).name)].join(', '))}${sec.crav?`<div class="secbody"><div class="desc" style="font-size:12px;margin-top:2px">${t('linkHint')}</div>
    <div class="row"><input id="cn" placeholder="${esc(t('cPh'))}" data-enter="addC" style="flex:1"><button class="b p" data-click="addC">${t('add')}</button></div>
    <ul style="list-style:none;padding:0">${free.filter(c=>!c.recipe_id).map(c=>`<li class="mrow"><span>${esc(c.text)}</span><button type="button" class="mb" data-click="delC" data-id="${c.id}" aria-label="${esc(t('del'))}">✕</button></li>`).join('')}</ul></div>`:''}</div>
-  <div class="card">${secHead('book','⭐',t('book'),(S.recipes||[]).length,picked.size?`✓ ${picked.size}`:'',`<button class="b" data-click="toggleCust">➕ ${t('custBtn')}</button>`)}${sec.book?`<div class="secbody">${custOpen?custPanel():''}${(S.recipes||[]).length?'':`<div class="desc">${t('bookEmpty')}</div>`}
-  ${(S.recipes||[]).map(r=>{const v=rv(r),on=picked.has(r.id);return `<div class="alt" style="padding:6px 8px;${on?'border:2px solid var(--ac);background:var(--pick)':''}">
-   <label class="rbook"><input type="checkbox" ${on?'checked':''} data-change="takeRec" data-id="${r.id}"><b style="flex:1;min-width:0">${esc(v.name)}</b></label>
-   <details><summary>${t('recipe')}</summary><div class="desc">${esc(v.description)}</div>${okUrl(r.source)?`<div class="desc"><a href="${esc(r.source)}" target="_blank" rel="noopener">${t('src')}</a></div>`:''}<b>${t('ingr')}</b><ul>${r.ingredients.map((i,k)=>`<li>${esc(i.qty??'')} ${esc(i.unit)} ${esc(v.ing[k]||i.name)}</li>`).join('')}</ul><b>${t('steps')}</b><ol>${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>
-   <div class="row"><button class="b" style="margin-left:auto" data-click="delRec" data-id="${r.id}">${t('del')}</button></div></details></div>`}).join('')}</div>`:''}</div>
+  <div class="card"><div class="mrow" style="border:0"><span><b>⭐ ${t('book')}</b> <span class="cnt">${(S.recipes||[]).length}</span><div class="desc">${t('bookPickHint')}</div></span><button class="b" data-click="goTab" data-t="book">${t('open')} →</button></div>
+   ${(S.recipes||[]).filter(r=>picked.has(r.id)).map(r=>`<div class="mrow"><span>✓ ${esc(rv(r).name)}</span><button type="button" class="mb" data-click="togglePick" data-id="${r.id}" aria-label="${esc(t('del'))}">✕</button></div>`).join('')}</div>
   ${draft?'':`<div class="row"><button class="b p" style="flex:1;padding:14px;font-size:16px" ${jobRunning?'disabled':''} data-click="gen">${t('goBtn')}</button></div>`}`;
   return h}
 // Usunięcie całego tygodnia: jedyna akcja z potwierdzeniem (nie da się jej cofnąć), ale we własnym arkuszu, nie w oknie systemowym.
@@ -455,7 +480,8 @@ async function addC(){const raw=$('#cn').value,v=raw.trim();if(!v)return;const i
   const r=added('#cn',raw,await api('/api/cravings','POST',{text:v},isU?t('bImport'):undefined));if(r){set(r);if(isU)toast('⭐ '+t('favOn'))}}
 async function delC(id){set(await api('/api/cravings/'+id,'DELETE'))}
 async function delRec(id){set(await api('/api/recipes/'+id,'DELETE'))}
-async function useRec(id,d){if(d==='')return;const r=await api(`/api/recipes/${id}/use`,'POST',W({day:+d}));if(r){set(r);tab='plan';render()}}
+async function useRec(id,d){const rc=(S.recipes||[]).find(x=>x.id===id);closeSheet();
+  const r=await api(`/api/recipes/${id}/use`,'POST',W({day:d}));if(r){set(r);tab='plan';render();window.scrollTo(0,0);toast('✓ '+t('usedT')+(rc?rv(rc).name:''))}}
 async function addX(){const v=$('#xn').value;if(!v.trim())return;set(added('#xn',v,await api('/api/shop/extra','POST',W({name:v}))))}
 async function delX(id){set(await api('/api/shop/extra/'+id,'DELETE'))}
 async function dismissG(k){set(await api('/api/shop/dismiss','POST',W({key:k})))}
