@@ -48,6 +48,7 @@ async def lifespan(_app):
     # kopia dzienna: od razu przy starcie, potem raz na dobę (wątek w tle)
     stop = threading.Event()
     threading.Thread(target=backup_loop, args=(stop,), daemon=True, name="kopia-dzienna").start()
+    threading.Thread(target=offers_loop, args=(stop,), daemon=True, name="gazetki").start()
     resume_recipes()  # przy lifespan FastAPI pomija @app.on_event("startup"), więc wznawianie przepisów wołamy tutaj
     yield
     stop.set()
@@ -89,6 +90,14 @@ def init_db():
                                               pos INTEGER DEFAULT 0, done INTEGER DEFAULT 0, done_at TEXT);
         CREATE TABLE IF NOT EXISTS todo_steps(id INTEGER PRIMARY KEY, item_id INTEGER, name TEXT,
                                               pos INTEGER DEFAULT 0, done INTEGER DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS offer_sources(chain TEXT PRIMARY KEY, tried_at TEXT, ok_at TEXT, error TEXT,
+                                                 batch TEXT, week TEXT, n INTEGER DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS offers(id INTEGER PRIMARY KEY, chain TEXT, ext_id TEXT, title TEXT, price REAL,
+                                          multi INTEGER, pay INTEGER, percent INTEGER, member INTEGER DEFAULT 0,
+                                          pant INTEGER DEFAULT 0, products TEXT, unsure TEXT DEFAULT '',
+                                          valid_from TEXT, valid_to TEXT, assumed INTEGER DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS product_map(canon TEXT, product TEXT, name TEXT, verdict TEXT, source TEXT,
+                                               updated TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(canon, product));
         """)
 
     for table, col in (("meals", "tr TEXT"), ("meals", "servings INTEGER"),
@@ -899,6 +908,545 @@ def shopping(c, week, meals=None):
     return shop_rows(c, week, *shop_agg(c, week, meals))
 
 
+# ---------- gazetki: promocje tygodnia przy pozycjach listy zakupów ----------
+# Raz w tygodniu na sieć pobieramy publiczną stronę gazetki (jedno zapytanie); oferty leżą w SQLite do końca ważności,
+# a przy błędzie zostają poprzednie. Które oferty pasują do której pozycji listy, rozstrzyga model: jedno wywołanie na
+# sieć i tydzień, plus jedno, gdy na liście pojawią się nowe pozycje. Wynik i ręczne „to nie to” pamięta product_map.
+# product_map(canon, product) ma służyć także cenom regularnym: canon to klucz z canon() (własny produkt: 'x:' +
+# fold(nazwa)), product to kod EAN ('n:' + fold(nazwa), gdy go brak; 't:' + fold(tytuł), gdy pasuje cała oferta).
+OFFER_CHAINS = {"extra": ("Extra", "extra"), "obs": ("Obs", "obs"),
+                "prix": ("Coop Prix", "coop-prix"), "mega": ("Coop Mega", "coop-mega")}  # klucz: (nazwa, parametr strony)
+OFFER_URL = "https://www.coop.no/minkundeavis?chain={}"
+# przedstawiamy się wprost i bez danych właściciela (nagłówek HTTP: tylko ASCII)
+OFFER_UA = "handleliste-hjemme/1.0 (privat husholdningsverktoy; henter kundeavisen en gang i uken)"
+OFFER_LLM = os.getenv("OFFER_LLM", "1") == "1"
+OFFER_RETRY_H = 12      # po nieudanej próbie (albo gdy strona pokazuje jeszcze starą gazetkę) następna po tylu godzinach
+OFFER_MANUAL_MIN = 5    # ręczne „odśwież” nie częściej niż co tyle minut na sieć
+OFFER_PROD_CAP = 60     # tyle produktów jednej oferty widzi model (oferty typu „-40% na wszystko z Toro” mają ich 50)
+OFFER_MATCH_WAIT = float(os.getenv("OFFER_MATCH_WAIT", "20"))  # s zwłoki przed pytaniem modelu: kilka dopisanych pozycji idzie w jednym wywołaniu
+OFFER_LOCK = threading.Lock()
+OFFER_BUSY = set()      # sieci w trakcie pobierania; "match" = trwa dopasowanie do listy
+OFFER_MATCH_FAIL = [0.0]  # czas ostatniego nieudanego dopasowania (model nie odpowiedział): chwila przerwy przed kolejnym
+
+
+def offer_chains_on(c) -> list:
+    r = c.execute("SELECT value FROM settings WHERE key='offer_chains'").fetchone()
+    try:
+        on = json.loads(r["value"]) if r else []
+    except ValueError:
+        on = []
+    return [k for k in OFFER_CHAINS if k in on]
+
+
+def offer_week(now: datetime | None = None) -> date:
+    """Poniedziałek tygodnia gazetki. Nowej szukamy od poniedziałku 6:00; wcześniej liczy się jeszcze poprzedni tydzień."""
+    d = ((now or datetime.now()) - timedelta(hours=6)).date()
+    return d - timedelta(days=d.weekday())
+
+
+_JS_ESC = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "v": "\v", "0": "\0"}
+
+
+def js_unescape(s: str) -> str:
+    """Treść literału tekstowego JS ('…') -> tekst."""
+    return re.sub(r"\\(u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)",
+                  lambda m: chr(int(m[1][1:], 16)) if len(m[1]) > 1 else _JS_ESC.get(m[1], m[1]), s, flags=re.S)
+
+
+PACK_RE = re.compile(r"(?:(\d+)\s*x\s*)?(\d+(?:[.,]\d+)?)\s*(kg|g|l|dl|cl|ml)\b", re.I)
+PACK_UNIT = {"kg": (1, "kg"), "g": (.001, "kg"), "l": (1, "l"), "dl": (.1, "l"), "cl": (.01, "l"), "ml": (.001, "l")}
+DETAIL_RE = re.compile(r"pr\.?\s+(.+?)\s+(\d[\d ]*(?:[.,]\d+)?)\s*$", re.I)
+
+
+def pack_size(name: str):
+    """Gramatura z nazwy produktu: '… 400g' -> (0.4, 'kg'), '10x0,33l' -> (3.3, 'l'). None, gdy jej nie ma."""
+    ms = list(PACK_RE.finditer(name))
+    if not ms:
+        return None
+    m = ms[-1]
+    k, fam = PACK_UNIT[m[3].lower()]
+    return float(m[2].replace(",", ".")) * int(m[1] or 1) * k, fam
+
+
+def unit_price(detail: str):
+    """'Pr kg 137,50' -> ('kg', 137.5); None, gdy sieć nie podała ceny jednostkowej."""
+    m = DETAIL_RE.search(detail or "")
+    if not m:
+        return None
+    return m[1].lower(), float(m[2].replace(" ", "").replace(",", "."))
+
+
+def offer_unsure(price, multi, pay, percent, products) -> str:
+    """Kontrola odczytu: '' = w porządku, 'sum' = cena za sztukę podzielona przez gramaturę nie zgadza się z ceną
+    za kg/l podaną przez sieć (takiej oferty nie pokazujemy), 'info' = brakuje ceny albo ceny jednostkowej (pokazujemy
+    z dopiskiem „sprawdź w sklepie”)."""
+    if price is None:
+        return "" if percent or (multi and pay) else "info"
+    each, checked, wrong, units = price / (multi or 1), 0, 0, 0
+    for p in products:
+        up, size = unit_price(p["detail"]), pack_size(p["name"])
+        units += bool(up)
+        if up and size and size[1] == up[0] and size[0] > 0 and up[1] > 0:
+            checked += 1
+            wrong += abs(each / size[0] - up[1]) > max(0.03 * up[1], 0.06)
+    if checked and wrong == checked:
+        return "sum"
+    return "" if units else "info"
+
+
+def _int(v):
+    try:
+        return int(float(v)) or None
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_coop(page_html: str, chain: str) -> list:
+    """Strona coop.no/minkundeavis -> lista ofert. Dane siedzą w window.INITIAL_DATA (JSON w literale JS)."""
+    m = re.search(r"window\.INITIAL_DATA\s*=\s*JSON\.parse\('((?:[^'\\]+|\\.)*)'\)", page_html, re.S)
+    if not m:
+        raise ValueError("na stronie nie ma danych gazetki")
+    page = (json.loads(js_unescape(m[1])) or {}).get("page") or {}
+    sel = [x.get("url") for x in page.get("chains") or [] if x.get("selected")]
+    if sel != [OFFER_CHAINS[chain][1]]:
+        raise ValueError(f"strona oddała gazetkę innej sieci: {sel}")
+    out = []
+    for o in page.get("offers") or []:
+        sp = o.get("splash") or {}
+        title = " ".join(str(o.get("title") or "").split())
+        prods = [{"ean": re.sub(r"\D", "", str(p.get("id") or "")), "name": " ".join(str(p.get("description") or "").split()),
+                  "detail": " ".join(str(p.get("detail") or "").split())}
+                 for p in o.get("products") or [] if isinstance(p, dict) and str(p.get("description") or "").strip()]
+        if not title:
+            continue
+        price = sp.get("price")
+        price = float(price) if isinstance(price, (int, float)) and not isinstance(price, bool) and price > 0 else None
+        multi, pay, percent = _int(sp.get("multiplier")), _int(sp.get("amount")), _int(sp.get("percent"))
+        unsure = offer_unsure(price, multi, pay, percent, prods)
+        if unsure == "sum":
+            # Tu cena pochodzi z danych sieci, nie z odczytu obrazu. Rachunek nie zgadza się tylko wtedy, gdy sieć liczy
+            # cenę za kg od masy po odsączeniu (ogórki w zalewie) albo od gotowej porcji (kaszka), więc oferta zostaje.
+            unsure = ""
+        out.append({"ext_id": str(o.get("id") or ""), "title": title, "price": price, "multi": multi, "pay": pay,
+                    "percent": percent, "member": int(bool(sp.get("memberOnly"))), "pant": int(bool(sp.get("recycle"))),
+                    "products": prods, "unsure": unsure})
+    if not out:
+        raise ValueError("gazetka bez ofert")
+    return out
+
+
+def offer_fetch(chain: str) -> str:
+    src = os.getenv("OFFERS_SRC_DIR")  # testy i próby bez sieci: zapisane strony coop-<sieć>.html
+    if src:
+        return (Path(src) / f"coop-{chain}.html").read_text(encoding="utf-8")
+    r = httpx.get(OFFER_URL.format(OFFER_CHAINS[chain][1]), timeout=30, follow_redirects=True,
+                  headers={"User-Agent": OFFER_UA, "Accept-Language": "nb"})
+    r.raise_for_status()
+    return r.text
+
+
+def offer_batch(offs: list) -> str:
+    import hashlib
+    sig = sorted((o["ext_id"], o["title"], o["price"], o["multi"], o["pay"], o["percent"]) for o in offs)
+    return hashlib.sha1(json.dumps(sig).encode()).hexdigest()[:12]
+
+
+def offer_refresh(chain: str, force: bool = False, now: datetime | None = None):
+    """Jedno pobranie gazetki sieci. Udane podmienia jej oferty w jednej transakcji; nieudane zapisuje tylko błąd,
+    a dotychczasowe oferty zostają do końca swojej ważności."""
+    now = now or datetime.now()
+    wk = offer_week(now)
+    try:
+        offs, err = parse_coop(offer_fetch(chain), chain), None
+    except Exception as e:
+        offs, err = None, f"{type(e).__name__}: {e}"[:200]
+        print(f"gazetka {chain}: {err}", flush=True)
+    with db() as c:
+        src = c.execute("SELECT * FROM offer_sources WHERE chain=?", (chain,)).fetchone()
+        c.execute("INSERT OR IGNORE INTO offer_sources(chain) VALUES(?)", (chain,))
+        if offs is not None:
+            batch = offer_batch(offs)
+            if not force and src and src["batch"] == batch and src["week"] != str(wk) and now.weekday() < 3:
+                # początek tygodnia, a strona pokazuje jeszcze zeszłotygodniową gazetkę: nie przedłużamy jej, próbujemy później
+                err = "unchanged"
+            else:
+                # Coop nie podaje dat ważności: przyjmujemy bieżący tydzień od poniedziałku do niedzieli (assumed=1)
+                c.execute("DELETE FROM offers WHERE chain=?", (chain,))
+                c.executemany(
+                    "INSERT INTO offers(chain, ext_id, title, price, multi, pay, percent, member, pant, products, unsure,"
+                    " valid_from, valid_to, assumed) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
+                    [(chain, o["ext_id"], o["title"], o["price"], o["multi"], o["pay"], o["percent"], o["member"], o["pant"],
+                      json.dumps(o["products"], ensure_ascii=False), o["unsure"], str(wk), str(wk + timedelta(days=6)))
+                     for o in offs])
+                c.execute("UPDATE offer_sources SET ok_at=?, batch=?, week=?, n=? WHERE chain=?",
+                          (now.isoformat(timespec="seconds"), batch, str(wk), len(offs), chain))
+        c.execute("UPDATE offer_sources SET tried_at=?, error=? WHERE chain=?", (now.isoformat(timespec="seconds"), err, chain))
+
+
+def offer_due(src, now: datetime) -> bool:
+    if src and src["week"] == str(offer_week(now)):
+        return False  # gazetka na ten tydzień już jest
+    if src and src["tried_at"] and now - datetime.fromisoformat(src["tried_at"]) < timedelta(hours=OFFER_RETRY_H):
+        return False
+    return True
+
+
+def offer_job(chains: list, force: bool):
+    try:
+        with OFFER_LOCK:
+            for ch in chains:
+                offer_refresh(ch, force)
+            offer_match_all()
+    except Exception as e:  # gazetki nie mogą zatrzymać aplikacji
+        print(f"gazetki: {type(e).__name__}: {e}", flush=True)
+    finally:
+        OFFER_BUSY.difference_update(chains)
+
+
+def offer_start(chains: list, force: bool = False):
+    chains = [ch for ch in chains if ch not in OFFER_BUSY]
+    if chains:
+        OFFER_BUSY.update(chains)
+        threading.Thread(target=offer_job, args=(chains, force), daemon=True, name="gazetki-pobieranie").start()
+
+
+def offers_tick():
+    now = datetime.now()
+    with db() as c:
+        srcs = {r["chain"]: r for r in c.execute("SELECT * FROM offer_sources")}
+        due = [ch for ch in offer_chains_on(c) if offer_due(srcs.get(ch), now)]
+    offer_start(due)
+
+
+def offers_loop(stop: threading.Event):
+    wait = 60  # pierwsze sprawdzenie minutę po starcie, potem co pół godziny (samo pobranie: raz w tygodniu na sieć)
+    while not stop.wait(wait):
+        wait = 1800
+        try:
+            offers_tick()
+        except Exception as e:
+            print(f"gazetki: {type(e).__name__}: {e}", flush=True)
+
+
+# --- dopasowanie pozycji listy do ofert ---
+def offer_key(row: dict) -> str:
+    """Klucz pozycji listy w product_map: nazwa kanoniczna składnika albo 'x:' + nazwa własnego produktu."""
+    return "x:" + fold(row["name"]) if row.get("extra_id") else row["key"]
+
+
+def prod_key(p: dict) -> str:
+    return p["ean"] or "n:" + fold(p["name"])
+
+
+def title_key(title: str) -> str:
+    return "t:" + fold(title)
+
+
+def offer_rows(c, chains: list, today: date | None = None) -> list:
+    """Ważne dziś oferty wybranych sieci (bez tych z niezgodnym rachunkiem)."""
+    if not chains:
+        return []
+    day = str(today or date.today())
+    out = []
+    for r in c.execute(f"SELECT * FROM offers WHERE chain IN ({','.join('?' * len(chains))}) AND valid_from<=? AND valid_to>=?"
+                       " AND unsure!='sum' ORDER BY id", (*chains, day, day)):
+        o = dict(r)
+        o["products"] = json.loads(o["products"] or "[]")
+        out.append(o)
+    return out
+
+
+def offer_judged(c) -> dict:
+    r = c.execute("SELECT value FROM settings WHERE key='offer_judged'").fetchone()
+    try:
+        return json.loads(r["value"]) if r else {}
+    except ValueError:
+        return {}
+
+
+def offer_pending(c, chains: list, keys) -> dict:
+    """{sieć: klucze pozycji, których model jeszcze nie zestawił z jej bieżącą gazetką}."""
+    judged = offer_judged(c)
+    srcs = {r["chain"]: r for r in c.execute("SELECT chain, batch FROM offer_sources")}
+    out = {}
+    for ch in chains:
+        if ch not in srcs or not srcs[ch]["batch"]:
+            continue
+        j = judged.get(ch) or {}
+        seen = set(j.get("keys") or []) if j.get("batch") == srcs[ch]["batch"] else set()
+        todo = [k for k in keys if k not in seen]
+        if todo:
+            out[ch] = todo
+    return out
+
+
+def offer_items(c) -> dict:
+    """Pozycje list zakupów bieżącego i przyszłych tygodni: klucz -> (opis dla modelu, dział)."""
+    today, items = date.today(), {}
+    for w in c.execute("SELECT * FROM weeks ORDER BY start").fetchall():
+        if date.fromisoformat(w["start"]) + timedelta(days=6) < today:
+            continue
+        for aisle, rows in shopping(c, w)[0].items():
+            for r in rows:
+                items.setdefault(offer_key(r), (r["name"], aisle))
+    return items
+
+
+def match_prompt(chain: str, items: list, offs: list) -> str:
+    lines_i = "\n".join(f"{n}: {name} [{aisle}]" for n, (name, aisle) in enumerate(items, 1))
+    lines_o = []
+    for n, o in enumerate(offs, 1):
+        ps = o["products"][:OFFER_PROD_CAP]
+        named = len(ps) > 1 or (ps and fold(ps[0]["name"]) != fold(o["title"]))
+        lines_o.append(f"{n}: {o['title']}" + (" | " + "; ".join(f"{k}) {p['name']}" for k, p in enumerate(ps, 1)) if named else ""))
+    return f"""Lista zakupów domu w Norwegii i oferty z gazetki sieci {OFFER_CHAINS[chain][0]}. Dla każdej pozycji listy wskaż oferty,
+które są TYM produktem: ktoś, kto ma kupić pozycję do gotowania, może wziąć produkt z oferty i przepis się nie zmieni.
+Zasady:
+- Liczy się rodzaj produktu, nie wspólne słowo. „potet” to nie „potetchips” ani „potetmos”, „melk” to nie „melkesjokolade”,
+  „kokosmelk” ani „havredrikk”, „hvitløk” to nie „hvitløksnan”, „ingefær” to nie „syltet ingefær”, „tomat” to nie „ketchup”.
+- Marka, gramatura i odmiana mogą być dowolne, o ile pozycja ich nie wskazuje: „melk” pasuje do helmelk i lettmelk,
+  „kjøttdeig” do „Coop Kjøttdeig 14% 400g”, „løk” do „Løk i strømpe”. Pozycja z przymiotnikiem jest wiążąca: „rød paprika”
+  to nie paprikapulver, „hakkede tomater” to puszka, nie świeże pomidory, „kyllingfilet” to nie lårfilet w marynacie.
+- Dania gotowe, przekąski, słodycze, napoje, przetwory i półprodukty nie pasują do surowych składników. Gdy jednak sama
+  pozycja jest przekąską, napojem albo chemią, paruj ją z ofertą tego samego rodzaju („potetgull” to chipsy ziemniaczane,
+  „havremelk” to havredrikk).
+- Oferta zbiorcza (kilka produktów po „|”): podaj numery tylko tych produktów, które pasują.
+- W razie wątpliwości nie paruj. Większość pozycji nie ma żadnej oferty i to jest poprawny wynik.
+Pozycje (numer: nazwa [dział sklepu]; nazwy bywają też po polsku lub angielsku):
+{lines_i}
+Oferty (numer: tytuł | produkty):
+{chr(10).join(lines_o)}
+Zwróć wyłącznie JSON: {{"offer_match": [{{"item": 1, "offer": 1, "products": [1]}}]}}
+„products” to numery pasujących produktów oferty; pusta lista oznacza całą ofertę. Bez dopasowań: {{"offer_match": []}}."""
+
+
+# Bezpiecznik po odpowiedzi modelu: para odpada, gdy produkt z oferty jest wyraźnie czymś innym niż pozycja listy.
+# Słowo z nazwy pozycji występuje w produkcie tylko jako początek złożenia ('potet' w 'potetchips', 'hvitløk' w
+# 'hvitløksnan') albo produkt ma w nazwie słowo z listy przetworów.
+OFFER_NOT = {fold(x) for x in "chips sjokolade snacks nudler ferdigrett syltet tørket nan godteri drops is iskrem brus".split()}
+OFFER_PLURAL = ("", "e", "r", "s", "a", "er", "en", "et", "ne", "ene", "ter")  # końcówki liczby i rodzajnika: to wciąż to samo słowo
+
+
+def offer_guard(item_name: str, prod_name: str) -> bool:
+    """True = para może zostać."""
+    iw, pw = fold(item_name).split(), fold(prod_name).split()
+    if not iw or not pw:
+        return False
+    if OFFER_NOT & set(pw) and not OFFER_NOT & set(iw):
+        return False
+    for w in iw:
+        if len(w) < 4:
+            continue
+        if any(x.endswith(w) or (x.startswith(w) and x[len(w):] in OFFER_PLURAL) for x in pw):
+            continue
+        if any(x.startswith(w) for x in pw):
+            return False  # tylko początek złożenia: inny produkt
+    return True
+
+
+def offer_match(chain: str, items: dict, todo: list) -> int:
+    """Jedno wywołanie modelu: pozycje `todo` kontra bieżące oferty sieci. Zapisuje pary 'yes' (nie rusza decyzji
+    właściciela) i odnotowuje, że te pozycje są już zestawione z tą gazetką. Zwraca liczbę zapisanych par.
+    Baza jest otwarta tylko przed pytaniem i po nim, nie w trakcie (model odpowiada nawet kilka minut)."""
+    with db() as c:
+        src = c.execute("SELECT batch FROM offer_sources WHERE chain=?", (chain,)).fetchone()
+        offs = offer_rows(c, [chain])
+    todo = [k for k in todo if k in items]
+    rows = []
+    if offs and todo:
+        res = llm.ask_json(match_prompt(chain, [items[k] for k in todo], offs), big=True)
+        pairs = res.get("offer_match") if isinstance(res, dict) else None
+        if not isinstance(pairs, list):
+            raise llm.LLMError("odpowiedź bez offer_match")
+        for m in pairs:
+            i, o = (_int(m.get("item")), _int(m.get("offer"))) if isinstance(m, dict) else (None, None)
+            if not i or not o or i > len(todo) or o > len(offs):
+                continue
+            key, off = todo[i - 1], offs[o - 1]
+            prods = off["products"][:OFFER_PROD_CAP]
+            picks = [prods[j - 1] for j in (m.get("products") or []) if isinstance(j, int) and 1 <= j <= len(prods)]
+            if not picks and len(prods) == 1:
+                picks = prods
+            if picks:
+                rows += [(key, prod_key(p), p["name"]) for p in picks if offer_guard(items[key][0], p["name"])]
+            elif offer_guard(items[key][0], off["title"]):
+                rows.append((key, title_key(off["title"]), off["title"]))
+    saved = 0
+    with db() as c:
+        for row in rows:
+            saved += c.execute("INSERT OR IGNORE INTO product_map(canon, product, name, verdict, source)"
+                               " VALUES(?,?,?,'yes','llm')", row).rowcount
+        judged = offer_judged(c)
+        j = judged.get(chain) or {}
+        seen = set(j.get("keys") or []) if j.get("batch") == src["batch"] else set()
+        judged[chain] = {"batch": src["batch"], "keys": sorted(seen | set(todo))}
+        c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('offer_judged', ?)",
+                  (json.dumps(judged, ensure_ascii=False),))
+    return saved
+
+
+def offer_match_all():
+    """Dopasowanie dla wszystkich włączonych sieci, które mają pozycje jeszcze niezestawione z bieżącą gazetką."""
+    if not OFFER_LLM:
+        return
+    with db() as c:
+        chains = offer_chains_on(c)
+        items = offer_items(c) if chains else {}
+        pend = offer_pending(c, chains, list(items))
+    for ch, todo in pend.items():
+        try:
+            n = offer_match(ch, items, todo)
+            print(f"gazetka {ch}: {len(todo)} pozycji zestawionych z ofertami, nowych par: {n}", flush=True)
+        except Exception as e:  # model nie odpowiedział: pozycje zostają bez ofert, spróbujemy później
+            OFFER_MATCH_FAIL[0] = time.time()
+            print(f"gazetka {ch}: dopasowanie nieudane: {type(e).__name__}: {e}", flush=True)
+
+
+def offer_match_job():
+    try:
+        time.sleep(OFFER_MATCH_WAIT)
+        with OFFER_LOCK:
+            offer_match_all()
+    finally:
+        OFFER_BUSY.discard("match")
+
+
+def offer_match_kick():
+    if OFFER_LLM and "match" not in OFFER_BUSY and time.time() - OFFER_MATCH_FAIL[0] > 600:
+        OFFER_BUSY.add("match")
+        threading.Thread(target=offer_match_job, daemon=True, name="gazetki-dopasowanie").start()
+
+
+def offers_for(c, rows: list, chains: list) -> dict:
+    """{klucz pozycji: [oferty do pokazania]} dla wierszy listy. Pokazujemy tylko pary potwierdzone ('yes'); produkt
+    albo cała oferta z decyzją 'no' (ręczne „to nie to”) odpada."""
+    offs = offer_rows(c, chains)
+    if not offs or not rows:
+        return {}
+    verdict = {}
+    for r in c.execute("SELECT canon, product, verdict FROM product_map"):
+        verdict.setdefault(r["canon"], {})[r["product"]] = r["verdict"]
+    out = {}
+    for row in rows:
+        v = verdict.get(offer_key(row))
+        if not v:
+            continue
+        found = []
+        for o in offs:
+            tv = v.get(title_key(o["title"]))
+            if tv == "no":
+                continue
+            ps = [p for p in o["products"] if v.get(prod_key(p)) != "no" and (tv == "yes" or v.get(prod_key(p)) == "yes")]
+            if not ps and not (tv == "yes" and not o["products"]):
+                continue
+            ups = sorted((u for u in (unit_price(p["detail"]) for p in ps) if u), key=lambda u: u[1])
+            found.append({"id": o["id"], "chain": o["chain"], "title": o["title"], "price": o["price"], "multi": o["multi"],
+                          "pay": o["pay"], "percent": o["percent"], "member": bool(o["member"]), "pant": bool(o["pant"]),
+                          "to": o["valid_to"], "assumed": bool(o["assumed"]), "q": o["unsure"] == "info",
+                          "unit": list(ups[0]) if ups else None,
+                          "names": [p["name"] for p in ps[:4]], "more": max(0, len(ps) - 4)})
+        if found:
+            # najtańsza za kg/l na górze; oferty bez ceny jednostkowej po nich, od najniższej ceny za sztukę
+            found.sort(key=lambda f: (f["unit"] is None, f["unit"][1] if f["unit"] else (f["price"] or 1e9) / (f["multi"] or 1)))
+            out[row["key"]] = found
+    return out
+
+
+def offers_info(c) -> dict:
+    """Stan gazetek do ustawień i paska sieci."""
+    on = offer_chains_on(c)
+    srcs = {r["chain"]: r for r in c.execute("SELECT * FROM offer_sources")}
+    today = str(date.today())
+    chains = []
+    for k, (name, _) in OFFER_CHAINS.items():
+        s = srcs.get(k)
+        to = c.execute("SELECT MAX(valid_to) AS t FROM offers WHERE chain=? AND valid_to>=?", (k, today)).fetchone()["t"] if s else None
+        chains.append({"id": k, "name": name, "on": k in on, "n": (s["n"] if s and to else 0), "at": s["ok_at"] if s else None,
+                       "to": to, "error": bool(s and s["error"] and s["error"] != "unchanged"), "busy": k in OFFER_BUSY})
+    return {"chains": chains, "busy": bool(OFFER_BUSY)}
+
+
+def attach_offers(c, w, groups: dict) -> dict:
+    """Dokleja oferty do wierszy listy oglądanego tygodnia (nie do archiwalnych) i w razie potrzeby budzi dopasowanie."""
+    info = offers_info(c)
+    on = [x["id"] for x in info["chains"] if x["on"]]
+    if not on or w is None or date.fromisoformat(w["start"]) + timedelta(days=6) < date.today():
+        return info
+    rows = [r for g in groups.values() for r in g]
+    for k, found in offers_for(c, rows, on).items():
+        next(r for r in rows if r["key"] == k)["offers"] = found
+    if rows and offer_pending(c, on, [offer_key(r) for r in rows]):
+        offer_match_kick()
+        info["busy"] = bool(OFFER_BUSY)
+    return info
+
+
+class OfferChainReq(BaseModel):
+    chain: str
+    on: bool
+    week: int | None = None
+
+
+@app.post("/api/offers/chain")
+def offers_chain(req: OfferChainReq):
+    """Włącza albo wyłącza sieć. Włączona pierwszy raz od razu pobiera gazetkę (w tle)."""
+    if req.chain not in OFFER_CHAINS:
+        raise HTTPException(400, "nieznana sieć")
+    with db() as c:
+        on = [k for k in offer_chains_on(c) if k != req.chain] + ([req.chain] if req.on else [])
+        c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('offer_chains', ?)", (json.dumps(on),))
+        src = c.execute("SELECT * FROM offer_sources WHERE chain=?", (req.chain,)).fetchone()
+    if req.on and offer_due(src, datetime.now()):
+        offer_start([req.chain])
+    return build_state(req.week)
+
+
+@app.post("/api/offers/refresh")
+def offers_refresh(req: WeekReq):
+    """Ręczne „odśwież”: pobiera gazetki włączonych sieci teraz, ale nie częściej niż co kilka minut."""
+    now = datetime.now()
+    with db() as c:
+        srcs = {r["chain"]: r for r in c.execute("SELECT * FROM offer_sources")}
+        todo = [ch for ch in offer_chains_on(c)
+                if not (srcs.get(ch) and srcs[ch]["tried_at"]
+                        and now - datetime.fromisoformat(srcs[ch]["tried_at"]) < timedelta(minutes=OFFER_MANUAL_MIN))]
+    if not todo:
+        raise HTTPException(429, "odświeżone przed chwilą")
+    offer_start(todo, force=True)
+    return build_state(req.week)
+
+
+class OfferVerdictReq(BaseModel):
+    key: str
+    offer: int
+    ok: bool = False
+    week: int | None = None
+
+
+@app.post("/api/offers/verdict")
+def offers_verdict(req: OfferVerdictReq):
+    """„To nie to” (ok=false): ta oferta nie pasuje do tej pozycji listy, teraz i w kolejnych tygodniach. ok=true cofa."""
+    with db() as c:
+        w = current_week(c, req.week)
+        o = c.execute("SELECT * FROM offers WHERE id=?", (req.offer,)).fetchone()
+        if not w or not o:
+            raise HTTPException(404, "nie ma takiej oferty")
+        row = next((r for g in shopping(c, w)[0].values() for r in g if r["key"] == req.key), None)
+        if not row:
+            raise HTTPException(404, "nie ma takiej pozycji")
+        key = offer_key(row)
+        names = {prod_key(p): p["name"] for p in json.loads(o["products"] or "[]")} | {title_key(o["title"]): o["title"]}
+        have = {r["product"]: r for r in c.execute("SELECT * FROM product_map WHERE canon=?", (key,)) if r["product"] in names}
+        if req.ok:
+            flip = [p for p, r in have.items() if r["verdict"] == "no" and r["source"] == "user"]
+        else:
+            flip = [p for p, r in have.items() if r["verdict"] == "yes"]
+        for p in flip:
+            c.execute("INSERT OR REPLACE INTO product_map(canon, product, name, verdict, source) VALUES(?,?,?,?,'user')",
+                      (key, p, names[p], "yes" if req.ok else "no"))
+    return build_state(req.week)
+
+
 init_db()  # tutaj, bo migracja odhaczeń korzysta z canon() i shop_qty()
 
 
@@ -940,6 +1488,7 @@ def build_state(week=None, meals=None, shop=None):
         if not w:
             return {"week": None, "meals": [], "pantry": pantry, "carry": carry, "cravings": cravings,
                     "recipes": recipes, "weeks": [], "current_id": None, "dislikes": dislikes, "todo": todo,
+                    "offers": offers_info(c),
                     "servings_default": dflt,
                     "next_start": str(saturday_on_or_before(today))}
         start = date.fromisoformat(w["start"])
@@ -955,6 +1504,7 @@ def build_state(week=None, meals=None, shop=None):
             m["servings_eff"] = m["servings"] or dflt
             m["qv"] = [fmt_qty(scale_qty(i["qty"], i["unit"], fct)) for i in m["ingredients"]]
         groups, have, gone = shop_rows(c, w, *(shop or shop_agg(c, w, meals, dflt)))
+        offers = attach_offers(c, w, groups)
         pending = sum(1 for m in meals if m["draft"] and m["status"] != "removed")
         if pending:
             gone = []
@@ -962,7 +1512,7 @@ def build_state(week=None, meals=None, shop=None):
                 "week": {"id": w["id"], "start": w["start"], "end": str(start + timedelta(days=6)),
                          "confirmed": bool(w["confirmed"])},
                 "meals": meals, "pantry": pantry, "carry": carry, "cravings": cravings, "recipes": recipes,
-                "dislikes": dislikes, "todo": todo,
+                "dislikes": dislikes, "todo": todo, "offers": offers,
                 "servings_default": dflt,
                 "trmap": build_trmap(meals), "shopping": groups, "gone": gone,
                 "shop_alert": len(gone) + sum(1 for g in groups.values() for i in g if i.get("topup")),
