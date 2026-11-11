@@ -776,7 +776,7 @@ AISLE_LLM = os.getenv("AISLE_LLM", "1") == "1"
 AISLE_WORDS = {
     "Frukt og grønt": """eple banan appelsin sitron lime paere drue jordbaer blabaer bringebaer tomat agurk salat gulrot
         potet lok rodlok varlok purre hvitlok paprika brokkoli blomkal kal spinat sopp sjampinjong avokado squash
-        ingefaer mango melon ananas kiwi selleri urter basilikum persille koriander dill frukt gronnsak
+        ingefaer mango melon ananas kiwi selleri rodbet kalrot pastinakk asparges reddik urter basilikum persille koriander dill frukt gronnsak
         jablk pomarancz cytryn winogron truskaw malin borowk pomidor ogork marchew ziemniak cebul czosn papryk brokul
         kalafior kapust szpinak pieczark grzyb awokado imbir pietruszk koperek owoc warzyw gruszk sliwk por seler
         rzodkiew burak cukini szczypior
