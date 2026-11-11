@@ -129,6 +129,25 @@ body.modal{overflow:hidden}
 .chip{min-width:44px;min-height:44px;padding:0 14px;border:0;border-radius:22px;background:var(--chip);color:var(--chiptx);font-size:15px;font-weight:600;font-family:inherit}
 .inrow{display:flex;gap:8px;align-items:center;margin-top:6px}.inrow input{flex:1;min-width:0}.inrow button{flex:none}
 .lnk{display:inline-flex;align-items:center;min-height:44px;padding:0;border:0;background:none;color:var(--ac);font-size:15px;font-family:inherit;text-decoration:none}
+/* zakładka Zadania: listy u góry, wiersze w kolejności ważności, pole dopisywania przy dolnej krawędzi (jak w zakupach) */
+.todo{display:flex;flex-direction:column;min-height:calc(100vh - var(--hdrh) - var(--navh) - 30px - env(safe-area-inset-bottom));min-height:calc(100dvh - var(--hdrh) - var(--navh) - 30px - env(safe-area-inset-bottom))}
+.tchips{display:flex;gap:8px;margin:0 -10px;padding:0 10px 4px;overflow-x:auto;scrollbar-width:none}.tchips::-webkit-scrollbar{display:none}
+.tchips .chip{flex:none;position:relative;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.tchips .chip small{font-size:13px;font-weight:400}
+.chip.dot::after{content:'';position:absolute;top:3px;right:5px;width:10px;height:10px;border-radius:50%;background:var(--td);border:2px solid var(--bg)}
+.trows{display:flex;flex-direction:column;gap:6px}
+.trow{position:relative;display:flex;align-items:center;min-height:52px;scroll-margin-bottom:150px;border:1px solid var(--bd);border-radius:12px;background:var(--card)}
+.trow.new{border-color:var(--ac);background:var(--pick);box-shadow:0 0 0 1px var(--ac)}
+.trow.dragging{box-shadow:0 10px 28px #0007;z-index:15;opacity:.96}
+.trow.insb{box-shadow:0 -5px 0 -2px var(--td)}.trow.insa{box-shadow:0 5px 0 -2px var(--td)}
+.tgrip{flex:none;width:46px;align-self:stretch;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;color:var(--tx2)}
+.tgrip small{font-size:12px;letter-spacing:1px}.tgrip b{font-size:17px;color:var(--tx);font-variant-numeric:tabular-nums}
+.trow.done .nmb{padding-left:14px}.trow.done .name{color:var(--tx2);font-weight:400;text-decoration:line-through}
+.trow .pbar{display:block;height:6px;margin:4px 0 2px}.trow .desc .late{color:var(--td);font-weight:600}
+.tcnt{flex:none;min-width:48px;height:48px;padding:0 6px;border:0;border-radius:10px;background:none;color:var(--tx2);font-size:14px;font-weight:700;font-family:inherit;font-variant-numeric:tabular-nums}
+.tstep{display:flex;align-items:center;gap:2px;min-height:48px;border-bottom:1px solid var(--line);font-size:16px}
+.tstep .ck{margin-left:-10px}.tstep>span{flex:1;min-width:0;overflow-wrap:anywhere}.tstep.c>span{color:var(--tx2);text-decoration:line-through}
+.tdue{display:flex;align-items:center;gap:6px}
+.tdue input{min-height:44px;padding:8px;border:1px solid var(--bd);border-radius:9px;font-size:16px;font-family:inherit;background:var(--card);color:var(--tx)}
 /* zakładka Przepisy */
 .bhint{margin:8px 2px}
 .brow{display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:0 8px 0 10px;border:1px solid var(--bd);border-radius:12px;background:var(--card)}

@@ -119,10 +119,14 @@ const ACT={
   togUses:d=>togUses(d.k),addX:()=>addX(),delX:d=>{closeSheet();delX(+d.id)},openX:d=>openSheet({kind:'xitem',id:+d.id}),setAisle:d=>{closeSheet();setAisle(+d.id,d.a)},dismissG:d=>dismissG(d.k),
   copyList:()=>copyList(),addP:()=>addP(),delP:byId(delP),addC:()=>addC(),delC:byId(delC),gen:()=>gen(),jbAdd:()=>jbAdd(),
   openBook:d=>openSheet({kind:'book',id:+d.id}),togglePick:d=>takeRec(+d.id,!bookPicked().has(+d.id)),useDay:d=>{sheet.day=+d.d;render()},
-  useRec:d=>useRec(+d.id,+d.d),delRecAsk:byId(delRecAsk)},
+  useRec:d=>useRec(+d.id,+d.d),delRecAsk:byId(delRecAsk),
+  tPick:byId(tPick),tListNew:()=>openSheet({kind:'tlist'}),tListMenu:d=>openSheet({kind:'tlist',id:+d.id}),tNewList:d=>tNewList(d.n),
+  tListSave:byId(tListSave),tListDelAsk:byId(tListDelAsk),addT:()=>addT(),openT:byId(openT),tDone:d=>tDone(+d.id,d.on==='1'),
+  tMove:d=>tMove(+d.id,+d.i),tStep:d=>tStep(+d.id,d.on==='1'),tStepDel:byId(tStepDel),tStepAdd:byId(tStepAdd),tDueClear:d=>tDue(+d.id,''),
+  tToList:d=>tToList(+d.id,+d.l),tRename:()=>tRename(),tRenameSave:byId(tRenameSave),tDelAsk:byId(tDelAsk)},
  change:{
-  chk:(d,el)=>chk(d.k,el.checked),addImgs:(d,el)=>{addImgs(el.files);el.value=''}},
- enter:{findAlts:d=>findAlts(+d.id),dislikeSave:byId(dislikeSave),addX:()=>addX(),addP:()=>addP(),addC:()=>addC(),jbAdd:()=>jbAdd()},
+  chk:(d,el)=>chk(d.k,el.checked),tDue:(d,el)=>tDue(+d.id,el.value),addImgs:(d,el)=>{addImgs(el.files);el.value=''}},
+ enter:{addT:()=>addT(),tNewList:()=>tNewList(),tListSave:byId(tListSave),tStepAdd:byId(tStepAdd),tRenameSave:byId(tRenameSave),findAlts:d=>findAlts(+d.id),dislikeSave:byId(dislikeSave),addX:()=>addX(),addP:()=>addP(),addC:()=>addC(),jbAdd:()=>jbAdd()},
  input:{custText:(d,el)=>{custText=el.value},bookQ:(d,el)=>{bookQ=el.value;const b=$('#blist');if(b)b.innerHTML=bookList()}}};
 function dispatch(kind,e){
   const el=e.target&&e.target.closest?e.target.closest('[data-'+kind+']'):null;if(!el)return;
@@ -163,6 +167,8 @@ function sheetBody(){
     return `${sheetHead(esc(x.name))}<p class="ptxt">${t('aisleQ')}</p>
      ${AISLES.map(a=>`<button class="act" data-click="setAisle" data-id="${x.extra_id}" data-a="${esc(a)}" aria-pressed="${a===x.aisle}">${esc(t(a))}${a===x.aisle?' ✓':''}</button>`).join('')}
      <div class="row"><button class="b danger" data-click="delX" data-id="${x.extra_id}">${t('del')}</button><button class="b" data-click="closeSheet">${t('close')}</button></div>`}
+  if(sheet.kind==='titem')return tItemSheet();
+  if(sheet.kind==='tlist')return tListSheet();
   if(sheet.kind==='text')return `${sheetHead(esc(sheet.title))}<textarea rows="12" readonly>${esc(sheet.text)}</textarea>`;
   const m=gm(sheet.id);
   return sheet.kind==='rec'?recSheet(m):mealSheet(m)}
@@ -176,7 +182,7 @@ function paint(el,html,force){
   if(aid){const e=document.getElementById(aid);if(e){e.focus();try{e.setSelectionRange(as,as)}catch(_){}}}
   el.scrollTop=top}
 function renderSheet(){const box=$('#sheet');
-  if(sheet&&(!S||((sheet.kind==='rec'||sheet.kind==='meal'||sheet.kind==='rate')&&!gm(sheet.id))||(sheet.kind==='xitem'&&!extraItem(sheet.id))||(sheet.kind==='book'&&!(S.recipes||[]).some(r=>r.id===sheet.id))))sheet=null;   // danie zniknęło (np. inny tydzień): arkusz nie ma czego pokazać
+  if(sheet&&(!S||((sheet.kind==='rec'||sheet.kind==='meal'||sheet.kind==='rate')&&!gm(sheet.id))||(sheet.kind==='xitem'&&!extraItem(sheet.id))||(sheet.kind==='titem'&&!tFind(sheet.id))||(sheet.kind==='tlist'&&sheet.id&&!tLists().some(l=>l.id===sheet.id))||(sheet.kind==='book'&&!(S.recipes||[]).some(r=>r.id===sheet.id))))sheet=null;   // danie zniknęło (np. inny tydzień): arkusz nie ma czego pokazać
   box.classList.toggle('open',!!sheet);document.body.classList.toggle('modal',!!(sheet||cook));
   paint($('#panel'),sheet?sheetBody():'')}
 function menuHtml(){const dl=S.dislikes||[],dark=document.documentElement.getAttribute('data-theme')==='dark';
@@ -195,12 +201,12 @@ function headRender(){
   const w=S&&S.week,wk=(tab==='plan'||tab==='shop')&&w;let h;
   if(wk){const tag=w.id!==S.current_id?(w.start>S.today?t('upcoming'):t('archBan')).replace(':',''):'';
     h=`<b>${t('week')} ${isoWk(w.start)} · ${dm(w.start)}–${dm(w.end)}</b>${tag?`<small>${tag}</small>`:''}`}
-  else h=`<b>${tab==='fridge'?t('tabW'):tab==='book'?t('tabB'):'Ukesmeny'}</b>`;
+  else h=`<b>${tab==='fridge'?t('tabW'):tab==='book'?t('tabB'):tab==='todo'?t('todoT'):'Ukesmeny'}</b>`;
   const r=$('#range');if(r._h!==h){r._h=h;r.innerHTML=h}
   [['#wkPrev',-1,'prevWk'],['#wkNext',1,'nextWkA']].forEach(([q,d,k])=>{const b=$(q);b.hidden=!wk;b.disabled=!weekNb(d);b.setAttribute('aria-label',t(k))});
   $('#gear').setAttribute('aria-label',t('menuA'))}
 /* --- dolny pasek zakładek; przy zakupach licznik pozycji, które zostały do kupienia */
-const TABS=[['plan','tabWk'],['shop','tabS'],['fridge','tabW'],['book','tabB']];
+const TABS=[['plan','tabWk'],['shop','tabS'],['fridge','tabW'],['book','tabB'],['todo','tabT']];
 function shopLeft(){let n=0;for(const g of Object.values((S&&S.shopping)||{}))for(const i of g)if(!i.checked)n++;return n}
 function navRender(){
   TABS.forEach(([k,l])=>{const b=$('#n_'+k);b.querySelector('span').textContent=t(l);b.classList.toggle('on',tab===k);
@@ -217,7 +223,7 @@ function render(){
   // szeroki ekran (od 900 px): tydzień w siatce siedmiu dni, a lista zakupów w bocznej kolumnie; ten sam HTML co na telefonie
   const wide=wideMq.matches&&tab==='plan'&&!!S.week,main=$('#main');main.classList.toggle('w',wide);
   paint(main,wide?`<div class="wide"><div class="wcol">${plan()}</div><aside class="side">${shop()}</aside></div>`
-    :tab==='plan'?plan():tab==='shop'?shop():tab==='book'?book():fridge(),forceRender);forceRender=false;
+    :tab==='plan'?plan():tab==='shop'?shop():tab==='book'?book():tab==='todo'?todo():fridge(),forceRender);forceRender=false;
   renderCook();renderSheet();
   if(tab==='fridge')wizSync();
   schedulePoll()}
@@ -596,6 +602,126 @@ function endDrag(e,cancel){if(!drag)return;const d=drag;
   if(sl)mv2(d.id,sl.dataset.day);else if(!cancel&&!d.moved)openMeal(d.id);else render()}
 document.addEventListener('pointerup',e=>endDrag(e,false));
 document.addEventListener('pointercancel',e=>endDrag(e,true));
+/* --- zakładka Zadania: wspólne listy rzeczy do zrobienia. Listy przełącza się u góry; w liście kolejność jest priorytetem
+   (przeciąganie za uchwyt z numerem albo strzałki w arkuszu pozycji). Pozycja może mieć kroki: wiersz pokazuje wtedy pasek,
+   następny krok i licznik, a po odhaczeniu ostatniego kroku cała pozycja przechodzi do zrobionych.
+   Endpointy /api/todo/* zwracają samo {todo}, bez przeliczania tygodnia i zakupów. */
+let todoSel=+localStorage.getItem('todoList')||null,flashT=null,tdrag=null;
+const todoFlash=new Set(),todoDots=new Set();   // pozycje i listy zmienione na drugim telefonie: podświetlenie na chwilę, kropka do otwarcia listy
+const tLists=()=>(S&&S.todo&&S.todo.lists)||[];
+const tOpen=l=>l.items.filter(i=>!i.done);
+const ofN=(a,b)=>t('ofN').replace('{a}',a).replace('{b}',b);
+function tCur(){const ls=tLists();return ls.find(l=>l.id===todoSel)||ls[0]||null}
+function tFind(id){for(const l of tLists()){const i=l.items.find(x=>x.id===id);if(i)return {l,i}}return null}
+function tSel(id){todoSel=id;localStorage.setItem('todoList',id);todoDots.delete(id)}
+function tPick(id){tSel(id);render();window.scrollTo(0,0)}
+function setTodo(r){if(!r||!r.todo)return;
+  if(pending)return;   // jak w set(): ekran odświeży odpowiedź ostatniej akcji z kolejki
+  S.todo=r.todo;render()}
+function tMark(ids){ids.forEach(i=>todoFlash.add(i));clearTimeout(flashT);
+  flashT=setTimeout(()=>{todoFlash.clear();if(S&&!tdrag)render()},6000)}
+// Porównanie stanu z tła z tym na ekranie: co druga osoba dodała albo zmieniła.
+function todoDiff(a,b){if(!a||!b)return;const old=new Map(),cur=tCur(),ch=[];
+  a.lists.forEach(l=>l.items.forEach(i=>old.set(i.id,JSON.stringify([l.id,i]))));
+  b.lists.forEach(l=>{let any=false;l.items.forEach(i=>{if(old.get(i.id)!==JSON.stringify([l.id,i])){any=true;if(!i.done)ch.push(i.id)}});
+    if(any&&cur&&l.id!==cur.id)todoDots.add(l.id)});
+  if(ch.length)tMark(ch)}
+function tRow(i,n){const st=i.steps,dn=st.filter(s=>s.done).length,nx=st.find(s=>!s.done),prog=st.length&&!i.done;
+  const sub=[i.due&&!i.done?`<span class="${i.due<S.todo.today?'late':''}">${esc(t('tDueBy').replace('{d}',dm(i.due)))}</span>`:'',prog&&nx?esc(t('tNext').replace('{x}',nx.name)):''].filter(Boolean).join(' · ');
+  return `<div class="trow${i.done?' done':''}${todoFlash.has(i.id)?' new':''}" data-id="${i.id}">${i.done?'':`<span class="tgrip"><small>⋮⋮</small><b>${n}</b></span>`}
+   <button class="nmb" data-click="openT" data-id="${i.id}"><span class="name">${esc(i.name)}</span>${prog?`<span class="pbar"><i style="width:${Math.round(100*dn/st.length)}%"></i></span>`:''}${sub?`<span class="desc">${sub}</span>`:''}</button>
+   ${prog?`<button class="tcnt" data-click="openT" data-id="${i.id}" aria-label="${esc(t('tSteps')+' '+ofN(dn,st.length))}">${dn}/${st.length}</button>`
+     :`<button class="ck${i.done?' on':''}" data-click="tDone" data-id="${i.id}" data-on="${i.done?0:1}" aria-pressed="${!!i.done}" aria-label="${esc(t('tMark')+': '+i.name)}"></button>`}</div>`}
+function todo(){const ls=tLists(),cur=tCur();
+  if(!cur)return `<div class="card"><b>${t('tFirstT')}</b><p class="ptxt">${t('tFirst')}</p>
+   <div class="chips">${t('tSug').map(n=>`<button class="chip" data-click="tNewList" data-n="${esc(n)}">${esc(n)}</button>`).join('')}</div>
+   <div class="inrow"><input id="tln" placeholder="${esc(t('tListPh'))}" data-enter="tNewList"><button class="b p" data-click="tNewList">${t('tCreate')}</button></div></div>`;
+  const open=tOpen(cur),done=cur.items.filter(i=>i.done);
+  let h=`<div class="todo"><div class="tchips">${ls.map(l=>{const n=tOpen(l).length;return `<button class="chip${l.id===cur.id?' on':''}${todoDots.has(l.id)?' dot':''}" data-click="tPick" data-id="${l.id}" aria-pressed="${l.id===cur.id}">${esc(l.name)}${n?` <small>${n}</small>`:''}</button>`}).join('')}<button class="chip" data-click="tListNew" aria-label="${esc(t('tNewList'))}">+</button></div>
+   <div class="shead"><span class="desc">${t('leftN').replace('{n}',open.length)}</span><span class="sp"></span><button class="mb" data-click="tListMenu" data-id="${cur.id}" aria-label="${esc(t('tListOpts'))}">⋯</button></div>`;
+  if(!cur.items.length)h+=`<div class="card">${t('tEmpty')}</div>`;
+  else if(!open.length)h+=`<div class="card">✓ ${t('tAllDone')}</div>`;
+  h+=`<div class="trows">${open.map((i,n)=>tRow(i,n+1)).join('')}</div>`;
+  if(done.length)h+=`<button type="button" class="bhead" data-click="foldSec" data-k="tdone" aria-expanded="${!!sec.tdone}"><span>${t('tDoneT')} (${done.length})</span><span>${sec.tdone?'▾':'▸'}</span></button>`+(sec.tdone?`<div class="trows" style="margin-top:8px">${done.map(i=>tRow(i,0)).join('')}</div>`:'');
+  return h+`<div class="addbar"><input id="tn" placeholder="${esc(t('tAddPh'))}" data-enter="addT"><button class="b p" data-click="addT" aria-label="${esc(t('add'))}">+</button></div></div>`}
+// Arkusz pozycji: kolejność, kroki, termin, przeniesienie do innej listy, nazwa, usunięcie.
+function tItemSheet(){const {l,i}=tFind(sheet.id),id=i.id,open=tOpen(l),ix=open.indexOf(i),st=i.steps,others=tLists().filter(x=>x.id!==l.id);
+  let h=sheetHead(esc(i.name));
+  if(sheet.edit)h+=`<div class="inrow"><input id="trn" value="${esc(i.name)}" data-enter="tRenameSave" data-id="${id}"><button class="b p" data-click="tRenameSave" data-id="${id}">${t('save')}</button></div>`;
+  if(!i.done)h+=`<div class="mrow"><span>${t('tOrder')}</span><span class="stp"><button class="b" data-click="tMove" data-id="${id}" data-i="${ix-1}" ${ix<=0?'disabled':''} aria-label="${esc(t('tUp'))}">↑</button><b>${ofN(ix+1,open.length)}</b><button class="b" data-click="tMove" data-id="${id}" data-i="${ix+1}" ${ix>=open.length-1?'disabled':''} aria-label="${esc(t('tDown'))}">↓</button></span></div>
+   ${ix>0?`<button class="act" data-click="tMove" data-id="${id}" data-i="0">⤒ ${t('tToTop')}</button>`:''}`;
+  h+=`<div class="lbl">${t('tSteps')}${st.length?' · '+ofN(st.filter(s=>s.done).length,st.length):''}</div>`
+   +st.map(s=>`<div class="tstep${s.done?' c':''}"><button class="ck${s.done?' on':''}" data-click="tStep" data-id="${s.id}" data-on="${s.done?0:1}" aria-pressed="${!!s.done}" aria-label="${esc(s.name)}"></button><span>${esc(s.name)}</span><button class="mb" data-click="tStepDel" data-id="${s.id}" aria-label="${esc(t('del')+': '+s.name)}">✕</button></div>`).join('')
+   +`<div class="inrow"><input id="tsn" placeholder="${esc(t('tStepPh'))}" data-enter="tStepAdd" data-id="${id}"><button class="b p" data-click="tStepAdd" data-id="${id}" aria-label="${esc(t('tStepPh'))}">+</button></div>
+   <div class="mrow" style="margin-top:8px"><span>📅 ${t('tDue')}</span><span class="tdue"><input type="date" id="tdue" aria-label="${esc(t('tDue'))}" value="${esc(i.due||'')}" data-change="tDue" data-id="${id}">${i.due?`<button class="b" data-click="tDueClear" data-id="${id}" aria-label="${esc(t('tNoDue'))}">✕</button>`:''}</span></div>`;
+  if(others.length)h+=`<div class="lbl">${t('tMoveTo')}</div><div class="chips">${others.map(x=>`<button class="chip" data-click="tToList" data-id="${id}" data-l="${x.id}">${esc(x.name)}</button>`).join('')}</div>`;
+  if(i.done)h+=`<button class="act" data-click="tDone" data-id="${id}" data-on="0">↩ ${t('restore')}</button>`;
+  if(!sheet.edit)h+=`<button class="act" data-click="tRename">✎ ${t('tRename')}</button>`;
+  return h+`<button class="act danger" data-click="tDelAsk" data-id="${id}">${t('del')}</button>`}
+// Arkusz listy: bez id nowa lista (z podpowiedziami nazw), z id zmiana nazwy i usunięcie.
+function tListSheet(){const l=sheet.id&&tLists().find(x=>x.id===sheet.id);
+  if(l)return `${sheetHead(esc(l.name))}<div class="inrow"><input id="tle" value="${esc(l.name)}" data-enter="tListSave" data-id="${l.id}"><button class="b p" data-click="tListSave" data-id="${l.id}">${t('save')}</button></div>
+   <button class="act danger" style="margin-top:8px" data-click="tListDelAsk" data-id="${l.id}">${t('tDelList')}</button>`;
+  const have=new Set(tLists().map(x=>x.name.toLowerCase())),sug=t('tSug').filter(n=>!have.has(n.toLowerCase()));
+  return `${sheetHead(t('tNewList'))}<div class="inrow"><input id="tln" placeholder="${esc(t('tListPh'))}" data-enter="tNewList"><button class="b p" data-click="tNewList">${t('tCreate')}</button></div>
+   ${sug.length?`<div class="lbl">${t('tSugT')}</div><div class="chips">${sug.map(n=>`<button class="chip" data-click="tNewList" data-n="${esc(n)}">${esc(n)}</button>`).join('')}</div>`:''}`}
+async function tNewList(n){const v=(n||($('#tln')||{}).value||'').trim();if(!v)return;
+  const r=await api('/api/todo/list','POST',{name:v});if(!r)return;
+  const e=$('#tln');if(e)e.value='';if(sheet)closeSheet();tSel(r.list);setTodo(r)}
+async function tListSave(id){const v=(($('#tle')||{}).value||'').trim();if(!v)return;closeSheet();setTodo(await api('/api/todo/list/'+id,'POST',{name:v}))}
+function tListDelAsk(id){const l=tLists().find(x=>x.id===id);if(!l)return;
+  sheet=null;openSheet({kind:'confirm',title:l.name,text:t('tDelListQ').replace('{n}',l.items.length),yes:t('tDelList'),fn:async()=>{todoSel=null;setTodo(await api('/api/todo/list/'+id,'DELETE'))}})}
+function openT(id){if(tFind(id))openSheet({kind:'titem',id})}
+async function addT(){const cur=tCur(),v=($('#tn')||{}).value||'';if(!cur||!v.trim())return;
+  const r=added('#tn',v,await api('/api/todo/item','POST',{list:cur.id,name:v}));if(!r)return;
+  tMark([r.item]);setTodo(r);const el=$(`.trow[data-id="${r.item}"]`);if(el)el.scrollIntoView({block:'nearest'});
+  const f=tFind(r.item);if(f&&tOpen(f.l).length>1)toast(t('tAdded'),{label:t('tTop'),fn:()=>tMove(r.item,0)})}
+async function tMove(id,ix){setTodo(await api(`/api/todo/item/${id}/move`,'POST',{index:ix}))}
+// Odhaczenie widać od razu, zapis idzie w tle; po nieudanym zapisie api() przywraca stan z serwera.
+async function tDone(id,on){const f=tFind(id);if(!f)return;f.i.done=on;if(sheet&&sheet.kind==='titem')closeSheet();else render();
+  setTodo(await api('/api/todo/item/'+id,'POST',{done:on}))}
+async function tStep(sid,on){const f=sheet&&tFind(sheet.id),s=f&&f.i.steps.find(x=>x.id===sid);if(!s)return;
+  const was=f.i.done;s.done=on;render();
+  const r=await api('/api/todo/step/'+sid,'POST',{done:on});if(!r)return;setTodo(r);
+  const g=tFind(f.i.id);if(g&&g.i.done&&!was&&sheet&&sheet.kind==='titem'&&sheet.id===g.i.id){closeSheet();toast('✓ '+g.i.name)}}   // ostatni krok: cała pozycja zrobiona
+async function tStepDel(sid){setTodo(await api('/api/todo/step/'+sid,'DELETE'))}
+async function tStepAdd(id){const v=($('#tsn')||{}).value||'';if(!v.trim())return;
+  setTodo(added('#tsn',v,await api(`/api/todo/item/${id}/step`,'POST',{name:v})));const e=$('#tsn');if(e)e.focus()}
+async function tDue(id,v){setTodo(await api('/api/todo/item/'+id,'POST',{due:v}))}
+async function tToList(id,lid){const l=tLists().find(x=>x.id===lid);closeSheet();
+  const r=await api('/api/todo/item/'+id,'POST',{list:lid});if(r){setTodo(r);if(l)toast(t('tMoved').replace('{x}',l.name))}}
+function tRename(){sheet.edit=true;render();const e=$('#trn');if(e){e.focus();e.select()}}
+async function tRenameSave(id){const v=(($('#trn')||{}).value||'').trim();if(!v)return;sheet.edit=false;setTodo(await api('/api/todo/item/'+id,'POST',{name:v}))}
+function tDelAsk(id){const f=tFind(id);if(!f)return;
+  sheet=null;openSheet({kind:'confirm',title:f.i.name,text:t('tDelQ'),yes:t('del'),fn:async()=>setTodo(await api('/api/todo/item/'+id,'DELETE'))})}
+/* Przeciąganie pozycji w liście: uchwytem jest numer, wiersz jedzie za palcem w pionie, kreska pokazuje miejsce wstawienia.
+   Dotknięcie numeru bez ruchu otwiera arkusz pozycji, tak jak dotknięcie nazwy. */
+function tdragAt(){const d=tdrag,rows=[...d.box.children].filter(r=>r!==d.row),r0=d.row.getBoundingClientRect(),mid=r0.top+r0.height/2;
+  let ix=0;for(const r of rows){const b=r.getBoundingClientRect();if(mid>b.top+b.height/2)ix++}
+  rows.forEach((r,n)=>{r.classList.toggle('insb',n===ix);r.classList.toggle('insa',ix===rows.length&&n===rows.length-1)});return ix}
+function tdragLoop(){if(!tdrag)return;const d=tdrag;
+  if(!d.moved&&Math.abs(d.y-d.y0)>6){d.moved=true;d.row.classList.add('dragging')}
+  if(d.moved){d.row.style.transform=`translateY(${(d.y-d.y0)+(window.scrollY-d.s0)}px)`;
+    if(d.y<90)window.scrollBy(0,-10);else if(d.y>innerHeight-150)window.scrollBy(0,10);
+    d.ix=tdragAt()}
+  requestAnimationFrame(tdragLoop)}
+document.addEventListener('pointerdown',e=>{const g=e.target.closest&&e.target.closest('.tgrip');if(!g||tdrag||drag)return;
+  e.preventDefault();const row=g.closest('.trow');
+  tdrag={row,box:row.parentElement,id:+row.dataset.id,y:e.clientY,y0:e.clientY,s0:window.scrollY,moved:false,ix:null};
+  try{g.setPointerCapture(e.pointerId)}catch(_){}
+  requestAnimationFrame(tdragLoop)});
+document.addEventListener('pointermove',e=>{if(tdrag){tdrag.y=e.clientY;e.preventDefault()}},{passive:false});
+function tdragEnd(e,cancel){if(!tdrag)return;const d=tdrag;
+  if(!cancel){d.y=e.clientY;if(Math.abs(d.y-d.y0)>6){d.moved=true;d.row.style.transform=`translateY(${(d.y-d.y0)+(window.scrollY-d.s0)}px)`;d.ix=tdragAt()}}
+  tdrag=null;d.row.classList.remove('dragging');d.row.style.transform='';
+  d.box.querySelectorAll('.insb,.insa').forEach(r=>r.classList.remove('insb','insa'));
+  if(cancel)return;if(!d.moved){openT(d.id);return}
+  const cur=tCur(),open=cur?tOpen(cur):[],from=open.findIndex(i=>i.id===d.id);
+  if(d.ix==null||from<0||d.ix===from)return;
+  open.splice(d.ix,0,open.splice(from,1)[0]);cur.items=[...open,...cur.items.filter(i=>i.done)];render();   // nowa kolejność od razu na ekranie
+  tMove(d.id,d.ix)}
+document.addEventListener('pointerup',e=>tdragEnd(e,false));
+document.addEventListener('pointercancel',e=>tdragEnd(e,true));
 function applyTheme(){const s=localStorage.getItem('theme');const d=s?s==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
   if(d)document.documentElement.setAttribute('data-theme','dark');else document.documentElement.removeAttribute('data-theme');
   const mt=document.querySelector('meta[name=theme-color]');if(mt)mt.content=d?'#1f4a31':'#2f7d4f'}
@@ -605,7 +731,7 @@ applyTheme();
 setLang(lang);load();pollJob();
 /* --- współdzielenie: świeży stan co 15 s, gdy strona jest widoczna, i od razu po powrocie --- */
 function typing(){const a=document.activeElement;return !!(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT')&&a.type!=='checkbox')}
-function busyUI(){return pending||drag||typing()||(S&&S.meals&&S.meals.some(m=>m.loading||m.choosing!=null||m.closing))}
+function busyUI(){return pending||drag||tdrag||typing()||(S&&S.meals&&S.meals.some(m=>m.loading||m.choosing!=null||m.closing))}
 async function sync(){if(document.hidden||busyUI()||!S)return;
   const seq=mutSeq;
   try{const r=await fetch('/api/state'+wq());if(!r.ok)return;const d=await r.json();
@@ -613,8 +739,9 @@ async function sync(){if(document.hidden||busyUI()||!S)return;
     if(viewWeek&&!(d.weeks||[]).some(w=>w.id===viewWeek)){viewWeek=null;return load()}
     const sig=x=>JSON.stringify([x.week&&x.week.id,x.week&&x.week.confirmed,(x.weeks||[]).map(w=>w.id+':'+w.confirmed),
       (x.meals||[]).map(m=>[m.id,m.day,m.status,m.name,m.steps.length,m.servings,m.disliked,m.filling,m.alts&&m.alts.length]),
-      x.shopping,x.pantry,x.cravings,(x.recipes||[]).map(r=>r.id),(x.dislikes||[]).map(r=>r.id),x.servings_default]);
+      x.shopping,x.pantry,x.cravings,x.todo,(x.recipes||[]).map(r=>r.id),(x.dislikes||[]).map(r=>r.id),x.servings_default]);
     if(sig(d)===sig(S))return;
+    todoDiff(S.todo,d.todo);
     const y=window.scrollY;adopt(d);render();window.scrollTo(0,y);ensureTr()}catch(e){}}
 setInterval(sync,15000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()});
