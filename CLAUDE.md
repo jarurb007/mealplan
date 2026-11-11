@@ -31,3 +31,7 @@ DB_PATH=/tmp/moja-kopia.db BACKUP_DIR=/tmp/moje-kopie \
   debugowania Chromium, żeby równoległe sesje się nie zderzały) i `FAKE_LOG` (plik, do którego atrapa zapisuje prompty;
   ta sama wartość musi być ustawiona dla serwera i dla testu).
 - Port 8099 jest zarezerwowany dla wersji podglądowej. Nie zajmuj go w testach.
+- Gazetki (promocje na liście zakupów) w testach nie sięgają do sieci: `OFFERS_SRC_DIR=<repo>/tools/testdata/offers`
+  każe czytać zapisane strony zamiast `coop.no`, a `OFFER_MATCH_WAIT=0` wyłącza zwłokę przed pytaniem modelu.
+  `tools/test_offers.py` (bez argumentów) ustawia to sam; tryb `ui` wymaga serwera uruchomionego z tymi zmiennymi.
+  Dopóki w ustawieniach nie jest włączona żadna sieć, aplikacja niczego nie pobiera.

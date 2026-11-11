@@ -151,6 +151,7 @@ const ACT={
   goTab:d=>goTab(d.t),goWeek:d=>goWeek(numOrNull(d.id)),confirmPlan:()=>confirmPlan(),delWeek:byId(delWeek),confirmWeek:byId(confirmWeek),
   findAlts:d=>findAlts(+d.id),swapHint:d=>findAlts(+d.id,d.h),closeAlt:byId(closeAlt),toggleAIng:d=>toggleAIng(d.k),choose:d=>choose(+d.id,+d.i),
   togUses:d=>togUses(d.k),addX:()=>addX(),delX:d=>{closeSheet();delX(+d.id)},openX:d=>openSheet({kind:'xitem',id:+d.id}),setAisle:d=>{closeSheet();setAisle(+d.id,d.a)},dismissG:d=>dismissG(d.k),
+  openOffers:d=>openSheet({kind:'offers',k:d.k}),offFilter:d=>offFilter(d.c),offNot:d=>offNot(d.k,+d.id),offChainSet:d=>offChainSet(d.c,d.on==='1'),offRefresh:()=>offRefresh(),
   copyList:()=>copyList(),addP:()=>addP(),delP:byId(delP),addC:()=>addC(),delC:byId(delC),gen:()=>gen(),jbAdd:()=>jbAdd(),
   openBook:d=>openSheet({kind:'book',id:+d.id}),togglePick:d=>takeRec(+d.id,!bookPicked().has(+d.id)),useDay:d=>{sheet.day=+d.d;render()},
   useRec:d=>useRec(+d.id,+d.d),delRecAsk:byId(delRecAsk),
@@ -201,6 +202,7 @@ function sheetBody(){
     return `${sheetHead(esc(x.name))}<p class="ptxt">${t('aisleQ')}</p>
      ${AISLES.map(a=>`<button class="act" data-click="setAisle" data-id="${x.extra_id}" data-a="${esc(a)}" aria-pressed="${a===x.aisle}">${esc(t(a))}${a===x.aisle?' ✓':''}</button>`).join('')}
      <div class="row"><button class="b danger" data-click="delX" data-id="${x.extra_id}">${t('del')}</button><button class="b" data-click="closeSheet">${t('close')}</button></div>`}
+  if(sheet.kind==='offers')return offersSheet();
   if(sheet.kind==='titem')return tItemSheet();
   if(sheet.kind==='tlist')return tListSheet();
   if(sheet.kind==='text')return `${sheetHead(esc(sheet.title))}<textarea rows="12" readonly>${esc(sheet.text)}</textarea>`;
@@ -216,7 +218,7 @@ function paint(el,html,force){
   if(aid){const e=document.getElementById(aid);if(e){e.focus();try{e.setSelectionRange(as,as)}catch(_){}}}
   el.scrollTop=top}
 function renderSheet(){const box=$('#sheet');
-  if(sheet&&(!S||((sheet.kind==='rec'||sheet.kind==='meal'||sheet.kind==='rate')&&!gm(sheet.id))||(sheet.kind==='xitem'&&!extraItem(sheet.id))||(sheet.kind==='titem'&&!tFind(sheet.id))||(sheet.kind==='tlist'&&sheet.id&&!tLists().some(l=>l.id===sheet.id))||(sheet.kind==='book'&&!(S.recipes||[]).some(r=>r.id===sheet.id))))sheet=null;   // danie zniknęło (np. inny tydzień): arkusz nie ma czego pokazać
+  if(sheet&&(!S||((sheet.kind==='rec'||sheet.kind==='meal'||sheet.kind==='rate')&&!gm(sheet.id))||(sheet.kind==='xitem'&&!extraItem(sheet.id))||(sheet.kind==='offers'&&!((shopItem(sheet.k)||{}).offers||[]).length)||(sheet.kind==='titem'&&!tFind(sheet.id))||(sheet.kind==='tlist'&&sheet.id&&!tLists().some(l=>l.id===sheet.id))||(sheet.kind==='book'&&!(S.recipes||[]).some(r=>r.id===sheet.id))))sheet=null;   // danie zniknęło (np. inny tydzień): arkusz nie ma czego pokazać
   box.classList.toggle('open',!!sheet);document.body.classList.toggle('modal',!!(sheet||cook));
   paint($('#panel'),sheet?sheetBody():'')}
 function menuHtml(){const dl=S.dislikes||[],dark=document.documentElement.getAttribute('data-theme')==='dark';
@@ -225,7 +227,7 @@ function menuHtml(){const dl=S.dislikes||[],dark=document.documentElement.getAtt
   <div class="mrow"><span>${t('themeT')}</span><span class="seg"><button class="${dark?'':'on'}" data-click="setTheme" data-th="light">${ic('sun')} ${t('thLight')}</button><button class="${dark?'on':''}" data-click="setTheme" data-th="dark">${ic('moon')} ${t('thDark')}</button></span></div>
   <div class="mrow"><span>${t('pDef')}</span><span class="stp"><button class="b" data-click="setDef" data-n="${S.servings_default-1}" aria-label="−">−</button><b>${S.servings_default}</b><button class="b" data-click="setDef" data-n="${S.servings_default+1}" aria-label="+">+</button></span></div>
   <div class="msec"><b>${ic('bad')} ${t('dislikesT')}</b> <span class="desc">${t('dislikesSub')}</span>
-  ${dl.length?dl.map(d=>`<div class="mrow"><span>${esc(d.name)}${d.reason?` <i>– ${esc(d.reason)}</i>`:''}</span><button class="b" aria-label="${esc(t('restore'))}" data-click="undislike" data-id="${d.id}">${ic('x')}</button></div>`).join(''):`<div class="desc">${t('dislikesNone')}</div>`}</div></div>
+  ${dl.length?dl.map(d=>`<div class="mrow"><span>${esc(d.name)}${d.reason?` <i>– ${esc(d.reason)}</i>`:''}</span><button class="b" aria-label="${esc(t('restore'))}" data-click="undislike" data-id="${d.id}">${ic('x')}</button></div>`).join(''):`<div class="desc">${t('dislikesNone')}</div>`}</div></div>${offMenu()}
   ${S.week?`<button class="act danger" data-click="delWeek" data-id="${S.week.id}">${ic('del')} ${t('delWeek')} · ${t('wk')}${isoWk(S.week.start)}</button>`:''}`}
 function isoWk(ds){const x=new Date(ds+'T12:00:00');x.setDate(x.getDate()+2);const d=new Date(Date.UTC(x.getFullYear(),x.getMonth(),x.getDate()));const n=d.getUTCDay()||7;d.setUTCDate(d.getUTCDate()+4-n);const y=new Date(Date.UTC(d.getUTCFullYear(),0,1));return Math.ceil(((d-y)/864e5+1)/7)}
 /* --- nagłówek: jedna linia. Na zakładkach tygodnia i zakupów tydzień ze strzałkami ‹ ›, na pozostałych nazwa zakładki. */
@@ -261,7 +263,7 @@ function render(){
   renderCook();renderSheet();
   if(tab==='fridge')wizSync();
   schedulePoll()}
-function needPoll(){return S&&S.meals&&S.meals.some(m=>m.filling||(m.alts&&m.alts.length===0&&!m.loading))}
+function needPoll(){return S&&S.meals&&((S.offers&&S.offers.busy)||S.meals.some(m=>m.filling||(m.alts&&m.alts.length===0&&!m.loading)))}
 function schedulePoll(){if(pollT||!needPoll())return;pollT=setTimeout(async()=>{pollT=null;if(drag||pending){schedulePoll();return}
   const seq=mutSeq;
   try{const r=await fetch('/api/state'+wq());if(r.ok){const d=await r.json();
@@ -399,7 +401,43 @@ function usesHtml(i,k){const u=i.uses||[];if(!u.length)return '';
   return `<div class="use">${t('usedIn').replace('{n}',u.length)}: ${u.map(x=>esc(t('daysS')[x.day])).join(', ')}</div>`+(usesOpen.has(k)?u.map(x=>`<div class="use">${useLine(x,true)}</div>`).join(''):'')}
 function usesBtn(i,k){return (i.uses||[]).length>1?`<button type="button" class="mb" data-click="togUses" data-k="${esc(k)}" aria-label="${esc(t('usesA'))}" aria-expanded="${usesOpen.has(k)}">${ic(usesOpen.has(k)?'chu':'chd')}</button>`:''}
 function headsTxt(i){if(!i.heads)return '';const w=t('heads');return ` <span class="use" style="text-decoration:none">(≈ ${i.heads} ${i.heads===1?w[0]:w[1]})</span>`}
-function shopRow(i){return `<label class="${i.checked?'c':''}"><input type="checkbox" ${i.checked?'checked':''} data-change="chk" data-k="${esc(i.key)}"><div class="li"><span>${i.topup?'<b>+ </b>':''}${esc(i.qty)} ${esc(i.unit)} ${esc(i.extra_id?i.name:nm(i.name))}</span>${headsTxt(i)}${i.topup?` <span class="tag" style="background:var(--badbg);color:var(--bad)">${t('buyMore')}</span>`:''}${usesHtml(i,i.key)}</div>${usesBtn(i,i.key)}${i.extra_id?`<button type="button" class="mb" data-click="openX" data-id="${i.extra_id}" aria-label="${esc(t('more'))}">${ic('more')}</button>`:''}</label>`}
+function shopRow(i){return `<label class="${i.checked?'c':''}"><input type="checkbox" ${i.checked?'checked':''} data-change="chk" data-k="${esc(i.key)}"><div class="li"><span>${i.topup?'<b>+ </b>':''}${esc(i.qty)} ${esc(i.unit)} ${esc(i.extra_id?i.name:nm(i.name))}</span>${headsTxt(i)}${i.topup?` <span class="tag" style="background:var(--badbg);color:var(--bad)">${t('buyMore')}</span>`:''}${usesHtml(i,i.key)}</div>${offBtn(i)}${usesBtn(i,i.key)}${i.extra_id?`<button type="button" class="mb" data-click="openX" data-id="${i.extra_id}" aria-label="${esc(t('more'))}">${ic('more')}</button>`:''}</label>`}
+/* --- promocje z gazetek: przy pozycji cena i sieć (dotknięcie otwiera arkusz ofert), nad listą pasek sieci z liczbą
+   pozycji w promocji (dotknięcie zawęża listę do tej sieci), w menu wybór sieci i ręczne pobranie. */
+let offChain=null;
+const kr=v=>Number.isInteger(v)?v+',–':v.toFixed(2).replace('.',',');
+const chName=id=>(((S.offers||{}).chains||[]).find(c=>c.id===id)||{name:id}).name;
+function offPrice(o){   // „34,90”, „2 for 110”, „3 for 2”, „−40 %”
+  if(o.percent)return '−'+o.percent+' %';
+  const f=(n,p)=>t('offFor').replace('{n}',n).replace('{p}',p);
+  if(o.price==null)return o.multi&&o.pay?f(o.multi,o.pay):'?';
+  return o.multi>1?f(o.multi,kr(o.price).replace(',–','')):kr(o.price)}
+function offBtn(i){const all=i.offers||[];if(!all.length||i.checked)return '';
+  const o=(offChain&&all.find(x=>x.chain===offChain))||all[0],n=new Set(all.map(x=>x.chain)).size-1;
+  return `<button type="button" class="pr" data-click="openOffers" data-k="${esc(i.key)}" aria-label="${esc(t('offShow'))}"><b>${esc(offPrice(o))}</b><small>${esc(chName(o.chain))}${n>0?' +'+n:''}${o.q?' ?':''}</small></button>`}
+function offBar(all){const cs=((S.offers||{}).chains||[]).filter(c=>c.on);if(!cs.length){offChain=null;return ''}
+  const list=cs.map(c=>({...c,cnt:all.filter(i=>!i.checked&&(i.offers||[]).some(o=>o.chain===c.id)).length})).sort((a,b)=>b.cnt-a.cnt);
+  if(offChain&&!list.some(c=>c.id===offChain&&c.cnt))offChain=null;
+  return `<div class="tchips obar"><span class="desc">${t('offBar')}</span>${list.map(c=>`<button class="chip ${offChain===c.id?'on':''}" data-click="offFilter" data-c="${c.id}" aria-pressed="${offChain===c.id}" ${c.cnt?'':'disabled'}>${esc(c.name)} <small>${c.cnt}</small></button>`).join('')}${S.offers.busy?`<span class="desc">${ic('wait')} ${t('offBusy')}</span>`:''}</div>`}
+function offFilter(c){offChain=offChain===c?null:c;render();window.scrollTo(0,0)}
+function offersSheet(){const i=shopItem(sheet.k);
+  return sheetHead(esc(i.extra_id?i.name:nm(i.name)))+`<div class="desc">${t('offHint')}</div>`+i.offers.map(o=>{
+    const bundle=o.names.length>1||(o.names[0]&&o.names[0]!==o.title);
+    const cond=[o.price!=null&&o.multi>1?`${kr(o.price/o.multi)} ${t('offEach')}`:'',o.member?t('offMember'):'',o.pant?t('offPant'):'',
+      o.unit?`${kr(o.unit[1]).replace(',–',',00')}/${o.unit[0]}`:'',t('offTo').replace('{d}',dm(o.to))+(o.assumed?' *':'')].filter(Boolean).join(' · ');
+    return `<div class="of"><b>${esc(chName(o.chain))}</b><b class="p">${esc(offPrice(o))}</b>
+     <div class="od"><span>${esc(o.title)}${o.q?` <span class="tag">${t('offCheck')}</span>`:''}${bundle?`<br>${esc(o.names.join(', '))}${o.more?' +'+o.more:''}`:''}<br>${esc(cond)}</span>
+     <button class="lnk" data-click="offNot" data-k="${esc(i.key)}" data-id="${o.id}">${t('offNot')}</button></div></div>`}).join('')
+   +(i.offers.some(o=>o.assumed)?`<p class="desc">* ${t('offAssumed')}</p>`:'')}
+async function offNot(k,id){const r=await api('/api/offers/verdict','POST',W({key:k,offer:id,ok:false}));if(!r)return;set(r);
+  toast(t('offNotT'),{label:t('undo'),fn:async()=>set(await api('/api/offers/verdict','POST',W({key:k,offer:id,ok:true})))})}
+async function offChainSet(c,on){set(await api('/api/offers/chain','POST',W({chain:c,on})))}
+async function offRefresh(){const r=await api('/api/offers/refresh','POST',W({}));if(r){set(r);toast(t('offLoading'))}}
+function offMenu(){const o=S.offers;if(!o)return '';
+  const st=c=>c.busy?t('offLoading'):!c.on?'':c.at&&c.n?t('offAt').replace('{d}',dm(c.at.slice(0,10))).replace('{n}',c.n)+(c.error?' · '+t('offErrOld'):''):c.error?t('offErr'):t('offNever');
+  return `<div class="msec"><b>${ic('shop')} ${t('offT')}</b> <span class="desc">${t('offSub')}</span>
+  ${o.chains.map(c=>`<div class="mrow"><span>${esc(c.name)}${st(c)?`<br><span class="desc">${esc(st(c))}</span>`:''}</span><button class="chip ${c.on?'on':''}" data-click="offChainSet" data-c="${c.id}" data-on="${c.on?0:1}" aria-pressed="${c.on}" aria-label="${esc(c.name)}">${c.on?t('offOn'):t('offOff')}</button></div>`).join('')}
+  <div class="row"><button class="b" data-click="offRefresh" ${o.chains.some(c=>c.on)&&!o.busy?'':'disabled'}>${t('offUpd')}</button></div></div>`}
 /* --- zakupy: pasek postępu, w działach tylko to, co zostało do kupienia (z licznikiem), odhaczone zjeżdżają do zwiniętej
    sekcji „Kupione” na dole, pole dopisywania przy dolnej krawędzi. */
 function shop(){
@@ -408,14 +446,15 @@ function shop(){
   let h='<div class="shop">';
   if(all.length)h+=`<div class="shead"><b>${of(done.length,all.length)}</b><span class="desc">${t('leftN').replace('{n}',all.length-done.length)}</span><span class="sp"></span><button class="b" data-click="copyList">${ic('copy')} ${t('copyS')}</button></div>
    <div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="${all.length}" aria-valuenow="${done.length}"><i style="width:${Math.round(100*done.length/all.length)}%"></i></div>`;
+  h+=offBar(all);const onOffer=i=>!offChain||(i.offers||[]).some(o=>o.chain===offChain);
   if(S.pending)h+=`<div class="warn">${t('shopWait')}</div>`;
   if(!all.length&&!S.pending)h+=`<div class="card">${t('empty')}</div>`;
   if(all.length&&done.length===all.length)h+=`<div class="card">✓ ${t('allBought')}</div>`;
-  for(const [a,items] of Object.entries(g)){const todo=items.filter(i=>!i.checked);if(!todo.length)continue;
+  for(const [a,items] of Object.entries(g)){const todo=items.filter(i=>!i.checked&&onOffer(i));if(!todo.length)continue;
     h+=`<h3><span>${esc(t(a))}</span><span class="cnt">${of(items.length-todo.length,items.length)}</span></h3>`+todo.map(shopRow).join('')}
   if((S.gone||[]).length)h+=`<h3 style="color:var(--orange)">${t('goneT')}</h3>`+S.gone.map(g=>`<div class="mrow"><span>✓ ${esc(g.label)}</span><button class="b" data-click="dismissG" data-k="${esc(g.key)}">${t('dismiss')}</button></div>`).join('');
-  if(done.length)h+=`<button type="button" class="bhead" data-click="foldSec" data-k="bought" aria-expanded="${!!sec.bought}"><span>${t('bought')} (${done.length})</span><span>${ic(sec.bought?'chd':'chr')}</span></button>`+(sec.bought?`<div class="bought">${done.map(shopRow).join('')}</div>`:'');
-  if(S.have.length)h+=`<h3>${t('have')}</h3>`+S.have.map(i=>`<div class="haverow"><div class="li">${esc(i.qty)} ${esc(i.unit)} ${esc(nm(i.name))}${usesHtml(i,'have:'+i.key)}</div>${usesBtn(i,'have:'+i.key)}</div>`).join('');
+  if(done.length&&!offChain)h+=`<button type="button" class="bhead" data-click="foldSec" data-k="bought" aria-expanded="${!!sec.bought}"><span>${t('bought')} (${done.length})</span><span>${ic(sec.bought?'chd':'chr')}</span></button>`+(sec.bought?`<div class="bought">${done.map(shopRow).join('')}</div>`:'');
+  if(S.have.length&&!offChain)h+=`<h3>${t('have')}</h3>`+S.have.map(i=>`<div class="haverow"><div class="li">${esc(i.qty)} ${esc(i.unit)} ${esc(nm(i.name))}${usesHtml(i,'have:'+i.key)}</div>${usesBtn(i,'have:'+i.key)}</div>`).join('');
   return h+`<div class="addbar"><input id="xn" placeholder="${esc(t('addPh'))}" data-enter="addX"><button class="b p" data-click="addX" aria-label="${esc(t('add'))}">+</button></div></div>`}
 /* --- zakładka Przepisy: książka z wyszukiwaniem, podgląd przepisu, „Wstaw na dzień”, własny przepis */
 let bookQ='';
@@ -774,7 +813,7 @@ async function sync(){if(document.hidden||busyUI()||!S)return;
     if(viewWeek&&!(d.weeks||[]).some(w=>w.id===viewWeek)){viewWeek=null;return load()}
     const sig=x=>JSON.stringify([x.week&&x.week.id,x.week&&x.week.confirmed,(x.weeks||[]).map(w=>w.id+':'+w.confirmed),
       (x.meals||[]).map(m=>[m.id,m.day,m.status,m.name,m.steps.length,m.servings,m.disliked,m.filling,m.alts&&m.alts.length]),
-      x.shopping,x.pantry,x.cravings,x.todo,(x.recipes||[]).map(r=>r.id),(x.dislikes||[]).map(r=>r.id),x.servings_default]);
+      x.shopping,x.offers,x.pantry,x.cravings,x.todo,(x.recipes||[]).map(r=>r.id),(x.dislikes||[]).map(r=>r.id),x.servings_default]);
     if(sig(d)===sig(S))return;
     todoDiff(S.todo,d.todo);
     const y=window.scrollY;adopt(d);render();window.scrollTo(0,y);ensureTr()}catch(e){}}
