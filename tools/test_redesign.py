@@ -91,6 +91,13 @@ async def prepare():
     db = sqlite3.connect(DB)
     for mid, day, data in db.execute("SELECT id, day, data FROM meals WHERE week_id=?", (wid,)).fetchall():
         d = json.loads(data); d["name"] = LONG[day]
+        # kilka składników (wspólne dla dań i jeden własny) i cztery kroki: lista zakupów ma działy, a tryb gotowania co pokazywać
+        d["ingredients"] = d.get("ingredients", []) + [
+            {"name": "gulrot", "qty": 2, "unit": "stk", "aisle": "Frukt og grønt", "from_pantry": False},
+            {"name": "ris", "qty": 3, "unit": "dl", "aisle": "Tørrvarer og hermetikk", "from_pantry": False},
+            {"name": "fløte", "qty": 0.5, "unit": "dl", "aisle": "Meieri og kjøl", "from_pantry": False},
+            {"name": f"krydder {day}", "qty": 1, "unit": "ts", "aisle": "Krydder og basis", "from_pantry": False}]
+        d["steps"] = [f"Steg {k} for dag {day}: skjær, stek og rør godt." for k in range(1, 5)]
         db.execute("UPDATE meals SET data=?, tr=NULL WHERE id=?", (json.dumps(d, ensure_ascii=False), mid))
     db.commit(); db.close()
     for n in ("melk", "brød", "smør", "egg"):   # atrapa daje jedną pozycję zakupów: dopisujemy własne, żeby lista miała dwa działy
@@ -196,8 +203,11 @@ async def shopping(A, wid):
                    "inMain:!!q('.addbar #xn'),last:Math.max(...[...document.querySelectorAll('.shop label')].map(e=>r(e).bottom))}})()")
     ok(g["head"] == f"0 av {len(alli)}" and g["bar"] == "0%" and g["copy"], f"pasek postępu „X z Y” i przycisk kopiowania w nagłówku listy: '{g['head']}', {g['bar']}")
     ok(g["cnts"] == [f"0 av {len(v)}" for v in st["shopping"].values()] and g["rows"] == len(alli), f"licznik w każdym dziale {g['cnts']}")
-    ok(g["inMain"] and 0 <= g["navTop"] - g["addBottom"] <= 28 and g["addTop"] >= g["last"],
-       f"pole dopisywania przy dolnej krawędzi, pod listą (dół pola {g['addBottom']:.0f} px, pasek zakładek od {g['navTop']:.0f} px)")
+    ok(g["inMain"] and 0 <= g["navTop"] - g["addBottom"] <= 28,
+       f"pole dopisywania przy dolnej krawędzi, tuż nad paskiem zakładek (dół pola {g['addBottom']:.0f} px, pasek od {g['navTop']:.0f} px)")
+    e = await A.ev("(()=>{window.scrollTo(0,99999);const r=e=>e.getBoundingClientRect(),a=r(document.querySelector('.addbar'));"
+                   "const o=[Math.max(...[...document.querySelectorAll('.shop label')].map(x=>r(x).bottom)),a.top,a.bottom,r(document.querySelector('nav')).top];window.scrollTo(0,0);return o})()")
+    ok(e[0] <= e[1] + 1 and 0 <= e[3] - e[2] <= 28, f"po przewinięciu do końca pole nie zasłania ostatniej pozycji (pozycja do {e[0]:.0f} px, pole od {e[1]:.0f} px)")
     ok(not g["bought"], "nic nie kupione: brak sekcji „Kupione”")
     await shot(A, "shop")
     # odhaczenie: pozycja zjeżdża do zwiniętej sekcji „Kupione (1)”, liczniki i pasek rosną
@@ -253,6 +263,7 @@ async def recipes_tab(A, wid):
     await A.ev(TYPE % json.dumps("")); await A.ev("document.getElementById('bq').blur()"); await asyncio.sleep(0.2)
     # podgląd przepisu
     await A.ev(f"document.querySelector('#blist .brow[data-rid=\"{target['id']}\"] [data-click=openBook]').click()"); await asyncio.sleep(0.4)
+    ok(await A.ev("!!document.querySelector('#panel [data-click=openCook][data-rid]')"), "podgląd przepisu z książki ma „Gotuj”")
     r = await A.ev("[document.querySelector('#panel h2').textContent,document.querySelectorAll('#panel .ings li').length,document.querySelectorAll('#panel .steps li').length,"
                    "document.querySelectorAll('#panel [data-click=useDay]').length,!!document.querySelector('#panel [data-click=useRec]')]")
     ok(r == [target["name"], len(target["ingredients"]), len(target["steps"]), 7, False], f"podgląd przepisu: składniki, kroki i 7 dni do wstawienia {r}")
@@ -277,6 +288,82 @@ async def recipes_tab(A, wid):
     ok(await A.ev("!!document.getElementById('ct') && !!document.getElementById('camIn') && !!document.getElementById('galIn')"), "własny przepis (tekst, aparat, galeria) dodaje się w zakładce Przepisy")
     await shot(A, "book_custom")
     await A.ev("toggleCust();goTab('plan')"); await asyncio.sleep(0.4)
+
+
+def qty(q):
+    return str(int(q)) if isinstance(q, float) and q.is_integer() else str(q)
+
+
+async def cooking(A, wid):
+    st = api(f"/api/state?week={wid}", "GET")
+    m = next(x for x in st["meals"] if x["date"] == st["today"]); mid = m["id"]; n = len(m["steps"])
+    ings = [f"{qty(m['qv'][k])} {i['unit']} {i['name']}" for k, i in enumerate(m["ingredients"])]
+    ok(n >= 4 and len(ings) >= 4, f"przygotowanie: dzisiejsze danie ma {n} kroki i {len(ings)} składników")
+    # atrapa Wake Lock: liczy prośby i zwolnienia, potrafi odmówić
+    await A.ev("window.__wl={req:0,rel:0,mode:'ok'};Object.defineProperty(navigator,'wakeLock',{configurable:true,value:{request:async()=>{__wl.req++;"
+               "if(__wl.mode==='deny')throw new DOMException('odmowa','NotAllowedError');return {release:async()=>{__wl.rel++},addEventListener(){}}}}});1")
+    ok("Lag mat" in await A.ev("document.querySelector('.slot.today .tr [data-click=openCook]').textContent"), "dzisiejszy dzień ma przycisk „Gotuj”")
+    await A.ev("document.querySelector('.slot.today .tr [data-click=openCook]').click()"); await asyncio.sleep(0.5)
+    STEP = ("(()=>{const q=s=>document.querySelector('#cook '+s);return {open:document.getElementById('cook').classList.contains('open'),"
+            "n:q('.cstepn').textContent,step:q('.cstep').textContent,size:parseFloat(getComputedStyle(q('.cstep')).fontSize),"
+            "steps:document.querySelectorAll('#cook .cstep').length,ing:!!q('[data-click=cookIng]'),list:[...document.querySelectorAll('#cook .cing li')].map(e=>e.textContent),"
+            "back:q('[data-click=cookStep][data-d=\"-1\"]').disabled,next:!!q('[data-click=cookStep][data-d=\"1\"]'),done:!!q('[data-click=cookDone]'),"
+            "awake:!!q('.awake'),full:q('.chead').getBoundingClientRect().top===0&&q('.cnav').getBoundingClientRect().bottom===innerHeight}})()")
+    g = await A.ev(STEP)
+    ok(g["open"] and g["full"] and g["steps"] == 1 and g["step"] == m["steps"][0] and g["n"] == f"Steg 1 av {n}" and g["size"] >= 22 and g["back"] and g["next"],
+       f"tryb gotowania: pełny ekran, jeden krok dużym tekstem ({g['size']} px), „Krok 1 z {n}”, Wstecz / Dalej")
+    ok(g["awake"] and await A.ev("__wl.req") == 1, "ekran nie gaśnie: blokada wygaszania wzięta, jest o tym informacja")
+    await shot(A, "cook")
+    # pełna lista składników z ilościami na KAŻDYM kroku, jednym dotknięciem, bez wychodzenia z kroku
+    per_step = []
+    for i in range(n):
+        before = await A.ev(STEP)
+        await A.ev("document.querySelector('#cook [data-click=cookIng]').click()"); await asyncio.sleep(0.2)
+        g = await A.ev(STEP)
+        vis = await A.ev("(()=>{const r=document.querySelector('#cook .cing').getBoundingClientRect();return r.height>40&&r.top>=0&&r.bottom<=innerHeight})()")
+        per_step.append(before["ing"] and not before["list"] and before["step"] == m["steps"][i] and g["list"] == ings and g["step"] == m["steps"][i]
+                        and g["n"] == f"Steg {i + 1} av {n}" and g["open"] and vis)
+        if i == 1:
+            await shot(A, "cook_ingredients")
+        await A.ev("document.querySelector('#cook [data-click=cookIng]').click()"); await asyncio.sleep(0.2)
+        if i < n - 1:
+            await A.ev("document.querySelector('#cook [data-click=cookStep][data-d=\"1\"]').click()"); await asyncio.sleep(0.2)
+    ok(all(per_step) and len(per_step) == n, f"„Wszystkie składniki” na każdym z {n} kroków: jedno dotknięcie, pełna lista z ilościami, krok zostaje ten sam {per_step}")
+    ok(all(x[0].isdigit() for x in ings) and len(ings) == len(m["ingredients"]), f"lista ma wszystkie składniki z ilościami {ings}")
+    g = await A.ev(STEP)
+    ok(g["done"] and not g["next"] and not g["back"], "ostatni krok kończy się przyciskiem „Zrobione”")
+    await A.ev("document.querySelector('#cook [data-click=cookStep][data-d=\"-1\"]').click()"); await asyncio.sleep(0.2)
+    ok((await A.ev(STEP))["step"] == m["steps"][n - 2], "„Wstecz” wraca do poprzedniego kroku")
+    await A.cmd("Input.dispatchKeyEvent", type="keyDown", key="ArrowRight", code="ArrowRight", windowsVirtualKeyCode=39); await asyncio.sleep(0.2)
+    await A.ev("document.querySelector('#cook [data-click=cookDone]').click()"); await asyncio.sleep(1.5)
+    now = next(x for x in api(f"/api/state?week={wid}", "GET")["meals"] if x["id"] == mid)
+    ok(now["status"] == "done" and await A.ev("!document.getElementById('cook').classList.contains('open')") and await A.ev("__wl.rel") == 1,
+       "„Zrobione” odhacza dzień, zamyka tryb gotowania i zwalnia blokadę ekranu")
+    ok(await A.ev(OPEN) and await A.ev("!!document.querySelector('#panel [data-click=fav]') && !!document.querySelector('#panel [data-click=rateDislike]')"),
+       "po „Zrobione” pytanie o ocenę: ⭐ albo 👎")
+    await shot(A, "cook_rate")
+    await A.ev("document.querySelector('#panel [data-click=rateDislike]').click()"); await asyncio.sleep(0.3)
+    ok(await A.ev(f"!!document.getElementById('why{mid}')"), "👎 z oceny prowadzi do pola powodu")
+    await A.ev("closeSheet()"); await asyncio.sleep(0.3)
+    # odmowa i brak Wake Lock: tryb gotowania działa, tylko bez informacji o ekranie
+    await A.ev(f"__wl.mode='deny';openCook({{id:{mid}}})"); await asyncio.sleep(0.5)
+    g = await A.ev(STEP)
+    ok(g["open"] and not g["awake"] and g["step"] == m["steps"][0] and await A.ev("__wl.req") == 2 and not A.errors, f"odmowa blokady ekranu: cicho, gotowanie działa {A.errors}")
+    await A.ev("cook.i=99;render()"); await asyncio.sleep(0.2)
+    ok(await A.ev("!document.querySelector('#cook [data-click=cookDone]') && !!document.querySelector('#cook .cnav [data-click=closeCook]')"), "danie już zrobione: ostatni krok ma „Zamknij”")
+    await A.ev("document.querySelector('#cook [data-click=cookIng]').click()"); await asyncio.sleep(0.2)
+    await A.ev("history.back()"); await asyncio.sleep(0.4)
+    g = await A.ev(STEP)
+    ok(g["open"] and not g["list"], "systemowe „wstecz” przy otwartych składnikach tylko zwija listę")
+    await A.ev("history.back()"); await asyncio.sleep(0.4)
+    ok(await A.ev("!document.getElementById('cook').classList.contains('open') && tab==='plan'"), "kolejne „wstecz” zamyka tryb gotowania, aplikacja zostaje otwarta")
+    await A.ev("Object.defineProperty(navigator,'wakeLock',{configurable:true,value:undefined})")
+    await A.ev(f"openSheet({{kind:'rec',id:{mid}}})"); await asyncio.sleep(0.3)
+    await A.ev("document.querySelector('#panel [data-click=openCook]').click()"); await asyncio.sleep(0.5)
+    g = await A.ev(STEP)
+    ok(g["open"] and not g["awake"] and not await A.ev(OPEN) and not A.errors, f"przeglądarka bez Wake Lock: „Gotuj” z podglądu przepisu działa {A.errors}")
+    await A.ev("document.querySelector('#cook .chead [data-click=closeCook]').click()"); await asyncio.sleep(0.3)
+    ok(await A.ev("!document.getElementById('cook').classList.contains('open')"), "✕ zamyka tryb gotowania")
 
 
 async def touch_and_drag(A, wid):
@@ -314,7 +401,9 @@ async def audit(A, wid):
                ("toast z Cofnij", "closeSheet();toast('Middagen er fjernet',{label:'Angre',fn:()=>0})"),
                ("zakupy", "sec.bought=true;goTab('shop')"), ("planuj", "sec.pantry=sec.crav=true;goTab('fridge')"),
                ("przepisy", "goTab('book')"), ("własny przepis", f"custOpen=true;custImgs=['{gif}'];render()"),
-               ("podgląd z książki", "custOpen=false;custImgs=[];openSheet({kind:'book',id:S.recipes[0].id,day:2})")]
+               ("podgląd z książki", "custOpen=false;custImgs=[];openSheet({kind:'book',id:S.recipes[0].id,day:2})"),
+               ("gotowanie", f"openCook({{id:{mid}}})"), ("gotowanie: składniki", "cook.ing=true;render()"),
+               ("ocena po gotowaniu", f"closeCook();openSheet({{kind:'rate',id:{mid}}})")]
     bad = {"contrast": [], "targets": [], "faded": []}
     for th in ("light", "dark"):
         await A.ev(f"setTheme('{th}')")
@@ -357,6 +446,7 @@ async def main():
         await asyncio.sleep(0.5)
         await week_view(A, wid, st)
         await shopping(A, wid)
+        await cooking(A, wid)
         await touch_and_drag(A, wid)
         await recipes_tab(A, wid)
         await audit(A, wid)
