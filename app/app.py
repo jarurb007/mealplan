@@ -7,6 +7,7 @@ import re
 import shutil
 import socket
 import threading
+import unicodedata
 import time
 import uuid
 import heapq
@@ -77,6 +78,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS proposals(id INTEGER PRIMARY KEY, week_id INTEGER, data TEXT);
         CREATE TABLE IF NOT EXISTS extras(id INTEGER PRIMARY KEY, week_id INTEGER, name TEXT);
         CREATE TABLE IF NOT EXISTS checks(week_id INTEGER, key TEXT, PRIMARY KEY(week_id, key));
+        CREATE TABLE IF NOT EXISTS aisle_memo(norm TEXT PRIMARY KEY, aisle TEXT);
         CREATE TABLE IF NOT EXISTS dislikes(id INTEGER PRIMARY KEY, name TEXT, norm TEXT UNIQUE, reason TEXT DEFAULT '',
                                             created TEXT DEFAULT CURRENT_TIMESTAMP);
         """)
@@ -85,7 +87,8 @@ def init_db():
                        ("meals", "liked INTEGER DEFAULT 0"), ("cravings", "recipe_id INTEGER"),
                        ("checks", "label TEXT"), ("checks", "qty REAL"),
                        ("cravings", "day INTEGER"), ("pantry", "day INTEGER"), ("pantry", "week_id INTEGER"),
-                       ("weeks", "confirmed INTEGER DEFAULT 1"), ("meals", "pre TEXT")):
+                       ("weeks", "confirmed INTEGER DEFAULT 1"), ("meals", "pre TEXT"),
+                       ("extras", "aisle TEXT")):
         try:
             with db() as c:
                 c.execute(f"ALTER TABLE {table} ADD COLUMN {col}")
@@ -94,6 +97,14 @@ def init_db():
     with db() as c:
         c.execute("UPDATE meals SET locked=0")  # funkcja blokady usunięta
     migrate_checks()
+    with db() as c:  # własne produkty sprzed kolumny aisle: dział bez pytania modelu
+        todo = c.execute("SELECT id, name FROM extras WHERE aisle IS NULL").fetchall()
+        if todo:
+            idx = aisle_history(c)
+            for r in todo:
+                a = guess_aisle(c, r["name"], idx)
+                if a:
+                    c.execute("UPDATE extras SET aisle=? WHERE id=?", (a, r["id"]))
 
 
 def backup_dir() -> Path:
@@ -740,20 +751,136 @@ def shop_row(cn, es, checks) -> dict:
 def shop_rows(c, week, agg, have):
     checks = {r["key"]: r for r in c.execute("SELECT * FROM checks WHERE week_id=?", (week["id"],))}
     groups = {}
-    mine = []
+    rows = [shop_row(cn, es, checks) for cn, es in by_product(agg).items()]
     for r in c.execute("SELECT * FROM extras WHERE week_id=? ORDER BY id", (week["id"],)):
         k = f"x{r['id']}"
-        mine.append({"key": k, "name": r["name"], "qty": "", "unit": "", "aisle": MINE,
+        # własny produkt stoi w swoim dziale sklepu; bez działu (chemia, nierozpoznane) trafia na samą górę listy
+        rows.append({"key": k, "name": r["name"], "qty": "", "unit": "", "aisle": r["aisle"] if r["aisle"] in AISLES else MINE,
                      "checked": k in checks, "topup": False, "extra_id": r["id"]})
-    for row in sorted((shop_row(cn, es, checks) for cn, es in by_product(agg).items()), key=lambda x: x["name"].lower()):
+    for row in sorted(rows, key=lambda x: x["name"].lower()):
         groups.setdefault(row["aisle"], []).append(row)
-    out = {a: groups[a] for a in AISLES if a in groups}
-    if mine:
-        out[MINE] = mine
+    out = {a: groups[a] for a in [MINE] + AISLES if a in groups}
     present = {f'{e["canon"]}|{e["fam"]}' for e in list(agg.values()) + list(have.values())}
     gone = [{"key": k, "label": r["label"]} for k, r in checks.items()
             if r["label"] and k not in present and not re.fullmatch(r"x\d+", k)]
     return out, [shop_row(cn, es, {}) for cn, es in by_product(have).items()], gone
+
+
+# --- dział własnego produktu -------------------------------------------------------------------------------------
+# Kolejność: ręczna poprawka lub wcześniejsza odpowiedź modelu (aisle_memo), ta sama nazwa w składnikach dań
+# (w trzech językach), słownik fragmentów nazw, na końcu model w tle. Wynik MINE = produkt bez działu spożywczego.
+AISLE_LLM = os.getenv("AISLE_LLM", "1") == "1"
+AISLE_WORDS = {
+    "Frukt og grønt": """eple banan appelsin sitron lime paere drue jordbaer blabaer bringebaer tomat agurk salat gulrot
+        potet lok rodlok varlok purre hvitlok paprika brokkoli blomkal kal spinat sopp sjampinjong avokado squash
+        ingefaer mango melon ananas kiwi selleri urter basilikum persille koriander dill frukt gronnsak
+        jablk pomarancz cytryn winogron truskaw malin borowk pomidor ogork marchew ziemniak cebul czosn papryk brokul
+        kalafior kapust szpinak pieczark grzyb awokado imbir pietruszk koperek owoc warzyw gruszk sliwk por seler
+        rzodkiew burak cukini szczypior
+        apple banana orange lemon grape berries berry tomato cucumber lettuce carrot potato onion garlic broccoli
+        cauliflower cabbage spinach mushroom avocado ginger fruit vegetable herbs""",
+    "Kjøtt og fisk": """kjott kylling svin biff bacon skinke polse laks torsk fisk reker kalkun lam karbonade kotelett
+        salami leverpostei fiskeboller kjottboller kjottkaker fiskekaker
+        mieso miesa miesn mielon kurcza wieprz wolow boczek boczk szynk kielbas parowk losos dorsz ryba ryby krewet indyk schab
+        filet wedlin
+        meat chicken pork beef ham sausage salmon fish shrimp turkey mince""",
+    "Meieri og kjøl": """melk flote romme yoghurt jogurt ost hvitost gulost brunost kremost smor egg eggs kesam skyr
+        cottage fraiche margarin juice kefir
+        mlek smietan ser sera serek twarog maslo masla maslank jajk jajek jaja sok
+        milk cream cheese butter yogurt""",
+    "Tørrvarer og hermetikk": """pasta spaghetti ris mel sukker havregryn musli cornflakes frokostblanding bonner
+        linser kikerter hermetisk nudler kaffe te kakao sjokolade kjeks notter rosin knekkebrod chips potetgull
+        godteri brus cola vann ol vin syltetoy honning peanott tunfisk kokosmelk
+        makaron ryz ryzu maka maki cukier cukr platki fasol soczewic ciecierzyc puszk kawa kawy herbat czekolad
+        ciastk orzech rodzynk slodycz woda wody piwo wino dzem miod tunczyk kasza kaszy napoj
+        rice flour sugar oats cereal beans lentils coffee tea chocolate cookies biscuit nuts crisps candy soda water
+        beer wine jam honey tuna noodle""",
+    "Brød og deig": """brod rundstykk lompe lefse tortilla pita baguett boller bolle croissant pizzabunn polsebrod
+        chleb bulka bulki bulek bagiet rogal tortill ciasto
+        bread buns bun roll rolls bagel wrap wraps""",
+    "Frys": """frys frossen frosne is iskrem fiskepinner pizza grandiosa
+        mrozon lody
+        frozen icecream ice_cream""",
+    "Krydder og basis": """salt pepper krydder olje olivenolje eddik buljong ketchup sennep majones soyasaus saus karri
+        kanel oregano timian spisskummen vanilje bakepulver
+        sol pieprz przypraw olej oliwa oliwy ocet octu bulion keczup musztard majonez sos sosu cynamon curry
+        proszek_do_pieczenia
+        oil vinegar stock mustard mayo sauce spice cinnamon""",
+    MINE: """toalettpapir dopapir papir torkerull oppvask vaskemiddel zalo sape sjampo tannkrem tannbors bleie
+        soppelpose pose poser bakepapir aluminiumsfolie folie batteri lys serviett deodorant
+        papier recznik plyn prania mydl szampon pasta_do_zebow worki workow pieluch folia bateri swiec serwetk
+        chusteczk dezodorant gabk
+        toilet paper towel detergent soap shampoo toothpaste diaper nappy bags foil batteries battery candle napkin
+        tissue""",
+}
+AISLE_KEYS = sorted(((k.replace("_", " "), a) for a, ws in AISLE_WORDS.items() for k in ws.split()),
+                    key=lambda x: -len(x[0]))
+
+
+def fold(s) -> str:
+    """Nazwa do porównań: małe litery, bez znaków diakrytycznych (ø, å, ł, ą...), pojedyncze spacje."""
+    s = str(s).lower().replace("ø", "o").replace("æ", "ae").replace("å", "a").replace("ł", "l")
+    s = "".join(ch for ch in unicodedata.normalize("NFKD", s) if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]+", " ", s).strip()
+
+
+def aisle_history(c) -> dict:
+    """Nazwa składnika (norweska i z tłumaczeń) -> dział, w którym najczęściej stała w dotychczasowych daniach."""
+    seen = {}
+    rows = list(c.execute("SELECT data, tr FROM meals")) + list(c.execute("SELECT data, tr FROM recipes"))
+    for r in rows:
+        try:
+            ings = (json.loads(r["data"] or "{}") or {}).get("ingredients") or []
+            trs = json.loads(r["tr"] or "{}") or {}
+        except (ValueError, AttributeError):
+            continue
+        for n, i in enumerate(ings):
+            if not isinstance(i, dict) or i.get("aisle") not in AISLES:
+                continue
+            names = [i.get("name"), canon(i.get("name", ""), i.get("unit"), i.get("aisle"))]
+            for t in trs.values() if isinstance(trs, dict) else ():
+                ti = t.get("ingredients") if isinstance(t, dict) else None
+                if isinstance(ti, list) and n < len(ti) and isinstance(ti[n], str):
+                    names.append(ti[n])
+            for nm in {fold(x) for x in names if x}:
+                seen.setdefault(nm, Counter())[i["aisle"]] += 1
+    return {k: v.most_common(1)[0][0] for k, v in seen.items() if k}
+
+
+def guess_aisle(c, name, idx=None):
+    """Dział własnego produktu bez pytania modelu; None, gdy nic nie pasuje."""
+    f = fold(name)
+    if not f:
+        return None
+    memo = c.execute("SELECT aisle FROM aisle_memo WHERE norm=?", (f,)).fetchone()
+    if memo:
+        return memo["aisle"]
+    idx = aisle_history(c) if idx is None else idx
+    if f in idx:
+        return idx[f]
+    words = f.split()
+    for k, a in AISLE_KEYS:  # najdłuższy fragment wygrywa: 'potetgull' przed 'potet', 'tunfisk' przed 'fisk'
+        if k in words or (len(k) >= 4 and k in f):
+            return a
+    for w in (words[-1], words[0]):  # 'tine lettmelk', 'mleko owsiane': rdzeń bywa na końcu albo na początku
+        if w in idx:
+            return idx[w]
+    return None
+
+
+def ask_aisle(eid: int, name: str):
+    try:
+        res = llm.ask_json('Do którego działu sklepu spożywczego należy produkt „' + name + '”? Zwróć wyłącznie JSON '
+                           '{"aisle_of": "..."}; wartość to dokładnie jedna z: ' + ", ".join(AISLES) +
+                           ', albo "Annet", gdy to nie jest żywność lub żaden dział nie pasuje.')
+        a = res.get("aisle_of")
+    except Exception as e:  # brak odpowiedzi modelu: produkt zostaje na górze listy
+        print(f"dział produktu '{name}': {e}")
+        return
+    a = a if a in AISLES else MINE
+    with db() as c:
+        c.execute("UPDATE extras SET aisle=? WHERE id=? AND aisle IS NULL", (a, eid))
+        c.execute("INSERT OR IGNORE INTO aisle_memo(norm, aisle) VALUES(?,?)", (fold(name), a))
 
 
 def shopping(c, week, meals=None):
@@ -967,7 +1094,7 @@ def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoi
                 done = {r["key"] for r in c.execute("SELECT key FROM checks WHERE week_id=?", (src["id"],))}
                 for r in c.execute("SELECT * FROM extras WHERE week_id=? ORDER BY id", (src["id"],)).fetchall():
                     if f"x{r['id']}" not in done and r["name"].lower() not in have:
-                        c.execute("INSERT INTO extras(week_id, name) VALUES(?,?)", (wid, r["name"]))
+                        c.execute("INSERT INTO extras(week_id, name, aisle) VALUES(?,?,?)", (wid, r["name"], r["aisle"]))
                         have.add(r["name"].lower())
             drafts = [r["id"] for r in c.execute("SELECT id, data FROM meals WHERE week_id=? ORDER BY day", (wid,))
                       if json.loads(r["data"]).get("draft")]
@@ -1287,7 +1414,7 @@ def delete_week(wid: int):
             have = {r["name"].lower() for r in c.execute("SELECT name FROM extras WHERE week_id=?", (keep["id"],))}
             for r in c.execute("SELECT * FROM extras WHERE week_id=?", (wid,)).fetchall():
                 if f"x{r['id']}" not in done and r["name"].lower() not in have:
-                    c.execute("INSERT INTO extras(week_id, name) VALUES(?,?)", (keep["id"], r["name"]))
+                    c.execute("INSERT INTO extras(week_id, name, aisle) VALUES(?,?,?)", (keep["id"], r["name"], r["aisle"]))
         for t in ("meals", "checks", "extras", "proposals"):
             c.execute(f"DELETE FROM {t} WHERE week_id=?", (wid,))
         c.execute("DELETE FROM weeks WHERE id=?", (wid,))
@@ -2069,7 +2196,28 @@ def add_extra(req: ExtraReq):
         w = current_week(c, req.week)
         if not w:
             raise HTTPException(400, "najpierw wygeneruj plan")
-        c.execute("INSERT INTO extras(week_id, name) VALUES(?,?)", (w["id"], name))
+        aisle = guess_aisle(c, name)
+        eid = c.execute("INSERT INTO extras(week_id, name, aisle) VALUES(?,?,?)", (w["id"], name, aisle)).lastrowid
+    if aisle is None and AISLE_LLM:  # słownik i historia nie znają produktu: model dopasuje dział w tle
+        threading.Thread(target=ask_aisle, args=(eid, name), daemon=True, name="dzial-produktu").start()
+    return state()
+
+
+class AisleReq(BaseModel):
+    aisle: str
+
+
+@app.post("/api/shop/extra/{eid}/aisle")
+def set_extra_aisle(eid: int, req: AisleReq):
+    """Ręczna poprawka działu. Zapamiętana pod nazwą produktu, więc następnym razem trafi tam od razu."""
+    if req.aisle not in AISLES + [MINE]:
+        raise HTTPException(400, "nieznany dział")
+    with db() as c:
+        r = c.execute("SELECT name FROM extras WHERE id=?", (eid,)).fetchone()
+        if not r:
+            raise HTTPException(404, "nie ma takiego produktu")
+        c.execute("UPDATE extras SET aisle=? WHERE id=?", (req.aisle, eid))
+        c.execute("INSERT OR REPLACE INTO aisle_memo(norm, aisle) VALUES(?,?)", (fold(r["name"]), req.aisle))
     return state()
 
 
