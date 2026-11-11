@@ -42,17 +42,19 @@ elif '"offer_match"' in p:
     def words(x):
         x = x.lower().replace("ø", "o").replace("æ", "ae").replace("å", "a")
         return re.sub(r"[^a-z0-9]+", " ", x).split()
-    items = re.findall(r"^(\d+): (.*) \[[^\]]*\]$", p[p.index("Pozycje ("):p.index("Oferty (")], re.M)
+    items = re.findall(r"^(\d+): (.*) \[([^\]]*)\]$", p[p.index("Pozycje ("):p.index("Oferty (")], re.M)
     offers = re.findall(r"^(\d+): (.*)$", p[p.index("Oferty ("):p.index("Zwróć wyłącznie JSON")], re.M)
     pairs = []
-    for i, name in items:
+    for i, name, aisle in items:
         iw = set(words(name))
         for o, line in offers:
             title, _, plist = line.partition(" | ")
             prods = re.split(r";\s+(?=\d+\) )", plist) if plist else []
             hit = [int(x.split(") ", 1)[0]) for x in prods if iw <= set(words(x.split(") ", 1)[1]))]
             if hit or (not prods and iw <= set(words(title))):
-                pairs.append({"item": int(i), "offer": int(o), "products": hit})
+                # dział: jak pozycja, poza wędliną z czosnkiem w nazwie (serwer ma taką parę odrzucić po dziale)
+                pairs.append({"item": int(i), "offer": int(o), "products": hit, "kind": title.lower(), "flavour": False,
+                              "aisle": "Kjøtt og fisk" if "svinekam" in line.lower() else aisle if aisle != "Moje produkty" else "Annet"})
     out = {"offer_match": pairs}
 elif '"aisle_of"' in p:
     kind = "aisle"
