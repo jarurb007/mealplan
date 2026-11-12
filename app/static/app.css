@@ -139,6 +139,7 @@ input[type=checkbox]:checked{background:var(--tx) var(--tick) center/15px no-rep
 .slot.today .kl{color:var(--tdtx2)}.slot.today .kr:active{background:none}
 .kstrip{border-color:var(--infobd);background:var(--info)}
 .kbox{margin:10px 0;padding:10px 12px;border:1px solid var(--infobd);border-radius:8px;background:var(--info)}
+.krules{margin-top:4px;font-size:14.5px;line-height:1.45}
 .kday{padding:8px 0 2px;border-bottom:1px solid var(--line);font-size:15px}.kday .chips{margin:6px 0 0}.kday .chip{min-height:40px}
 .kmore{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;min-height:40px;padding:0;border:0;background:none;color:var(--tx2);font:13.5px var(--fb);text-align:left}
 .kopt{display:flex;gap:6px;align-items:flex-start;width:100%;padding:10px 0;border:0;border-bottom:1px solid var(--line);background:none;color:var(--tx);font:16px var(--fb);text-align:left}
@@ -242,7 +243,9 @@ body.modal{overflow:hidden}
  .wide .slot{border:1px solid var(--bd);border-radius:8px;background:var(--card)}.wide .meal{background:var(--card);border-radius:8px}
  .wide .slot.today{margin:0;border-color:var(--tdbg);background:var(--tdbg)}.wide .slot.today .meal{background:var(--tdbg)}
  .wide .dr{display:grid;grid-template-columns:minmax(0,1fr) 44px;grid-template-rows:auto 1fr auto;grid-template-areas:"d mb" "n n" "ck ck";align-items:start;min-height:0}
- .wide .meal:not(:has(.tr)) .dr{height:100%;min-height:190px}
+ /* karta dnia to kolumna: wiersz dziecka (.kr) leży pod daniem W karcie, a nie pod nią */
+ .wide .meal{display:flex;flex-direction:column}
+ .wide .meal:not(:has(.tr)) .dr{flex:1 1 auto;min-height:190px}
  .wide .d{grid-area:d;flex-direction:row;justify-content:flex-start;align-items:baseline;align-self:center;gap:6px;width:auto;min-height:44px;padding:12px 0 0 9px}
  .wide .mb{grid-area:mb}.wide .ck{grid-area:ck;margin:0 0 4px 4px}
  .wide .nmb{grid-area:n;justify-content:flex-start;min-height:60px;padding:2px 9px 8px}
