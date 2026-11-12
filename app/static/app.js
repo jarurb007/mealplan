@@ -159,10 +159,16 @@ const ACT={
   tPick:byId(tPick),tListNew:()=>openSheet({kind:'tlist'}),tListMenu:d=>openSheet({kind:'tlist',id:+d.id}),tNewList:d=>tNewList(d.n),
   tListSave:byId(tListSave),tListDelAsk:byId(tListDelAsk),addT:()=>addT(),openT:byId(openT),tDone:d=>tDone(+d.id,d.on==='1'),
   tMove:d=>tMove(+d.id,+d.i),tStep:d=>tStep(+d.id,d.on==='1'),tStepDel:byId(tStepDel),tStepAdd:byId(tStepAdd),tDueClear:d=>tDue(+d.id,''),
-  tToList:d=>tToList(+d.id,+d.l),tRename:()=>tRename(),tRenameSave:byId(tRenameSave),tDelAsk:byId(tDelAsk)},
+  tToList:d=>tToList(+d.id,+d.l),tRename:()=>tRename(),tRenameSave:byId(tRenameSave),tDelAsk:byId(tDelAsk),
+  openKid:d=>openSheet({kind:'kid',id:+d.id,back:d.back==='1'||(sheet&&sheet.kind==='kidweek')}),openKidWeek:()=>openSheet({kind:'kidweek'}),openKidProf:()=>openSheet({kind:'kidprof'}),
+  kidMode:d=>kidSet(+d.id,{mode:d.m}),kidPick:d=>kidSet(+d.id,{pick:+d.i}),kidAway:d=>kidSet(+d.id,{away:d.on==='1'}),
+  kidExtraAdd:d=>kidSet(+d.id,{extra_add:d.w}),kidExtraDel:d=>kidSet(+d.id,{extra_del:d.w}),kidExtraType:byId(kidExtraType),
+  kidMore:byId(kidMore),kidType:()=>{sheet.type=!sheet.type;render();const i=$('#kidtxt');if(i)i.focus()},kidCustom:byId(kidCustom),kidRecipe:byId(kidRecipe),kidDone:()=>kidDone(),
+  kidName:()=>kidName(),kidProfSet:d=>kidProf({[d.f]:d.v==='1'}),kidFish:d=>kidProf({fish_max:+d.n}),kidWordAdd:d=>kidWordAdd(d.f),kidWordDel:d=>kidWordDel(d.f,d.w),kidDishDel:d=>kidDishDel(d.w)},
  change:{
   chk:(d,el)=>chk(d.k,el.checked),tDue:(d,el)=>tDue(+d.id,el.value),addImgs:(d,el)=>{addImgs(el.files);el.value=''}},
- enter:{offPost:()=>offPost(),addT:()=>addT(),tNewList:()=>tNewList(),tListSave:byId(tListSave),tStepAdd:byId(tStepAdd),tRenameSave:byId(tRenameSave),findAlts:d=>findAlts(+d.id),dislikeSave:byId(dislikeSave),priceSearch:d=>priceSearch(d.k),addX:()=>addX(),addP:()=>addP(),addC:()=>addC(),jbAdd:()=>jbAdd()},
+ enter:{offPost:()=>offPost(),addT:()=>addT(),tNewList:()=>tNewList(),tListSave:byId(tListSave),tStepAdd:byId(tStepAdd),tRenameSave:byId(tRenameSave),findAlts:d=>findAlts(+d.id),dislikeSave:byId(dislikeSave),priceSearch:d=>priceSearch(d.k),addX:()=>addX(),addP:()=>addP(),addC:()=>addC(),jbAdd:()=>jbAdd(),
+  kidCustom:byId(kidCustom),kidExtraType:byId(kidExtraType),kidName:()=>kidName(),kidWordAdd:d=>kidWordAdd(d.f)},
  input:{custText:(d,el)=>{custText=el.value},bookQ:(d,el)=>{bookQ=el.value;const b=$('#blist');if(b)b.innerHTML=bookList()}}};
 function dispatch(kind,e){
   const el=e.target&&e.target.closest?e.target.closest('[data-'+kind+']'):null;if(!el)return;
@@ -208,6 +214,9 @@ function sheetBody(){
   if(sheet.kind==='tlist')return tListSheet();
   if(sheet.kind==='pmap')return pmapSheet();
   if(sheet.kind==='pitem')return pitemSheet();
+  if(sheet.kind==='kidweek')return kidWeekSheet();
+  if(sheet.kind==='kidprof')return kidProfSheet();
+  if(sheet.kind==='kid'){const m=gm(sheet.id);return m?kidSheet(m):kidWeekSheet()}
   if(sheet.kind==='text')return `${sheetHead(esc(sheet.title))}<textarea rows="12" readonly>${esc(sheet.text)}</textarea>`;
   const m=gm(sheet.id);
   return sheet.kind==='rec'?recSheet(m):mealSheet(m)}
@@ -230,6 +239,7 @@ function menuHtml(){const dl=S.dislikes||[],dark=document.documentElement.getAtt
   <div class="mrow"><span>${t('themeT')}</span><span class="seg"><button class="${dark?'':'on'}" data-click="setTheme" data-th="light">${ic('sun')} ${t('thLight')}</button><button class="${dark?'on':''}" data-click="setTheme" data-th="dark">${ic('moon')} ${t('thDark')}</button></span></div>
   <div class="mrow"><span>${t('pDef')}</span><span class="stp"><button class="b" data-click="setDef" data-n="${S.servings_default-1}" aria-label="−">−</button><b>${S.servings_default}</b><button class="b" data-click="setDef" data-n="${S.servings_default+1}" aria-label="+">+</button></span></div>
   ${priceMenu()}
+  <button class="act" data-click="openKidProf">${ic('ppl')} ${t('kidProfT')}${kOn()?' · '+esc(S.kid.name):''}</button>
   <div class="msec"><b>${ic('bad')} ${t('dislikesT')}</b> <span class="desc">${t('dislikesSub')}</span>
   ${dl.length?dl.map(d=>`<div class="mrow"><span>${esc(d.name)}${d.reason?` <i>– ${esc(d.reason)}</i>`:''}</span><button class="b" aria-label="${esc(t('restore'))}" data-click="undislike" data-id="${d.id}">${ic('x')}</button></div>`).join(''):`<div class="desc">${t('dislikesNone')}</div>`}</div></div>${offMenu()}
   ${S.week?`<button class="act danger" data-click="delWeek" data-id="${S.week.id}">${ic('del')} ${t('delWeek')} · ${t('wk')}${isoWk(S.week.start)}</button>`:''}`}
@@ -267,7 +277,7 @@ function render(){
   renderCook();renderSheet();
   if(tab==='fridge')wizSync();
   schedulePoll()}
-function needPoll(){return S&&S.meals&&((S.offers&&S.offers.busy)||S.meals.some(m=>m.filling||(m.alts&&m.alts.length===0&&!m.loading)))}
+function needPoll(){return S&&S.meals&&((S.offers&&S.offers.busy)||S.meals.some(m=>m.filling||m.kid_busy||(m.alts&&m.alts.length===0&&!m.loading)))}
 function schedulePoll(){if(pollT||!needPoll())return;pollT=setTimeout(async()=>{pollT=null;if(drag||pending){schedulePoll();return}
   const seq=mutSeq;
   try{const r=await fetch('/api/state'+wq());if(r.ok){const d=await r.json();
@@ -297,14 +307,85 @@ function mealCard(m){const v=mv(m),id=m.id,isT=m.date===S.today,done=m.status===
   const ck=`<button class="ck ${done?'on':''}" data-click="toggleDone" data-id="${id}" aria-pressed="${done}" aria-label="${esc(t('markDoneA'))}"></button>`;
   return `<div class="meal ${done?'done':''} ${m.overdue&&m.status==='planned'?'late':''}" data-id="${id}"><div class="dr">${d}
    <button class="nmb" data-click="openMeal" data-id="${id}"><span class="name">${esc(v.name)}</span>${sub?`<span class="desc">${sub}</span>`:''}</button>
-   ${isT?ck:more+ck}</div>
+   ${isT?ck:more+ck}</div>${kidRow(m)}
    ${isT?`<div class="tr">${m.draft?`<button class="b p" data-click="openMeal" data-id="${id}">${ic('book')} ${t('recipe')}</button>`:`<button class="b ${done?'':'p'}" data-click="openCook" data-id="${id}">${ic('pot')} ${t('cookBtn')}</button>`}
     <span class="sp"></span>${more}</div>`:''}</div>`}
+/* --- plan dziecka: wiersz pod daniem dorosłych, krok „dziecko w tym tygodniu” po zatwierdzeniu planu, wybór na dzień
+   („to samo” albo własne proste danie z propozycji, dodatek tylko dla dziecka), profil w ustawieniach. Działa tylko z włączonym profilem. */
+const kOn=()=>!!(S&&S.kid&&S.kid.on);
+const kTag=()=>`<i class="kt">${esc(S.kid.name)}</i>`;
+const kOwn=k=>!!(k&&k.mode==='own'&&k.pick);
+const kExtras=k=>k&&k.extras.length?'+ '+k.extras.map(i=>esc(nm(i.name))).join(', '):'';
+function kidNote(x){return [x.is_new?`<i class="kt">${t('kidNew')}</i>`:'',[x.shares?esc(t('kidShare').replace('{x}',nm(x.shares))):'',x.extra_min?'+'+x.extra_min+' min':''].filter(Boolean).join(' · ')].join('')}
+function kidRow(m){if(!kOn()||!S.week.confirmed)return '';
+  const k=m.kid,open=`data-click="openKid" data-id="${m.id}"`;
+  if(!k&&!m.kid_busy)return '';   // dawny tydzień sprzed planu dziecka: nic o niej nie wiemy, wiersz byłby pusty
+  if(kOwn(k)&&!k.away)return `<button class="kr own" ${open}><span class="kn"><span class="kname">${esc(k.pick.name)}</span><span class="kl">${kTag()}${[kidNote(k.pick),kExtras(k)].filter(Boolean).join(' · ')}</span></span></button>`;
+  const same=t('kidSame').toLowerCase(),txt=!k?(m.kid_busy?t('kidWait'):same):k.away?t('kidAway').toLowerCase():[same,kExtras(k)].filter(Boolean).join(' · ');
+  return `<button class="kr" ${open}><span class="kl">${kTag()}${txt}</span></button>`}
+function kidRecBox(m){if(!kOn()||!S.week.confirmed||!m.kid||m.kid.away)return '';
+  const k=m.kid;
+  return `<div class="kbox"><b>${esc(t('kidExtraL').replace('{n}',S.kid.name))}</b>${kOwn(k)?`<div class="desc">${t('kidOwn')}: ${esc(k.pick.name)}</div>`:''}
+   ${k.extras.length?`<ul class="ings">${k.extras.map(i=>`<li>${esc(i.qty??'')} ${esc(i.unit)} ${esc(nm(i.name))}</li>`).join('')}</ul>`:''}
+   <div class="row"><button class="b" data-click="openKid" data-id="${m.id}">${ic('plus')} ${t('kidExtraAddB')}</button></div></div>`}
+function kidWeekSheet(){const D=t('days'),n=S.kid.name;
+  return `${sheetHead(esc(t('kidWeekT').replace('{n}',n)))}<div class="desc">${esc(t('kidWeekSub').replace('{n}',n))}</div>
+  ${S.meals.filter(m=>m.status!=='removed').map(m=>{const k=m.kid,own=kOwn(k);
+    return `<div class="kday" data-kid="${m.id}"><div><b>${esc(D[m.day])}</b> · ${esc(mv(m).name)}</div>
+     ${k&&k.away?'':`<div class="chips"><button class="chip ${own?'':'on'}" data-click="kidMode" data-id="${m.id}" data-m="same" aria-pressed="${!own}">${t('kidSame')}</button><button class="chip ${own?'on':''}" data-click="kidMode" data-id="${m.id}" data-m="own" aria-pressed="${own}" ${k&&(k.pick||k.props.length)?'':'disabled'}>${t('kidOwn')}</button></div>`}
+     <button class="kmore" data-click="openKid" data-id="${m.id}" data-back="1"><span>${!k?(m.kid_busy?ic('wait')+' '+t('kidWait'):''):k.away?t('kidAway'):[own?esc(k.pick.name):'',kExtras(k)].filter(Boolean).join(' · ')||t('kidExtraAddB')}</span><span>${k&&k.last?t('kidLast')+' ':''}›</span></button></div>`}).join('')}
+  <div class="row"><button class="b p" data-click="kidDone">${t('kidDoneB')}</button><button class="b" data-click="closeSheet">${t('later')}</button></div>`}
+function kidSheet(m){const k=m.kid,id=m.id,own=kOwn(k),hints=(S.kid_extras||[]).filter(x=>!(k&&k.extras.some(i=>i.name.toLowerCase()===x.toLowerCase())));
+  const head=`${sheetHead(esc(S.kid.name+' · '+t('days')[m.day]))}<div class="desc">${t('kidYou')}: ${esc(mv(m).name)}</div>
+   ${sheet.back?`<button class="lnk" data-click="openKidWeek">‹ ${t('kidWeekBack')}</button>`:''}`;
+  const custom=`<div class="row"><button class="b" data-click="kidMore" data-id="${id}">${t('kidMoreB')}</button><button class="b" data-click="kidType">${t('kidTypeB')}</button></div>
+   ${sheet.type?`<div class="inrow"><input id="kidtxt" placeholder="${esc(t('kidTypePh'))}" data-enter="kidCustom" data-id="${id}" autocomplete="off"><button class="b p" data-click="kidCustom" data-id="${id}">${t('add')}</button></div>`:''}`;
+  const dish=own?`<h3>${esc(k.pick.name)}</h3><ul class="ings">${k.pick.ingredients.map(i=>i.shared?`<li>${esc(nm(i.name))} <span class="desc">(${t('kidFromYours')})</span></li>`:`<li>${esc(i.qty??'')} ${esc(i.unit)} ${esc(nm(i.name))}</li>`).join('')}</ul>
+   ${k.pick.steps.length?`<ol class="steps">${k.pick.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>`:`<div class="row"><button class="b" data-click="kidRecipe" data-id="${id}">${ic('pen')} ${t('kidRecB')}</button></div>`}`:'';
+  return `${head}
+   <button class="kopt" data-click="kidMode" data-id="${id}" data-m="same" aria-pressed="${!own}"><span class="rb ${own?'':'on'}"></span><span class="li"><b>${t('kidSameL')}</b><span class="desc">${t('kidSameD')}</span></span></button>
+   <div class="kopt"><span class="rb ${own?'on':''}"></span><div class="li"><b>${t('kidOwnL')}</b><span class="desc">${t('kidOwnD')}</span>
+    ${!k&&m.kid_busy?`<div class="note">${ic('wait')} ${t('kidWait')}</div>`:''}${k&&k.error&&!k.props.length?`<div class="note">${t('kidErr')}</div>`:''}
+    ${(k?k.props:[]).map((x,i)=>`<button class="pr3 ${own&&k.pick.name===x.name?'on':''}" data-click="kidPick" data-id="${id}" data-i="${i}" aria-pressed="${own&&k.pick.name===x.name}"><span class="kname">${esc(x.name)}</span><span class="desc">${kidNote(x)}</span></button>`).join('')}
+    ${custom}</div></div>
+   ${dish}
+   <div class="lbl">${esc(t('kidExtraL').replace('{n}',S.kid.name))}</div>
+   <div class="chips">${(k?k.extras:[]).map(i=>`<button class="chip on" data-click="kidExtraDel" data-id="${id}" data-w="${esc(i.name)}">${esc(nm(i.name))} ×</button>`).join('')}${hints.map(x=>`<button class="chip" data-click="kidExtraAdd" data-id="${id}" data-w="${esc(x)}">${esc(nm(x))}</button>`).join('')}</div>
+   <div class="inrow"><input id="kidex" placeholder="${esc(t('kidExtraPh'))}" data-enter="kidExtraType" data-id="${id}" autocomplete="off"><button class="b" data-click="kidExtraType" data-id="${id}" aria-label="${esc(t('add'))}">+</button></div>
+   <div class="desc" style="margin-top:6px">${t('kidExtraD')}</div>
+   <div class="mrow" style="border:0"><span>${t('kidAwayL')}</span>${kSw('kidAway',!!(k&&k.away),`data-id="${id}"`)}</div>`}
+const kSw=(act,on,extra)=>`<button class="sw ${on?'on':''}" role="switch" aria-checked="${on}" data-click="${act}" data-on="${on?0:1}" data-v="${on?0:1}" ${extra||''}></button>`;
+function kidProfSheet(){const p=S.kid,ds=S.kid_dishes||[];
+  const words=f=>`<div class="chips">${p[f].map(w=>`<button class="chip" data-click="kidWordDel" data-f="${f}" data-w="${esc(w)}">${esc(w)} ×</button>`).join('')}</div>
+   <div class="inrow"><input id="kid_${f}" placeholder="${esc(t('kidWordPh'))}" data-enter="kidWordAdd" data-f="${f}" autocomplete="off"><button class="b" data-click="kidWordAdd" data-f="${f}" aria-label="${esc(t('add'))}">+</button></div>`;
+  return `${sheetHead(t('kidProfT'))}
+   <div class="inrow"><input id="kidname" value="${esc(p.name)}" placeholder="${esc(t('kidNamePh'))}" data-enter="kidName" autocomplete="off"><button class="b p" data-click="kidName">${t('save')}</button></div>
+   <div class="mrow"><span>${t('kidOnL')}</span>${kSw('kidProfSet',p.on,'data-f="on"')}</div>
+   <div class="lbl">${t('kidLikes')}</div>${words('likes')}
+   <div class="lbl">${t('kidDislikes')}</div>${words('dislikes')}
+   <div class="lbl">${t('kidDishes')}</div>${ds.length?ds.map(d=>`<div class="mrow"><span>${esc(d.name)}</span><button class="mb" data-click="kidDishDel" data-w="${esc(d.name)}" aria-label="${esc(t('del'))}">${ic('x')}</button></div>`).join(''):`<div class="desc">${t('kidDishesNone')}</div>`}
+   <div class="mrow"><span>${t('kidFishL')}</span><span class="stp"><button class="b" data-click="kidFish" data-n="${p.fish_max-1}" aria-label="−" ${p.fish_max<=0?'disabled':''}>−</button><b>${p.fish_max}</b><button class="b" data-click="kidFish" data-n="${p.fish_max+1}" aria-label="+" ${p.fish_max>=7?'disabled':''}>+</button></span></div>
+   <div class="mrow"><span>${t('kidMeatL')}</span>${kSw('kidProfSet',p.meat,'data-f="meat"')}</div>
+   <div class="mrow" style="border:0"><span>${t('kidNovL')}</span>${kSw('kidProfSet',p.novelty,'data-f="novelty"')}</div>`}
+async function kidSet(id,body){const r=await api(`/api/meal/${id}/kid`,'POST',body);if(r)set(r)}
+async function kidMore(id){const r=await api(`/api/meal/${id}/kid/more`,'POST',undefined,t('kidThinking'));if(r)set(r)}
+async function kidCustom(id){const v=(($('#kidtxt')||{}).value||'').trim();if(v.length<2)return;
+  const r=await api(`/api/meal/${id}/kid/custom`,'POST',{text:v},t('kidThinking'));if(r){if(sheet)sheet.type=false;set(r)}}
+async function kidRecipe(id){const r=await api(`/api/meal/${id}/kid/recipe`,'POST',undefined,t('kidRecWait'));if(r)set(r)}
+function kidExtraType(id){const i=$('#kidex'),v=((i||{}).value||'').trim();if(!v)return;i.value='';kidSet(id,{extra_add:v})}
+async function kidDone(){closeSheet();const r=await api('/api/week/kid_done','POST',W({}));if(r)set(r)}
+function kidAfterConfirm(){if(kOn()&&S.week&&S.week.confirmed&&!S.week.kid_step)openSheet({kind:'kidweek'})}
+async function kidProf(body){const r=await api('/api/kid/profile','POST',W(body));if(r)set(r)}
+function kidName(){const v=(($('#kidname')||{}).value||'').trim();if(!v){toast(t('kidNeedName'));return}kidProf(S.kid.name?{name:v}:{name:v,on:true})}
+function kidWordAdd(f){const i=$('#kid_'+f),add=((i||{}).value||'').split(',').map(x=>x.trim()).filter(Boolean);if(!add.length)return;i.value='';kidProf({[f]:[...S.kid[f],...add]})}
+function kidWordDel(f,w){kidProf({[f]:S.kid[f].filter(x=>x!==w)})}
+async function kidDishDel(w){const r=await api('/api/kid/dish/delete','POST',W({name:w}));if(r)set(r)}
 function plan(){
   if(!S.week)return `<div class="card">${t('noplan')}<div class="row"><button class="b p" data-click="goTab" data-t="fridge">${t('goPlanner')}</button></div></div>`;
   let h='';
   if(S.week.id!==S.current_id)h+=`<div class="strip"><span>${(S.week.start>S.today?t('upcoming'):t('archBan')).replace(':','')}</span><button class="b" data-click="goWeek" data-id="">${t('backCur')}</button></div>`;
   if(S.carry.length)h+=`<div class="warn">${t('waiting')} ${S.carry.map(esc).join(', ')}</div>`;
+  if(kOn()&&S.week.confirmed&&!S.week.kid_step)h+=`<div class="strip kstrip"><span>${esc(t('kidStrip').replace('{n}',S.kid.name))}</span><button class="b" data-click="openKidWeek">${t('kidChoose')}</button></div>`;
   if(S.week.confirmed===false)h+=`<div class="warn" style="background:var(--info);border-color:var(--infobd)"><b>${t('confTitle')}</b><div class="desc" style="margin-top:4px">${t('confTxt')}</div><div class="row"><button class="b p" data-click="confirmPlan">${t('confirmBtn')}</button></div></div>`;
   h+='<div class="week">'+S.meals.map(m=>`<div class="slot ${m.date===S.today?'today':''} ${m.date<S.today?'past':''} ${m.status==='removed'?'offday':''}" data-day="${m.day}">${mealCard(m)}</div>`).join('')+'</div>'+balWeek();
   return h}
@@ -365,7 +446,7 @@ function recSheet(m){const v=mv(m),id=m.id;let body;
      :(m.draft_error||S.week.confirmed)?`<div class="note">${t('recNone')}</div><div class="row"><button class="b p" data-click="retryRec" data-id="${id}">${ic('pen')} ${t('recWrite')}</button></div>`:'';
     body+=`<h3>${t('sectIng')}</h3>${ingList(m.ingredient_names||[])}`;
   }else body=`<h3>${t('sectIng')}</h3><ul class="ings">${m.ingredients.map((i,k)=>`<li>${esc(m.qv[k]??'')} ${esc(i.unit)} ${esc(v.ing[k]||i.name)}</li>`).join('')}</ul>
-   <h3>${t('sectStp')}</h3><ol class="steps">${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>
+   ${kidRecBox(m)}<h3>${t('sectStp')}</h3><ol class="steps">${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>
    ${okUrl(m.source)?`<a class="lnk" href="${esc(m.source)}" target="_blank" rel="noopener">${t('src')} ↗</a>`:''}`;
   return `${sheetHead(esc(v.name))}<div class="desc">${[v.description,m.time_min?m.time_min+' min':'',m.servings_eff+' '+t('por'),m.is_fish?t('fish'):''].filter(Boolean).map(esc).join(' · ')}</div>${balLine(m)}
    <div class="row">${m.draft?'':`<button class="b p" data-click="openCook" data-id="${id}">${ic('pot')} ${t('cookBtn')}</button>`}<button class="b" data-click="sheetMeal" data-id="${id}">${ic('more')} ${t('actions')}</button></div>
@@ -410,7 +491,8 @@ function attention(id){const m=gm(id);if(!m)return;m.justReady=true;render();
 const usesOpen=new Set();
 function togUses(k){usesOpen.has(k)?usesOpen.delete(k):usesOpen.add(k);render()}
 function useLine(u,withQty){const m=(S.meals||[]).find(x=>x.id===u.meal);const q=withQty&&u.qty?` – ${esc(u.qty)} ${esc(u.unit)}`:'';
-  return `${esc(t('daysS')[u.day])} · ${esc(m?rv(m).name:'')}${q}`}
+  const dish=m?rv(m).name:'',who=u.kid!==undefined&&S.kid?S.kid.name:'';   // składnik dziecka: jej własne danie albo dodatek do dania dorosłych
+  return `${esc(t('daysS')[u.day])} · ${esc(u.kid?u.kid:who?dish+' · '+who:dish)}${q}`}
 // W ilu daniach jest produkt. Jedno danie: sama linia. Kilka: linia z dniami, a szczegóły z ilościami rozwija przycisk ▾ na końcu wiersza.
 function usesHtml(i,k){const u=i.uses||[];if(!u.length)return '';
   if(u.length===1)return `<div class="use">${useLine(u[0])}</div>`;
@@ -510,10 +592,10 @@ async function wizSync(force){const lw=latestWeek();
   if((!force&&wizDraft&&wizDraft.id===lw.id)||wizBusy)return;
   wizBusy=true;
   try{const r=await fetch('/api/state?week='+lw.id);if(r.ok){const d=await r.json();
-    wizDraft={id:lw.id,start:lw.start,end:lw.end,prices:d.prices,meals:d.meals.map(m=>({id:m.id,day:m.day,name:m.name,tr:m.tr}))};
+    wizDraft={id:lw.id,start:lw.start,end:lw.end,prices:d.prices,meals:d.meals.map(m=>({id:m.id,day:m.day,name:m.name,tr:m.tr,kid:!!m.kid}))};
     if(tab==='fridge'&&!drag)render()}}catch(e){}
   wizBusy=false;clearTimeout(wizT);
-  if(wizDraft&&wizDraft.prices&&wizDraft.prices.pending&&tab==='fridge')wizT=setTimeout(()=>{if(tab==='fridge')wizSync(true)},4000)}
+  if(wizDraft&&((wizDraft.prices&&wizDraft.prices.pending)||(kOn()&&wizDraft.meals.some(m=>!m.kid)))&&tab==='fridge')wizT=setTimeout(()=>{if(tab==='fridge')wizSync(true)},4000)}
 /* --- ceny orientacyjne (Kassalapp): tylko w szkicu planu. P = S.prices szkicu albo null (brak klucza, ceny wyłączone). */
 const krP=x=>(+x).toFixed(2).replace('.',',');
 function priceCell(P,id){const x=P&&P.meals[id];if(!x)return '';
@@ -565,7 +647,7 @@ function fridge(){
    <div class="desc" style="margin-top:4px">${t('wizSub')}</div></div>`;
   if(lw&&!lw.confirmed){
     h+=`<div class="card" style="border:2px solid var(--ac)"><b>${t('draftT')} · ${t('wk')}${isoWk(lw.start)}</b>
-    ${draft?draft.meals.map(m=>{const x=lang!=='no'&&m.tr&&m.tr[lang];return `<div class="desc drow" style="padding:3px 0;border-bottom:1px solid var(--line)"><span><b>${D[m.day]}</b> · ${esc(x?x.name:m.name)}</span>${priceCell(draft.prices,m.id)}</div>`}).join('')+priceSum(draft.prices):`<div class="desc">…</div>`}
+    ${draft?draft.meals.map(m=>{const x=lang!=='no'&&m.tr&&m.tr[lang];return `<div class="desc drow" style="padding:3px 0;border-bottom:1px solid var(--line)"><span><b>${D[m.day]}</b> · ${esc(x?x.name:m.name)}</span>${priceCell(draft.prices,m.id)}</div>`}).join('')+priceSum(draft.prices)+(kOn()?`<div class="desc" style="padding-top:6px">${esc(t('kidDraft').replace('{n}',S.kid.name).replace('{a}',draft.meals.filter(m=>m.kid).length).replace('{b}',draft.meals.length))}</div>`:''):`<div class="desc">…</div>`}
     <div class="row"><button class="b p" data-click="confirmWeek" data-id="${lw.id}">${t('confirmBtn')}</button><button class="b" data-click="goWeek" data-id="${lw.id===S.current_id?'':lw.id}">${t('openPlan')}</button><button class="b" style="color:var(--bad);border-color:var(--badbd)" data-click="delWeek" data-id="${lw.id}" aria-label="${esc(t('delWeek'))}">${ic('del')}</button></div></div>`;
   }else if(lw&&lw.start>S.today){
     h+=`<div class="warn" style="background:var(--ok);border-color:var(--okbd)"><b>${t('wk')}${isoWk(lw.start)} · ${dm(lw.start)} ${t('nextReady')}</b><div class="desc">${t('nextAfter')} ${t('wk')}${isoWk(S.next_start)} · ${dm(S.next_start)}</div>
@@ -587,7 +669,7 @@ function delWeek(wid){const w=(S.weeks||[]).find(x=>x.id===wid);
 async function doDelWeek(wid){wizDraft=null;viewWeek=null;
   const r=await api('/api/week/'+wid,'DELETE');if(r){adopt(r);render();ensureTr()}}
 async function confirmWeek(wid){wizDraft=null;const r=await api('/api/week/confirm','POST',{week:wid},t('jFill'));
-  if(r){const jid=r.job;viewWeek=wid===r.current_id?null:wid;set(r);goTab('plan');if(jid){jobId=jid;clearTimeout(jobTimer);pollJob()}}}
+  if(r){const jid=r.job;viewWeek=wid===r.current_id?null:wid;set(r);goTab('plan');if(jid){jobId=jid;clearTimeout(jobTimer);pollJob()}kidAfterConfirm()}}
 async function takeRec(rid,on){const ex=S.cravings.find(c=>!c.used&&c.recipe_id===rid);
   if(on&&!ex)set(await api('/api/cravings','POST',{recipe_id:rid}));
   else if(!on&&ex)set(await api('/api/cravings/'+ex.id,'DELETE'))}
@@ -636,7 +718,7 @@ async function undislike(did){set(await api(`/api/dislikes/${did}`+(viewWeek?`?w
 async function fav(id){const r=await api(`/api/meal/${id}/favorite`);if(r){const m=r.meals.find(x=>x.id===id);set(r);if(m&&m.fav)toast(t('favOn'))}}
 async function carry(id){set(await api(`/api/meal/${id}/carry`))}
 function toggleAIng(k){openAIng[k]=!openAIng[k];render()}
-async function confirmPlan(){const r=await api('/api/week/confirm','POST',W({}),t('jFill'));if(r){const jid=r.job;set(r);if(jid){jobId=jid;clearTimeout(jobTimer);pollJob()}}}
+async function confirmPlan(){const r=await api('/api/week/confirm','POST',W({}),t('jFill'));if(r){const jid=r.job;set(r);if(jid){jobId=jid;clearTimeout(jobTimer);pollJob()}kidAfterConfirm()}}
 async function balFix(id){const r=await api(`/api/meal/${id}/balance`,'POST',undefined,t('balFixing'));if(r){set(r);toast(t('balFixed'))}}
 async function retryRec(id){set(await api(`/api/meal/${id}/recipe`))}
 async function setDef(n){if(n<1||n>12)return;set(await api('/api/settings','POST',{servings:n}))}

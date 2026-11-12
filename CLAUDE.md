@@ -33,6 +33,9 @@ DB_PATH=/tmp/moja-kopia.db BACKUP_DIR=/tmp/moje-kopie \
 - Ceny orientacyjne (Kassalapp) działają tylko z kluczem w `KASSAL_API_KEY` (lokalnie i na NUC-u w `.env`, nigdy w repo).
   `tools/test_prices.py` nie dotyka sieci: `tools/fake_kassal.py` udaje Kassalapp (`KASSAL_BASE`, `KASSAL_GAP=0`), a tryb
   `nokey` sprawdza aplikację bez klucza. `tools/probe_prices.py` to sonda na prawdziwym API (pyta naprawdę, używaj rzadko).
+- Plan dziecka (`tools/test_kid.py`, sam uruchamia serwer; tryb `ui` steruje Chromium) działa tylko z włączonym profilem
+  dziecka (ustawienia → „Plan dziecka”, klucz `kid` w tabeli `settings`). Bez profilu aplikacja nie pyta modelu o dania
+  dziecka i wygląda jak dawniej, więc pozostałe testy go nie widzą. Profil to dane prywatne: nie wpisuj go do repo.
 - Port 8099 jest zarezerwowany dla wersji podglądowej. Nie zajmuj go w testach.
 - Gazetki (promocje na liście zakupów) w testach nie sięgają do sieci: `OFFERS_SRC_DIR=<repo>/tools/testdata/offers`
   każe czytać zapisane próbki zamiast `coop.no` i `kiwi.no`, a `OFFER_MATCH_WAIT=0` wyłącza zwłokę przed pytaniem modelu.
