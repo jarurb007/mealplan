@@ -350,7 +350,7 @@ function openMeal(id){const m=gm(id);if(!m)return;
 // Podgląd przepisu (dotknięcie wiersza). Szkic bez przepisu pokazuje same nazwy składników i, gdy nikt go nie pisze, przycisk „Napisz przepis”.
 // Bilans talerza, celowo dyskretnie: jeden szary wiersz pod opisem dania. Przycisk „Popraw danie” tylko wtedy,
 // gdy białka brakuje albo jest go mało, a danie ma już przepis.
-const balKind=k=>t(`bk_${k}`);   // rodzaj źródła białka z serwera (legume, egg, cheese, dairy, fish, sub, nuts)
+const balKind=k=>t(`bk_${k}`);   // rodzaj źródła białka z serwera (legume, tofu, egg, cheese, dairy, fish, sub, nuts)
 function balLine(m){const b=m.bal;if(!b||!b.level)return '';
   const g=b.g!=null?' · '+t('balG').replace('{g}',b.g):'',k=b.kinds.map(balKind).join(', ');
   if(b.level==='ok')return `<div class="desc bal">${esc(t('balT')+': '+k+g)}</div>`;
