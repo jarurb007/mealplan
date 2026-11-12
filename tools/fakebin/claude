@@ -10,7 +10,11 @@ FAKE_FAIL_FILE=plik -> jeśli plik istnieje, a prompt zawiera jego treść, atra
 Bilans talerza: przepis na danie z "Soppstroganoff" lub "Uforbederlig" w nazwie nie ma białka, z "Risotto" ma go mało,
 z "Linsegryte" jest w porządku; prompt poprawki ("nie spełnia bilansu talerza") dokłada fasolę (poza "Uforbederlig").
 Prompt dopasowania gazetek ("offer_match") dostaje pary wyliczone prostą regułą wspólnych słów,
-prompt odczytu gazetki KIWI ("leaflet_offers") kilka stałych ofert."""
+prompt odczytu gazetki KIWI ("leaflet_offers") kilka stałych ofert.
+Plan dziecka: prompt z "kid_options" dostaje trzy dania "Barn <danie dorosłych> N" (numeracja idzie dalej za daniami z listy
+„nie powtarzaj”), pierwsze z rybą (z jajkiem, gdy prompt zakazuje ryby), ostatnie jako nowość, gdy prompt o nią prosi;
+"same_ok" jest prawdą dla dania dorosłych z "1" lub "Laks" w nazwie. "kid_dish" (wpisane danie) i "kid_steps" (przepis)
+dostają stałe odpowiedzi. Danie dorosłych z "Barnfeil" w nazwie kończy się błędem modelu."""
 import json, os, re, sys, time
 t0 = time.time()
 p = sys.stdin.read()
@@ -59,6 +63,28 @@ elif '"offer_match"' in p:
                 pairs.append({"item": int(i), "offer": int(o), "products": hit, "kind": title.lower(), "flavour": False,
                               "aisle": "Kjøtt og fisk" if "svinekam" in line.lower() else aisle if aisle != "Moje produkty" else "Annet"})
     out = {"offer_match": pairs}
+elif '"kid_options"' in p:
+    kind = "kid"
+    adult = re.search(r"Dorośli jedzą: (.*?) \(", p).group(1)
+    if "Barnfeil" in adult:
+        sys.exit("atrapa: zamówiony błąd planu dziecka")
+    k0 = len(re.findall(r"'Barn ", re.search(r"Nie powtarzaj tych dań: (.*)", p).group(1)))
+    I = lambda n, q, u, a, sh=False: {"name": n, "qty": q, "unit": u, "aisle": a, "shared": sh}
+    prot = I("egg", 1, "stk", "Meieri og kjøl") if "Nie proponuj ryby" in p else I("fiskekaker", 150, "g", "Kjøtt og fisk")
+    out = {"same_ok": "1" in adult or "Laks" in adult,
+           "kid_options": [{"name": f"Barn {adult} {k0 + i + 1}", "is_new": i == 2 and "nowością" in p,
+                            "is_fish": i == 0 and prot["name"] == "fiskekaker", "shares": "ris", "extra_min": 5 + i,
+                            "ingredients": [prot if i == 0 else I("kikerter", 100, "g", "Tørrvarer og hermetikk"),
+                                            I("ris", None, "", "Tørrvarer og hermetikk", True), I("agurk", 0.25, "stk", "Frukt og grønt")]}
+                           for i in range(3)]}
+elif '"kid_dish"' in p:
+    kind = "kiddish"
+    out = {"kid_dish": {"name": "Barn: " + re.search(r"«(.*?)»", p).group(1), "is_fish": False, "shares": "", "extra_min": 5,
+                        "ingredients": [{"name": "pasta", "qty": 60, "unit": "g", "aisle": "Tørrvarer og hermetikk", "shared": False},
+                                        {"name": "skinke", "qty": 30, "unit": "g", "aisle": "Kjøtt og fisk", "shared": False}]}}
+elif '"kid_steps"' in p:
+    kind = "kidsteps"
+    out = {"kid_steps": ["steg 1", "steg 2"]}
 elif '"price_pick"' in p:
     kind = "price"
     # drugi kandydat, gdy jest (widać, że wybór modelu wygrywa z rankingiem); 'zzbrak' = żaden produkt nie pasuje
