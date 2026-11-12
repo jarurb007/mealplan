@@ -1,5 +1,5 @@
 #!/bin/bash
-# Buduje katalog wdrożeniowy z app/: kopiuje app.py, llm.py i static/ do deploy/ukesmeny/
+# Buduje katalog wdrożeniowy z app/: kopiuje app.py, llm.py, inspiracje.json i static/ do deploy/ukesmeny/
 # i pakuje deploy/ukesmeny.tar.gz (bez data/ i .env). Niczego nie wdraża i nie dotyka deploy/ukesmeny/data/.
 # Skopiowane pliki nie są w repozytorium (.gitignore): źródłem jest wyłącznie app/.
 set -euo pipefail
@@ -11,8 +11,9 @@ for f in app.py llm.py; do
   python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read(), sys.argv[1])' "$SRC/$f"   # nie pakujemy pliku ze złą składnią
 done
 [ -f "$SRC/static/index.html" ] || { echo "brak $SRC/static/index.html" >&2; exit 1; }
+python3 -c 'import json, sys; assert json.load(open(sys.argv[1]))["recipes"]' "$SRC/inspiracje.json"   # baza inspiracji: poprawny JSON z przepisami
 
-cp "$SRC/app.py" "$SRC/llm.py" "$DST/"
+cp "$SRC/app.py" "$SRC/llm.py" "$SRC/inspiracje.json" "$DST/"
 rm -rf "$DST/static"
 cp -r "$SRC/static" "$DST/static"
 

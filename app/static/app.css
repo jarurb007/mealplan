@@ -255,3 +255,7 @@ body.modal{overflow:hidden}
  @keyframes pop{from{opacity:.4;transform:translateY(-47%)}}
  .panel{top:50%;bottom:auto;transform:translateY(-50%);border-radius:16px;max-height:86vh;padding-bottom:16px;animation:pop .16s ease-out}
 }
+/* baza inspiracji: przełącznik Nasze | Inspiracje, filtry, wiersz źródła w przepisie */
+.btabs{margin-bottom:8px}.btabs button{flex:1;justify-content:center}
+.ifl{margin:8px 0 0}.ifl .chip{min-height:40px;font-size:14px;padding:0 12px}
+.isrc{display:flex;flex-wrap:wrap;align-items:center;gap:0 6px}.isrc .lnk{min-height:32px}
