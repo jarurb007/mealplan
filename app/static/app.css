@@ -60,6 +60,8 @@ main{max-width:720px;margin:0 auto;padding:10px 10px calc(var(--navh) + 20px + e
 .nmb{flex:1;min-width:0;min-height:52px;display:flex;flex-direction:column;justify-content:center;gap:2px;padding:6px 6px 6px 2px;border:0;background:none;color:inherit;font-family:inherit;text-align:left}
 .name{font:500 18.5px/1.2 var(--fh);font-variant-numeric:lining-nums;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .desc{color:var(--tx2);font-size:14px}
+/* bilans talerza: szary wiersz, bez ramek i kolorów ostrzeżeń */
+.bal{display:flex;flex-wrap:wrap;align-items:center;gap:0 12px;margin-top:2px}.bal .lnk{font-size:14px}.balw{margin:10px 4px 0;text-align:center}
 .meal.done .name{color:var(--tx2)}.meal.late .desc{color:var(--td);font-weight:600}.meal.off .name{color:var(--tx2);font-weight:400}
 .mb{flex:none;display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;border-radius:6px;background:none;color:var(--tx2);font-size:22px;line-height:1;font-family:inherit}
 .mb:active,.nmb:active,.act:active{background:var(--soft2)}

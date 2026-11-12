@@ -145,7 +145,7 @@ const ACT={
   cookIng:()=>{cook.ing=!cook.ing;render()},cookDone:()=>cookDone(),rateDislike:d=>{sheet={kind:'meal',id:+d.id,why:true};render()},
   toastAct:()=>toastAct(),confirmYes:()=>{const f=sheet&&sheet.fn;closeSheet();if(f)f()},
   openMeal:byId(openMeal),openRec:d=>openSheet({kind:'rec',id:+d.id}),sheetMeal:d=>openSheet({kind:'meal',id:+d.id}),toggleDone:byId(toggleDone),
-  st:d=>{if(sheet&&d.s!=='planned')closeSheet();st(+d.id,d.s)},restoreSwap:d=>st(+d.id,'planned'),retryRec:byId(retryRec),
+  st:d=>{if(sheet&&d.s!=='planned')closeSheet();st(+d.id,d.s)},restoreSwap:d=>st(+d.id,'planned'),retryRec:byId(retryRec),balFix:byId(balFix),
   dislikeAsk:()=>{sheet.why=true;render();const i=$('#panel input[id^=why]');if(i)i.focus()},dislikeCancel:()=>{sheet.why=false;render()},
   dislikeSave:byId(dislikeSave),dislikeOff:byId(dislikeOff),fav:byId(fav),srv:d=>srv(+d.id,numOrNull(d.n)),
   mv2:d=>{closeSheet();mv2(+d.id,d.d)},removeDay:byId(removeDay),carry:d=>{closeSheet();carry(+d.id)},
@@ -292,7 +292,7 @@ function mealCard(m){const v=mv(m),id=m.id,isT=m.date===S.today,done=m.status===
    <button class="nmb" data-click="sheetMeal" data-id="${id}"><span class="name">${t('dayOffS')}</span><span class="desc"><s>${esc(v.name)}</s></span></button>
    <button class="mb" data-click="st" data-id="${id}" data-s="planned" aria-label="${esc(t('restore'))}" title="${esc(t('restore'))}">${ic('undo')}</button></div></div>`;
   let sub=[mealState(m),...(isT?[m.time_min?m.time_min+' min':'',m.servings_eff+' '+t('por'),m.is_fish?t('fish'):'']:[]),
-    m.status==='skipped'?t('tSkip'):'',m.owned?t('tCarry'):''].filter(Boolean).map(esc).join(' · ').replace(/^⏳ /,ic('wait')+' ').replace(/^⚠ /,ic('warn')+' ');
+    m.status==='skipped'?t('tSkip'):'',m.owned?t('tCarry'):'',m.bal&&m.bal.level==='none'?t('balNoneS'):''].filter(Boolean).map(esc).join(' · ').replace(/^⏳ /,ic('wait')+' ').replace(/^⚠ /,ic('warn')+' ');
   if(isT&&done)sub=`<b>${esc(t('tDoneT'))}</b>`+(sub?' · '+sub:'');   // dziś: stan także słowem, nie tylko kółkiem
   const ck=`<button class="ck ${done?'on':''}" data-click="toggleDone" data-id="${id}" aria-pressed="${done}" aria-label="${esc(t('markDoneA'))}"></button>`;
   return `<div class="meal ${done?'done':''} ${m.overdue&&m.status==='planned'?'late':''}" data-id="${id}"><div class="dr">${d}
@@ -306,7 +306,7 @@ function plan(){
   if(S.week.id!==S.current_id)h+=`<div class="strip"><span>${(S.week.start>S.today?t('upcoming'):t('archBan')).replace(':','')}</span><button class="b" data-click="goWeek" data-id="">${t('backCur')}</button></div>`;
   if(S.carry.length)h+=`<div class="warn">${t('waiting')} ${S.carry.map(esc).join(', ')}</div>`;
   if(S.week.confirmed===false)h+=`<div class="warn" style="background:var(--info);border-color:var(--infobd)"><b>${t('confTitle')}</b><div class="desc" style="margin-top:4px">${t('confTxt')}</div><div class="row"><button class="b p" data-click="confirmPlan">${t('confirmBtn')}</button></div></div>`;
-  h+='<div class="week">'+S.meals.map(m=>`<div class="slot ${m.date===S.today?'today':''} ${m.date<S.today?'past':''} ${m.status==='removed'?'offday':''}" data-day="${m.day}">${mealCard(m)}</div>`).join('')+'</div>';
+  h+='<div class="week">'+S.meals.map(m=>`<div class="slot ${m.date===S.today?'today':''} ${m.date<S.today?'past':''} ${m.status==='removed'?'offday':''}" data-day="${m.day}">${mealCard(m)}</div>`).join('')+'</div>'+balWeek();
   return h}
 /* --- tryb gotowania: pełny ekran, jeden krok dużym tekstem, „Wstecz / Dalej”. Przycisk „Wszystkie składniki” jest na
    każdym kroku i rozwija pełną listę z ilościami nad krokiem, bez wychodzenia z niego. Ekran nie gaśnie (Wake Lock),
@@ -348,6 +348,17 @@ async function cookDone(){const id=cook&&cook.id;closeCook();if(id==null)return;
 function openMeal(id){const m=gm(id);if(!m)return;
   openSheet({kind:m.status==='removed'||m.overdue||m.loading||m.alts!=null?'meal':'rec',id})}   // gdy danie czeka na decyzję, od razu arkusz akcji
 // Podgląd przepisu (dotknięcie wiersza). Szkic bez przepisu pokazuje same nazwy składników i, gdy nikt go nie pisze, przycisk „Napisz przepis”.
+// Bilans talerza, celowo dyskretnie: jeden szary wiersz pod opisem dania. Przycisk „Popraw danie” tylko wtedy,
+// gdy białka brakuje albo jest go mało, a danie ma już przepis.
+const balKind=k=>t(`bk_${k}`);   // rodzaj źródła białka z serwera (legume, egg, cheese, dairy, fish, sub, nuts)
+function balLine(m){const b=m.bal;if(!b||!b.level)return '';
+  const g=b.g!=null?' · '+t('balG').replace('{g}',b.g):'',k=b.kinds.map(balKind).join(', ');
+  if(b.level==='ok')return `<div class="desc bal">${esc(t('balT')+': '+k+g)}</div>`;
+  return `<div class="desc bal"><span>${esc(t(b.level==='none'?'balNone':'balLow')+(k?' ('+k+')':'')+g)}</span>${m.draft?'':`<button class="lnk" data-click="balFix" data-id="${m.id}">${t('balFix')}</button>`}</div>`}
+// Źródła białka w całym tygodniu (główne źródło każdego dania), jeden szary wiersz pod listą dni.
+function balWeek(){const n={};S.meals.forEach(m=>{const k=m.status!=='removed'&&m.bal&&m.bal.kinds[0];if(k)n[k]=(n[k]||0)+1});
+  const ks=Object.keys(n).sort((a,b)=>n[b]-n[a]);
+  return ks.length?`<div class="desc balw">${esc(t('balWeek')+': '+ks.map(k=>balKind(k)+' '+n[k]).join(' · '))}</div>`:''}
 function recSheet(m){const v=mv(m),id=m.id;let body;
   if(m.draft){
     body=m.filling?`<div class="note">${ic('wait')} ${t('recWait')}</div>`
@@ -356,7 +367,7 @@ function recSheet(m){const v=mv(m),id=m.id;let body;
   }else body=`<h3>${t('sectIng')}</h3><ul class="ings">${m.ingredients.map((i,k)=>`<li>${esc(m.qv[k]??'')} ${esc(i.unit)} ${esc(v.ing[k]||i.name)}</li>`).join('')}</ul>
    <h3>${t('sectStp')}</h3><ol class="steps">${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>
    ${okUrl(m.source)?`<a class="lnk" href="${esc(m.source)}" target="_blank" rel="noopener">${t('src')} ↗</a>`:''}`;
-  return `${sheetHead(esc(v.name))}<div class="desc">${[v.description,m.time_min?m.time_min+' min':'',m.servings_eff+' '+t('por'),m.is_fish?t('fish'):''].filter(Boolean).map(esc).join(' · ')}</div>
+  return `${sheetHead(esc(v.name))}<div class="desc">${[v.description,m.time_min?m.time_min+' min':'',m.servings_eff+' '+t('por'),m.is_fish?t('fish'):''].filter(Boolean).map(esc).join(' · ')}</div>${balLine(m)}
    <div class="row">${m.draft?'':`<button class="b p" data-click="openCook" data-id="${id}">${ic('pot')} ${t('cookBtn')}</button>`}<button class="b" data-click="sheetMeal" data-id="${id}">${ic('more')} ${t('actions')}</button></div>
    ${body}`}
 // Arkusz akcji dania: zamiana (podpowiedzi, własne życzenie, propozycje), przeniesienie, porcje, przepisy, 👎, usunięcie.
@@ -626,6 +637,7 @@ async function fav(id){const r=await api(`/api/meal/${id}/favorite`);if(r){const
 async function carry(id){set(await api(`/api/meal/${id}/carry`))}
 function toggleAIng(k){openAIng[k]=!openAIng[k];render()}
 async function confirmPlan(){const r=await api('/api/week/confirm','POST',W({}),t('jFill'));if(r){const jid=r.job;set(r);if(jid){jobId=jid;clearTimeout(jobTimer);pollJob()}}}
+async function balFix(id){const r=await api(`/api/meal/${id}/balance`,'POST',undefined,t('balFixing'));if(r){set(r);toast(t('balFixed'))}}
 async function retryRec(id){set(await api(`/api/meal/${id}/recipe`))}
 async function setDef(n){if(n<1||n>12)return;set(await api('/api/settings','POST',{servings:n}))}
 async function srv(id,n){if(n!==null&&(n<1||n>12))return;set(await api(`/api/meal/${id}/servings`,'POST',{servings:n}))}
@@ -857,7 +869,7 @@ async function sync(){if(document.hidden||busyUI()||!S)return;
     if(busyUI()||seq!==mutSeq)return;
     if(viewWeek&&!(d.weeks||[]).some(w=>w.id===viewWeek)){viewWeek=null;return load()}
     const sig=x=>JSON.stringify([x.week&&x.week.id,x.week&&x.week.confirmed,(x.weeks||[]).map(w=>w.id+':'+w.confirmed),
-      (x.meals||[]).map(m=>[m.id,m.day,m.status,m.name,m.steps.length,m.servings,m.disliked,m.filling,m.alts&&m.alts.length]),
+      (x.meals||[]).map(m=>[m.id,m.day,m.status,m.name,m.steps.length,m.servings,m.disliked,m.filling,m.alts&&m.alts.length,m.bal&&m.bal.level,m.bal&&m.bal.g]),
       x.shopping,x.offers,x.pantry,x.cravings,x.todo,(x.recipes||[]).map(r=>r.id),(x.dislikes||[]).map(r=>r.id),x.servings_default]);
     if(sig(d)===sig(S))return;
     todoDiff(S.todo,d.todo);

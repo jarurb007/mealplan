@@ -307,6 +307,165 @@ Składniki z lodówki mogą być podane po polsku: w nazwach dań i składników
 PANTRY_RULE = """Lodówka: składnik bez podanej ilości to jedna sztuka albo mała porcja. Użyj go w JEDNYM daniu tygodnia.
 W kolejnych daniach możesz użyć go tylko wtedy, gdy podana ilość na to wystarczy."""
 
+# ---------- Bilans talerza ----------
+# Każdy obiad ma mieć nazwane źródło białka, warzywa i sycący dodatek. Reguła trafia do poleceń dla modelu, a serwer
+# szacuje białko z ilości w przepisie: danie bez źródła białka dostaje jedną prośbę o poprawkę, a przy daniu z małą
+# ilością zostaje tylko dyskretna uwaga w aplikacji (sprawdzonych dań sami nie zmieniamy).
+BALANCE_FIX = os.getenv("BALANCE_FIX", "1") != "0"
+BALANCE_GOAL, BALANCE_LOW = 20, 18  # g białka na porcję: cel w poleceniach i próg uwagi „mało”
+
+BALANCE_RULE = """Bilans talerza (obowiązuje każdy obiad):
+1) wyraźne źródło białka: strączki (soczewica, fasola, ciecierzyca, groch, edamame), jajka, ser lub inny białkowy nabiał
+   (feta, mozzarella, halloumi, cottage cheese, skyr/kesam, twardy ser) albo ryba (w ramach limitu). Śmietana, masło,
+   mleko kokosowe, grzyby i same warzywa NIE są źródłem białka; orzechy i nasiona liczą się tylko jako dodatek do innego
+   źródła. Gotowych zamienników mięsa (vegetarfarse, quorn, kawałki sojowe) nie używaj, chyba że domownicy wprost o nie proszą;
+2) co najmniej dwa różne warzywa;
+3) sycący dodatek (ziemniaki, ryż, makaron, kasza, pieczywo, tortille).
+Jeśli tradycyjna wersja dania nie ma białka (np. soppstroganoff, grønnsakscurry, risotto), dodaj je tak, żeby pasowało
+do dania, i nazwij je w nazwie albo opisie."""
+BALANCE_WEEK = "W skali tygodnia: różne źródła białka; to samo główne źródło najwyżej 2 razy i nie dzień po dniu."
+BALANCE_QTY = f"""Ilość: około {BALANCE_GOAL} g białka na porcję. Dla orientacji tyle daje na porcję: 70 g suchej soczewicy,
+pół puszki (200 g) fasoli lub ciecierzycy razem z serem albo jajkiem, 2-3 jajka, 80-100 g sera, 150 g cottage cheese."""
+BALANCE_FIELD = ', "protein": "główne źródło białka: nazwa składnika"'
+
+# (wzorzec nazwy składnika, g białka na 100 g, rodzaj źródła albo None dla tła, gramy na sztukę)
+# Szacunek, nie tabela wartości odżywczych: strączki z puszki liczone razem z zalewą, soczewica jako sucha.
+PROTEIN = [(re.compile(p), g, kind, stk) for p, g, kind, stk in [
+    (r"buljong|kraft|fond|saus|pulver|krydder", 0, None, None),  # „fiskebuljong” to nie ryba
+    (r"vegetarfarse|quorn|soya(bit|farse|kjøtt|strimler)|tempeh|seitan|vegetarpølse|vegetarburger|vegetarkjøtt|tofu", 15, "sub", None),
+    (r"hermetisk\w* linse|linser? på boks", 6, "legume", None),
+    (r"linse", 24, "legume", None),
+    (r"tørk\w* (bønne|kikert|ert)", 21, "legume", None),
+    (r"falafel", 13, "legume", None),
+    (r"hummus", 7, "legume", None),
+    (r"edamame", 11, "legume", None),
+    (r"bønne|kikert", 5, "legume", None),
+    (r"\berter\b|gule erter|grønne erter", 5, "legume", None),
+    (r"eggnudl", 12, None, None),
+    (r"\begg\b|eggehvite", 12.5, "egg", 60),
+    (r"grana padano|parmesan|pecorino", 33, "cheese", None),
+    (r"halloumi|paneer", 22, "cheese", None),
+    (r"mozzarella|burrata", 18, "cheese", 125),
+    (r"feta|fetaost|salatost|chèvre|geitost", 15, "cheese", None),
+    (r"ricotta", 8, "cheese", None),
+    (r"kremost|smøreost|mascarpone", 6, None, None),
+    (r"cottage|kesam|skyr|kvarg", 11, "dairy", None),
+    (r"gresk yoghurt|tyrkisk yoghurt", 6, None, None),
+    (r"\bost\b|revet ost|gulost|hvitost|cheddar|norvegia|jarlsberg|gouda|gruyère", 27, "cheese", None),
+    (r"laks|torsk|\bsei\b|fisk|ørret|makrell|tunfisk|reke|sild|kveite|skrei|hyse", 20, "fish", None),
+    (r"peanøttsmør|tahini", 22, "nuts", None),
+    (r"mandl|nøtt(?!e?kål)|nøtter|cashew|pistasj|pinjekjern|\bfrø\b|sesamfrø|solsikkekjern|gresskarkjern", 20, "nuts", None),
+    (r"spag|pasta|penne|makaroni|fusilli|tagliatelle|lasagneplate|nudler|couscous|bulgur|quinoa|byggryn|havregryn", 12, None, None),
+    (r"\bris\b|risottoris|jasminris|basmatiris|fullkornsris", 7, None, None),
+    (r"yoghurt|\bmelk\b|helmelk|lettmelk", 3.5, None, None),
+    (r"rømme|crème fraîche|fløte", 2.5, None, None),
+    (r"kokosmelk", 1.5, None, None),
+    (r"potet", 2, None, 150),
+    (r"brokkoli|spinat|sukkererter|grønnkål|rosenkål", 3, None, 400),
+    (r"sjampinjong|champignon|sopp", 2.5, None, None),
+    (r"blomkål", 2, None, 600),
+    (r"tacoskjell|tortilla|lefse", 8, None, 20),
+    (r"\bmais\b", 3, None, None),
+    (r"brød|pita|naan", 9, None, 40),
+]]
+PROTEIN_MAIN = ("legume", "egg", "cheese", "dairy", "fish", "sub")  # orzechy i nasiona to tylko dodatek
+VEG_RE = re.compile(r"gulrot|aubergine|paprika(?!pulver|krydder)|tomat(?!pur)|brokkoli|blomkål|spinat|squash|søtpotet|"
+                    r"pastinakk|agurk|salat|rucola|ruccola|sukkererter|purre|kål|selleri|sopp|sjampinjong|champignon|"
+                    r"\bmais\b|avokado|gresskar|rødbete|asparges|fennikel|kålrot|vårløk|reddik|bønnespirer")
+BALANCE_MIN_INGS = 4  # krótszej listy nie oceniamy: to nie jest jeszcze przepis
+
+
+def _ing_grams(i: dict, per_stk):
+    q, u = i.get("qty"), unit_key(i.get("unit"))
+    if not isinstance(q, (int, float)):
+        return 0
+    f = {"g": 1, "kg": 1000, "ml": 1, "dl": 100, "l": 1000, "ss": 15, "ts": 5, "boks": 400, "pakke": 400}.get(u)
+    if f:
+        return q * f
+    return q * per_stk if u == "stk" and per_stk else 0
+
+
+def _protein_of(name: str):
+    n = str(name or "").lower()
+    return next(((g, kind, stk) for rx, g, kind, stk in PROTEIN if rx.search(n)), None)
+
+
+def balance(m: dict, portion: float = 1.0, goal: float = BALANCE_GOAL) -> dict:
+    """Ocena talerza: level 'ok' | 'low' | 'none' (albo None, gdy nie ma czego oceniać), g = szacunek białka na porcję,
+    kinds = rodzaje źródeł białka od największego. Szkic dania (same nazwy składników) dostaje ocenę bez gramów.
+    Ta sama reguła służy każdej porcji: portion to jej wielkość względem porcji z przepisu (dziecko np. 0.5),
+    goal to cel białka dla tej porcji w gramach; progi „mało” i „brak” skalują się razem z celem."""
+    if m.get("draft"):
+        names = [str(x) for x in (m.get("ingredient_names") or [])]
+        kinds = list(dict.fromkeys(k for k in ((_protein_of(n) or (0, None, 0))[1] for n in names + [m.get("protein") or ""]) if k))
+        main = [k for k in kinds if k in PROTEIN_MAIN]
+        level = None if len(names) < BALANCE_MIN_INGS else "ok" if main else "none"
+        return {"level": level, "g": None, "kinds": main + [k for k in kinds if k not in main]}
+    ings = m.get("ingredients") or []
+    srv = m.get("servings_base") or 3
+    total, by_kind, veg = 0.0, {}, set()
+    for i in ings:
+        hit = _protein_of(i.get("name"))
+        if hit:
+            g = _ing_grams(i, hit[2]) * hit[0] / 100
+            total += g
+            if hit[1]:
+                by_kind[hit[1]] = by_kind.get(hit[1], 0) + g
+        if VEG_RE.search(str(i.get("name") or "").lower()):
+            veg.add(str(i.get("name")).lower())
+    main_g = sum(g for k, g in by_kind.items() if k in PROTEIN_MAIN) / srv * portion
+    per = round(total / srv * portion)
+    f = goal / BALANCE_GOAL
+    if len(ings) < BALANCE_MIN_INGS:
+        level = None
+    elif main_g < 3 * f:  # śladowa ilość (łyżka parmezanu) to jeszcze nie źródło białka
+        level = "none"
+    elif per < BALANCE_LOW * f or main_g < 10 * f:
+        level = "low"
+    else:
+        level = "ok"
+    return {"level": level, "g": per, "veg": len(veg),
+            "kinds": sorted((k for k in by_kind if k in PROTEIN_MAIN or level == "ok"), key=lambda k: -by_kind[k])}
+
+
+BALANCE_RANK = {None: 0, "none": 0, "low": 1, "ok": 2}
+
+
+def balance_why(b: dict) -> str:
+    why = (f"brak źródła białka (ok. {b['g']} g białka na porcję)" if b["level"] == "none"
+           else f"za mało białka (ok. {b['g']} g na porcję, cel to ok. {BALANCE_GOAL} g)")
+    return why + (", za mało warzyw" if b.get("veg", 2) < 2 else "")
+
+
+def fix_prompt(m: dict, why: str) -> str:
+    slim = {k: m.get(k) for k in ("name", "time_min", "description", "is_fish", "ingredients", "steps")}
+    return f"""Zasady użytkownika:
+{prefs()}
+
+Poniższy przepis nie spełnia bilansu talerza: {why}.
+{BALANCE_RULE}
+{BALANCE_QTY}
+Popraw przepis, zmieniając jak najmniej: zachowaj charakter dania i jego nazwę, dodaj brakujący element albo zwiększ
+ilość tego, który już jest (składniki i kroki), dopasuj opis. Pola from_pantry istniejących składników zostaw bez zmian.
+Zwróć WYŁĄCZNIE JSON: {{"meal": {schema()} }}
+
+Przepis:
+{json.dumps(slim, ensure_ascii=False)}"""
+
+
+def rebalance(m: dict, need: str = "none"):
+    """Jedna prośba do modelu o poprawkę bilansu. Zwraca poprawiony przepis albo None, gdy poprawka nie jest lepsza.
+    need='none': poprawiamy tylko danie bez źródła białka (automat po napisaniu przepisu); 'low': także z małą ilością."""
+    b = balance(m)
+    if b["level"] not in (("none",) if need == "none" else ("none", "low")):
+        return None
+    f = clean_meal((lambda r: r.get("meal") or r)(llm.ask_json(fix_prompt(m, balance_why(b)), retries=0)))
+    if not (f["ingredients"] and f["steps"]) or BALANCE_RANK[balance(f)["level"]] <= BALANCE_RANK[b["level"]]:
+        return None
+    keep = {k: v for k, v in m.items() if k not in ("time_min", "description", "ingredients", "steps")}
+    return {**f, **keep, "description": f["description"] or m.get("description", ""), "rebalanced": True}
+
+
 
 def week_prompt(n: int, pantry: list, avoid: list, fixed: list | None = None, cravings: list | None = None) -> str:
     return f"""Jesteś planerem obiadów. Zasady użytkownika:
@@ -331,20 +490,26 @@ def memory_lines(recent: list | None, favs: list | None, fav_rule: str) -> str:
 
 
 def plan_prompt(n: int, pantry: list, avoid: list, fixed: list, cravings: list,
-                recent: list | None = None, favs: list | None = None) -> str:
+                recent: list | None = None, favs: list | None = None, proven: int = 0) -> str:
+    """proven: tyle sprawdzonych dań (książka przepisów i 👍) ma wrócić do planu; reszta to nowe propozycje."""
+    fav_rule = (f"To sprawdzone dania domowników: wstaw {proven} z nich, jeśli pasują do reszty tygodnia, a pozostałe "
+                f"propozycje mają być nowe; użyj wtedy dokładnie tej nazwy i niczego w tych daniach nie zmieniaj." if proven else
+                "Możesz wstawić najwyżej 1-2 z nich, jeśli pasują do reszty tygodnia; użyj wtedy dokładnie tej nazwy.")
     return f"""Jesteś planerem obiadów. Zasady użytkownika:
 {prefs()}
 
 Ułóż {n} różnych obiadów (kolacji) na kolejne dni. Średni wysiłek, 30-45 min.
 Te dania już są w tym tygodniu (NIE powtarzaj ich ani podobnych): {fixed or 'brak'}.
 Nie powtarzaj podobnych dań z rzędu. Ryba maks. 1 raz w tygodniu (już zaplanowane: {avoid or 'brak'}).
-{memory_lines(recent, favs, "Możesz wstawić najwyżej 1-2 z nich, jeśli pasują do reszty tygodnia; użyj wtedy dokładnie tej nazwy.")}
+{memory_lines(recent, favs, fav_rule)}
 Składniki z lodówki do wykorzystania (użyj, jeśli pasuje): {pantry or 'brak'}.
 {PANTRY_RULE}
 Na co domownicy mają ochotę (uwzględnij, ma pierwszeństwo): {cravings or 'brak'}.
+{BALANCE_RULE}
+{BALANCE_WEEK}
 Tylko nazwa (po norwesku), krótki opis i lista 6-10 głównych składników (same nazwy po norwesku, w liczbie pojedynczej), bez ilości i bez przepisu.
 W "uses_pantry" podaj składniki z lodówki użyte w tym daniu, dosłownie jak na liście (pusta lista, jeśli żadnego).
-Zwróć WYŁĄCZNIE JSON: {{"meals": [ {{"name": "...", "description": "1 zdanie", "is_fish": false, "ingredients": ["gulrot", "linser"], "uses_pantry": []}} ]}} z dokładnie {n} elementami."""
+Zwróć WYŁĄCZNIE JSON: {{"meals": [ {{"name": "...", "description": "1 zdanie", "is_fish": false, "ingredients": ["gulrot", "linser"], "uses_pantry": []{BALANCE_FIELD}}} ]}} z dokładnie {n} elementami."""
 
 
 def swap_prompt(current: dict, others: list, hint: str, pantry: list, count: int,
@@ -358,9 +523,10 @@ Pozostałe dania w tygodniu (nie powtarzaj): {others}.
 Życzenie użytkownika: {hint or 'brak, zaproponuj coś innego'}.
 Składniki z lodówki: {pantry or 'brak'}.
 {PANTRY_RULE}
+{BALANCE_RULE}
 Zaproponuj {count} różnych zamienników. Nazwa, krótki opis i lista 6-10 głównych składników (same nazwy po norwesku, w liczbie pojedynczej), bez ilości i bez przepisu.
 W "uses_pantry" podaj składniki z lodówki użyte w tym daniu, dosłownie jak na liście (pusta lista, jeśli żadnego).
-Zwróć WYŁĄCZNIE JSON: {{"options": [ {{"name": "...", "description": "1 zdanie", "is_fish": false, "ingredients": ["gulrot", "linser"], "uses_pantry": []}} ]}}"""
+Zwróć WYŁĄCZNIE JSON: {{"options": [ {{"name": "...", "description": "1 zdanie", "is_fish": false, "ingredients": ["gulrot", "linser"], "uses_pantry": []{BALANCE_FIELD}}} ]}}"""
 
 
 def recipe_prompt(name: str, description: str, pantry: list) -> str:
@@ -369,6 +535,8 @@ def recipe_prompt(name: str, description: str, pantry: list) -> str:
 
 Napisz pełny przepis na danie: {name} ({description}). Średni wysiłek, 30-45 min.
 Składniki z lodówki przeznaczone na to danie: {pantry or 'brak'}. Innych składników nie oznaczaj jako from_pantry.
+{BALANCE_RULE}
+{BALANCE_QTY}
 Zwróć WYŁĄCZNIE JSON: {{"meal": {schema()} }}"""
 
 
@@ -378,6 +546,8 @@ def days_prompt(items: list) -> str:
 
 Zmień TYLKO wymienione dni. Dla każdego dnia ułóż jedno nowe danie (po norwesku, średni wysiłek), które spełnia życzenia
 i wykorzystuje podane składniki z lodówki. Nie zmieniaj żadnych innych dni.
+{BALANCE_RULE}
+{BALANCE_QTY}
 Dni do zmiany: {json.dumps(items, ensure_ascii=False)}
 Zwróć WYŁĄCZNIE JSON: {{"changes": [ {{"day": 0, "meal": {schema()} }} ]}} z dokładnie jednym wpisem na każdy wymieniony dzień."""
 
@@ -391,6 +561,8 @@ Składniki do zużycia (są w lodówce): {pantry or 'brak'}.
 {PANTRY_RULE}
 Na co domownicy mają ochotę (ma pierwszeństwo, użyj jako danie lub inspirację): {cravings or 'brak'}.
 Wybierz maksymalnie 3 dni i zamień je na dania wykorzystujące te składniki i życzenia, zmieniając jak najmniej.
+{BALANCE_RULE}
+{BALANCE_QTY}
 Jeśli któreś danie już je wykorzystuje, nie zmieniaj go. Zwróć WYŁĄCZNIE JSON:
 {{"changes": [ {{"day": 0, "meal": {schema()} }} ]}}"""
 
@@ -2081,6 +2253,7 @@ def build_state(week=None, meals=None, shop=None):
             m["date"] = str(start + timedelta(days=m["day"]))
             m["fav"] = m["name"].lower() in favnames
             m["draft"] = bool(m.get("draft"))
+            m["bal"] = balance(m)
             m["filling"] = m["id"] in FILLING
             m["overdue"] = (cur is not None and w["id"] == cur["id"] and m["status"] == "planned"
                             and start + timedelta(days=m["day"]) < today)
@@ -2135,10 +2308,22 @@ def recent_meals(c, start, weeks: int) -> list:
     return out
 
 
+PROVEN_SHARE = 3 / 7  # tyle planu mają zająć sprawdzone dania, o ile domownicy mają ich dość
+
+
 def fav_names(c, skip: list) -> list:
-    """Nazwy z książki przepisów, które wolno podsunąć modelowi: bez jedzonych ostatnio i bez tych, które już są w tygodniu."""
-    no = {norm_name(x) for x in skip}
-    return [r["name"] for r in c.execute("SELECT name FROM recipes ORDER BY id DESC") if norm_name(r["name"]) not in no][:30]
+    """Sprawdzone dania, które wolno podsunąć modelowi: książka przepisów i dania z 👍, bez jedzonych ostatnio,
+    bez tych, które już są w tygodniu, i bez 👎."""
+    no = {norm_name(x) for x in skip} | disliked_set()
+    names = [r["name"] for r in c.execute("SELECT name FROM recipes ORDER BY id DESC")]
+    names += [str(json.loads(r["data"]).get("name") or "").strip()
+              for r in c.execute("SELECT data FROM meals WHERE liked=1 ORDER BY id DESC")]
+    out = []
+    for nm in names:
+        if nm and norm_name(nm) not in no:
+            no.add(norm_name(nm))
+            out.append(nm)
+    return out[:30]
 
 
 def pick_fresh(cands: list, recent: set, n: int, wishes: list) -> list:
@@ -2163,6 +2348,11 @@ def gen_recipe(name, description, pantry):
             m = clean_meal(r.get("meal") or r)
             if m["ingredients"] and m["steps"]:
                 m["name"] = m["name"] or name
+                if BALANCE_FIX:
+                    try:  # danie bez źródła białka: jedna prośba o poprawkę; gdy się nie uda, zostaje przepis bez niej
+                        m = rebalance(m) or m
+                    except Exception:
+                        pass
                 return m
             last = "pusty przepis"
         except Exception as e:
@@ -2185,7 +2375,7 @@ def draft_meal(o):
     return {"name": o["name"], "description": o.get("description", ""), "is_fish": bool(o.get("is_fish")),
             "time_min": None, "ingredients": [], "steps": [], "owned": False, "draft": True,
             "ingredient_names": _names(o.get("ingredients")), "uses_pantry": _names(o.get("uses_pantry")),
-            "servings_base": default_servings()}
+            "protein": str(o.get("protein") or "").strip()[:40], "servings_base": default_servings()}
 
 
 def pantry_for(d, names):
@@ -2201,7 +2391,8 @@ def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoi
         plan = []
         if n:
             job["stage"] = "plan"
-            res = llm.ask_json(plan_prompt(n + 2, pantry, avoid, known, cravings, list(recent), list(favs)), big=True)
+            proven = min(len(favs), round(n * PROVEN_SHARE))
+            res = llm.ask_json(plan_prompt(n + 2, pantry, avoid, known, cravings, list(recent), list(favs), proven), big=True)
             bad, seen, plan = disliked_set() | {norm_name(k) for k in known}, set(), []
             for o in res.get("meals", []):
                 nm = str(o.get("name", "")).strip()
@@ -2210,7 +2401,7 @@ def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoi
                 seen.add(norm_name(nm))
                 plan.append({"name": nm, "description": o.get("description", ""),
                              "is_fish": bool(o.get("is_fish")), "ingredients": o.get("ingredients"),
-                             "uses_pantry": o.get("uses_pantry")})
+                             "uses_pantry": o.get("uses_pantry"), "protein": o.get("protein")})
             plan = pick_fresh(plan, set(hard), n, cravings)  # bez powtórek z ostatnich tygodni, ale zawsze n dań
             if len(plan) < n:
                 raise RuntimeError(f"model zwrócił {len(plan)} dań zamiast {n}")
@@ -2267,9 +2458,10 @@ def known_recipe(c, d, pantry, mid=None):
         for r in c.execute("SELECT name, data, tr FROM recipes ORDER BY id DESC"):
             if norm_name(r["name"]) == nn:
                 yield json.loads(r["data"]), r["tr"]
-        for r in c.execute("SELECT data, tr FROM meals WHERE id!=? ORDER BY id DESC", (mid or 0,)):
+        for r in c.execute("SELECT data, tr, liked FROM meals WHERE id!=? ORDER BY id DESC", (mid or 0,)):
             x = json.loads(r["data"])
-            if not x.get("draft") and norm_name(x.get("name")) == nn:
+            # dawny przepis bez źródła białka nie wraca: model napisze go od nowa, już z regułą talerza
+            if not x.get("draft") and norm_name(x.get("name")) == nn and (r["liked"] or balance(x)["level"] != "none"):
                 yield x, r["tr"]
     src = next(((x, tr) for x, tr in sources() if x.get("ingredients") and x.get("steps")), None)
     if not src:
@@ -2333,7 +2525,8 @@ def fill_meal(mid):
     else:
         try:
             m, tr = gen_recipe(name, desc, pantry), None
-            m["name"], m["description"] = name, desc or m.get("description", "")
+            # po poprawce bilansu opis z planu mógłby już nie pasować do dania
+            m["name"], m["description"] = name, (m.get("description") if m.get("rebalanced") else desc) or desc or m.get("description", "")
             m["is_fish"] = bool(d.get("is_fish")) or m.get("is_fish", False)
         except Exception:
             m = None
@@ -2610,6 +2803,31 @@ def retry_recipe(mid: int):
     return state(r["week_id"])
 
 
+@app.post("/api/meal/{mid}/balance")
+def balance_meal(mid: int):
+    """„Popraw danie”: na prośbę domownika model dokłada do przepisu brakujące białko (także gdy jest go tylko mało)."""
+    with db() as c:
+        r = get_meal(c, mid)
+        d = json.loads(r["data"])
+    if d.get("draft"):
+        raise HTTPException(409, "to danie nie ma jeszcze przepisu")
+    if balance(d)["level"] not in ("none", "low"):
+        return state(r["week_id"])
+    try:
+        m = rebalance(d, "low")
+    except Exception as e:
+        raise HTTPException(502, f"nie udało się poprawić dania: {str(e)[:120]}")
+    if not m:
+        raise HTTPException(502, "model nie znalazł lepszej wersji tego dania")
+    with RECIPE_LOCK, db() as c:
+        cur = get_meal(c, mid)
+        if cur["data"] != r["data"]:
+            raise HTTPException(409, "danie zmieniło się w międzyczasie – odśwież i spróbuj jeszcze raz")
+        put_recipe(c, mid, m, None)  # tłumaczenie opisywało stary przepis
+        attach_used(c, r["week_id"])
+    return state(r["week_id"])
+
+
 @app.get("/api/job")
 def job_current():
     for j in JOBS.values():
@@ -2658,7 +2876,7 @@ def alternatives(mid: int, req: SwapReq):
             bad = disliked_set() | {norm_name(cur.get("name"))}
             opts = [{"name": str(o.get("name", "")).strip(), "description": o.get("description", ""),
                      "is_fish": bool(o.get("is_fish")), "ingredients": _names(o.get("ingredients")),
-                     "uses_pantry": _names(o.get("uses_pantry"))}
+                     "uses_pantry": _names(o.get("uses_pantry")), "protein": str(o.get("protein") or "").strip()[:40]}
                     for o in res.get("options", []) if o.get("name") and norm_name(o.get("name")) not in bad]
             opts = pick_fresh(opts, hard, req.count, [req.hint])
             if not opts:
