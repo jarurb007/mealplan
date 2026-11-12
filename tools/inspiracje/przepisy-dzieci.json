@@ -1,0 +1,865 @@
+[
+ {
+  "name": "Hjemmelagde fiskepinner",
+  "url": "https://www.godfisk.no/oppskrifter/torsk/hjemmelagde-fiskepinner/",
+  "site": "godfisk.no",
+  "rating": 5.0,
+  "votes": 31,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 20,
+  "protein": "torsk",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "torskefilet",
+    "qty": 600,
+    "unit": "g"
+   },
+   {
+    "name": "hvetemel",
+    "qty": 4,
+    "unit": "ss"
+   },
+   {
+    "name": "egg",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "melk",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "griljermel",
+    "qty": 1,
+    "unit": "dl"
+   },
+   {
+    "name": "margarin",
+    "qty": 4,
+    "unit": "ss"
+   },
+   {
+    "name": "poteter",
+    "qty": 5,
+    "unit": "stk"
+   },
+   {
+    "name": "melk",
+    "qty": 1,
+    "unit": "dl"
+   },
+   {
+    "name": "crispisalat",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "sitron",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Torsk i staver paneres i mel, egg og griljermel og stekes gylne. Serveres med potetmos og salat."
+ },
+ {
+  "name": "Fiskeboller i karrisaus",
+  "url": "https://www.godfisk.no/oppskrifter/hyse/fiskeboller-i-karrisaus/",
+  "site": "godfisk.no",
+  "rating": 4.0,
+  "votes": 151,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 20,
+  "protein": "fiskeboller",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "fiskeboller",
+    "qty": 500,
+    "unit": "g"
+   },
+   {
+    "name": "margarin",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "karri",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "hvetemel",
+    "qty": 3,
+    "unit": "ss"
+   },
+   {
+    "name": "fiskebollekraft",
+    "qty": 1,
+    "unit": "dl"
+   },
+   {
+    "name": "lettmelk",
+    "qty": 4,
+    "unit": "dl"
+   },
+   {
+    "name": "potet",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "gulrot",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Ferdige fiskeboller varmes i en mild, jevnet karrisaus på melk. Kokte poteter og gulrot til."
+ },
+ {
+  "name": "Pasta med laks, erter og purre",
+  "url": "https://www.godfisk.no/oppskrifter/laks/pasta-med-laks-erter-og-purre/",
+  "site": "godfisk.no",
+  "rating": 4.0,
+  "votes": 41,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 25,
+  "protein": "laks",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "laksefilet",
+    "qty": 600,
+    "unit": "g"
+   },
+   {
+    "name": "pasta (porsjon)",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "erter",
+    "qty": 250,
+    "unit": "g"
+   },
+   {
+    "name": "purreløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "matfløte",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "parmesan",
+    "qty": 1,
+    "unit": "dl"
+   },
+   {
+    "name": "basilikum",
+    "qty": 2,
+    "unit": "ss"
+   }
+  ],
+  "method": "Laks i terninger trekker i en fløtesaus med purre og erter og vendes sammen med pasta og parmesan."
+ },
+ {
+  "name": "Fullkornspasta med laks og grønnsaker",
+  "url": "https://www.godfisk.no/oppskrifter/laks/fullkornspasta-med-laks-og-gronnsaker/",
+  "site": "godfisk.no",
+  "rating": 4.0,
+  "votes": 11,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 20,
+  "protein": "laks",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "laksefilet",
+    "qty": 400,
+    "unit": "g"
+   },
+   {
+    "name": "pasta (porsjon)",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "rødløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "squash",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "gulrot",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "paprika",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "sitron",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "persille",
+    "qty": 2,
+    "unit": "ss"
+   }
+  ],
+  "method": "Grønnsaker i små biter stekes, lakseterninger stekes med, og alt vendes inn i fullkornspasta med sitron."
+ },
+ {
+  "name": "Laks i tacoskjell",
+  "url": "https://www.godfisk.no/oppskrifter/laks/Laks-i-tacoskjell/",
+  "site": "godfisk.no",
+  "rating": 4.0,
+  "votes": 41,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 20,
+  "protein": "laks",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "laksefilet",
+    "qty": 400,
+    "unit": "g"
+   },
+   {
+    "name": "tacoskjell",
+    "qty": 8,
+    "unit": "stk"
+   },
+   {
+    "name": "tacokrydder",
+    "qty": 1.5,
+    "unit": "ts"
+   },
+   {
+    "name": "koriander",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "ost",
+    "qty": 50,
+    "unit": "g"
+   },
+   {
+    "name": "salat",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "lettrømme",
+    "qty": 1,
+    "unit": "dl"
+   },
+   {
+    "name": "majones",
+    "qty": 1,
+    "unit": "dl"
+   },
+   {
+    "name": "sennep",
+    "qty": 0.5,
+    "unit": "ts"
+   },
+   {
+    "name": "sitronsaft",
+    "qty": 0.5,
+    "unit": "ts"
+   },
+   {
+    "name": "sukker",
+    "qty": 2,
+    "unit": "ts"
+   }
+  ],
+  "method": "Laks i biter krydres mildt med tacokrydder og stekes. Serveres i tacoskjell med salat, ost og en rømmedressing."
+ },
+ {
+  "name": "Haalands fiskeburger",
+  "url": "https://www.godfisk.no/oppskrifter/torsk/rask-og-enkel-fiskeburger/",
+  "site": "godfisk.no",
+  "rating": 5.0,
+  "votes": 27,
+  "weak_rating": false,
+  "servings": 2,
+  "time_min": 20,
+  "protein": "fiskeburger",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "fiskeburger",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "burgerbrød",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "crispisalat (blad)",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "agurk",
+    "qty": 0.25,
+    "unit": "stk"
+   },
+   {
+    "name": "rødløk",
+    "qty": 0.25,
+    "unit": "stk"
+   },
+   {
+    "name": "poteter",
+    "qty": 6,
+    "unit": "stk"
+   },
+   {
+    "name": "avokado",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "crème fraîche",
+    "qty": 0.5,
+    "unit": "dl"
+   },
+   {
+    "name": "bladpersille",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Ferdige fiskeburgere stekes og legges i grove brød med salat og avokadokrem. Ovnsbakte potetbåter til."
+ },
+ {
+  "name": "Vegetarisk pastagrateng",
+  "url": "https://www.tine.no/oppskrifter/middag-og-hovedretter/pasta-og-ris/vegetarisk-pastagrateng",
+  "site": "tine.no",
+  "rating": 4.0,
+  "votes": 199,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "egg og ost",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "pastaskjell",
+    "qty": 300,
+    "unit": "g"
+   },
+   {
+    "name": "cherrytomat",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "rød paprika",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "meierismør",
+    "qty": 3,
+    "unit": "ss"
+   },
+   {
+    "name": "sukker",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "frisk basilikum",
+    "qty": 5,
+    "unit": "ss"
+   },
+   {
+    "name": "ekte revet ost original",
+    "qty": 250,
+    "unit": "g"
+   },
+   {
+    "name": "finsnittet basilikum til topping",
+    "qty": 3,
+    "unit": "ss"
+   },
+   {
+    "name": "kremfløte",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "egg",
+    "qty": 3,
+    "unit": "stk"
+   }
+  ],
+  "method": "Kokt pasta blandes med tomat og paprika i form, dekkes med eggestand av fløte, egg og ost og gratineres."
+ },
+ {
+  "name": "Middagspannekaker med Kesam®",
+  "url": "https://www.tine.no/oppskrifter/middag-og-hovedretter/pannekaker/middagspannekaker-med-kesam",
+  "site": "tine.no",
+  "rating": 3.8,
+  "votes": 48,
+  "weak_rating": false,
+  "servings": 12,
+  "time_min": 40,
+  "protein": "egg, Kesam og kikerter",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "egg",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "helmelk",
+    "qty": 4,
+    "unit": "dl"
+   },
+   {
+    "name": "kesam naturell laktosefri",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "havregryn",
+    "qty": 1,
+    "unit": "dl"
+   },
+   {
+    "name": "sammalt hvete",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "meierismør",
+    "qty": 5,
+    "unit": "ss"
+   },
+   {
+    "name": "sopp",
+    "qty": 400,
+    "unit": "g"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rød paprika",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "kikerter (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "brokkoli",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Grove pannekaker med Kesam i røren stekes og fylles med stekt sopp, paprika og kikerter. Brokkoli til."
+ },
+ {
+  "name": "Ugnspannkaka",
+  "url": "https://www.arla.se/recept/ugnspannkaka/",
+  "site": "arla.se",
+  "rating": 4.2,
+  "votes": 1534,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": null,
+  "protein": "egg og melk",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "hvetemel",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "sukker",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "helmelk",
+    "qty": 6,
+    "unit": "dl"
+   },
+   {
+    "name": "egg",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "smør til formen",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "kremfløte",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "bringebær- eller jordbærsyltetøy",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Pannekakerøre av mel, melk og egg helles i en smurt langpanne og stekes i ovnen. Serveres med syltetøy; råkost eller grønnsaker ved siden av gjør måltidet mer fullverdig."
+ },
+ {
+  "name": "Indiskinspirert potetgryte med linser",
+  "url": "https://www.frukt.no/oppskrifter/indiskinspirert-potetgryte-med-linser/",
+  "site": "frukt.no",
+  "rating": 4.3,
+  "votes": 34,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "linser",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "rød chili",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "poteter",
+    "qty": 500,
+    "unit": "g"
+   },
+   {
+    "name": "gulrot",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "hermetiske linser (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hakkede hermetiske tomater (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "garam masala",
+    "qty": 1.5,
+    "unit": "ts"
+   },
+   {
+    "name": "paprikapulver",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "gurkemeie",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "malt spisskummen",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "hakket frisk basilikum",
+    "qty": 1,
+    "unit": "dl"
+   },
+   {
+    "name": "kaldt vann",
+    "qty": 2,
+    "unit": "dl"
+   }
+  ],
+  "method": "Potet- og gulrotterninger koker møre i tomat med hermetiske linser og milde indiske krydder. Dropp chilien for barn."
+ },
+ {
+  "name": "Linseburgere",
+  "url": "https://www.frukt.no/oppskrifter/linseburgere/",
+  "site": "frukt.no",
+  "rating": 4.5,
+  "votes": 2,
+  "weak_rating": true,
+  "servings": 4,
+  "time_min": 15,
+  "protein": "røde linser",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "røde linser",
+    "qty": 250,
+    "unit": "g"
+   },
+   {
+    "name": "gulrot",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "sellerirot",
+    "qty": 100,
+    "unit": "g"
+   },
+   {
+    "name": "løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "potetmel",
+    "qty": 3,
+    "unit": "ss"
+   },
+   {
+    "name": "egg",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "tomatpuré",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "røkt paprikapulver",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "hakket frisk timian",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "valnøttkjerner",
+    "qty": 10,
+    "unit": "stk"
+   },
+   {
+    "name": "spisskummenfrø",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "hakket bladpersille",
+    "qty": 1,
+    "unit": "dl"
+   }
+  ],
+  "method": "Kokte linser og rotgrønnsaker moses med egg og potetmel, formes til små burgere og stekes."
+ },
+ {
+  "name": "Vegetartaco",
+  "url": "https://vegetarmat.org/oppskrift/vegetartaco/",
+  "site": "vegetarmat.org",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "røde bønner og ost",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "røde bønner",
+    "qty": 400,
+    "unit": "g"
+   },
+   {
+    "name": "hermetiserte tomater",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "chili (cm)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "tacokrydder",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "avocado",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "agurk",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "rømme",
+    "qty": 100,
+    "unit": "g"
+   },
+   {
+    "name": "mais",
+    "qty": 150,
+    "unit": "g"
+   },
+   {
+    "name": "trippelsalat (pakke)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "revet ost",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "små tortilla-lefser",
+    "qty": 8,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Bønner småkoker med tomat og tacokrydder til tacofyll. Serveres i små lefser med mais, agurk, ost og rømme."
+ },
+ {
+  "name": "Vegetarnachos i langpanne",
+  "url": "https://www.coop.no/oppskrifter/vegetar/vegetarnachos-i-langpanne",
+  "site": "coop.no",
+  "rating": null,
+  "votes": 0,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "linser, bønner og ost",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "tortilla- eller nachochips (stor pose)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "revet ost",
+    "qty": 150,
+    "unit": "g"
+   },
+   {
+    "name": "linser og bønner (boks)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "vann",
+    "qty": 1.5,
+    "unit": "dl"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "spisskummin",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "paprikapulver",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "tørket oregano",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "chilipulver (klype)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "sukker",
+    "qty": 0.25,
+    "unit": "ts"
+   },
+   {
+    "name": "tomatpuré",
+    "qty": 2,
+    "unit": "ss"
+   }
+  ],
+  "method": "Hermetiske linser og bønner kokes med krydder og tomatpuré, fordeles over chips med ost og gratineres i langpanne."
+ }
+]

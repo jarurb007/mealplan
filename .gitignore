@@ -20,6 +20,7 @@ tools/testdb/
 # kopie kodu w katalogu wdrożeniowym: buduje je tools/make_deploy.sh z app/
 deploy/ukesmeny/app.py
 deploy/ukesmeny/llm.py
+deploy/ukesmeny/inspiracje.json
 deploy/ukesmeny/static/
 
 # środowisko i artefakty

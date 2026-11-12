@@ -10,7 +10,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py llm.py ./
+COPY app.py llm.py inspiracje.json ./
 COPY static ./static
 
 # Dane (baza, preferencje, kopie) żyją w wolumenie /data
