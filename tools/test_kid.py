@@ -7,7 +7,7 @@ Test SAM uruchamia serwer na kopii pustej bazy w katalogu tymczasowym, więc por
     UKES_PORT=8113 python3 tools/test_kid.py
     UKES_PORT=8113 python3 tools/test_kid.py ui     interfejs w Chromium (CDP), zrzuty ekranu do UKES_SHOTS
 Czyta z otoczenia to samo, co test_recipes_pipeline.py."""
-import json, os, shutil, signal, socket, sqlite3, subprocess, sys, tempfile, threading, time, urllib.error, urllib.request
+import json, os, re, shutil, signal, socket, sqlite3, subprocess, sys, tempfile, threading, time, urllib.error, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -324,7 +324,16 @@ async def ui():
     import asyncio, base64
     import test_two_users as T
     shutil.copy(EMPTY_DB, DB)
-    start(FAKE_DELAY="0.2", LLM_PARALLEL="2", PLAN_MIX="1")
+    # Skład tygodnia jest włączony (ustawienie produkcyjne), a baza inspiracji to pięć ustalonych dań: serwer bierze
+    # wszystkie (najwyżej dwa z jednego serwisu i dwa z tym samym białkiem), więc tydzień jest za każdym razem ten sam. Jedno z nich („Baked feta pasta”) ma makaron, tak jak danie
+    # wpisane dla dziecka: lista zakupów ma wtedy jeden wiersz makaronu dla obu dań.
+    base = {x["name"]: x for x in json.loads((ROOT / "app" / "inspiracje.json").read_text())["recipes"]}
+    small = TMP / "baza-ui.json"
+    small.write_text(json.dumps({"recipes": [base[n] for n in ("Dal med röda linser", "Chili sin carne", "Heit linsesuppe", "Baked feta pasta",
+                                                                "Vegetartaco med bønner", "Hjemmelagde fiskepinner")]}, ensure_ascii=False))
+    feta = base["Baked feta pasta"]
+    pasta = max(5, round(next(i["qty"] for i in feta["ingredients"] if i["name"] == "pasta") * 3 / feta["servings"] / 5) * 5) + 60
+    start(FAKE_DELAY="0.2", LLM_PARALLEL="2", PLAN_MIX="1", INSPO_PATH=str(small))
     api("/api/kid/profile", body={"on": True, "name": "Luna", "likes": ["kikerter", "feta"], "dislikes": ["gryteretter"]})
     wid = gen(["Laks med poteter", "Soppstroganoff med ris", "Pastasalat", "Ny 1", "Ny 2", "Ny 3", "Ny 4"])
     kid_ready(wid)
@@ -376,7 +385,10 @@ async def ui():
         await A.ev("document.querySelector('#kidtxt').value='fiskekaker i makaron'")
         await click("#panel .inrow [data-click=kidCustom]")
         ok(await until(f"S.meals.find(m=>m.id==={laks}).kid.pick.name==='Barn: fiskekaker i makaron'"), "wpisane danie zostaje wybrane")
-        ok("60 g pasta" in await txt("#panel") and await n("[data-click=kidRecipe]") == 1, "wpisane danie: składniki od razu, przepis pod przyciskiem")
+        # nazwa składnika bywa pokazana po polsku („PL pasta” z atrapy tłumaczenia), gdy ten sam składnik jest w daniu dorosłych
+        seen = await txt("#panel")
+        ok(("60 g pasta" in seen or "60 g PL pasta" in seen) and "30 g skinke" in seen and await n("[data-click=kidRecipe]") == 1,
+           "wpisane danie: składniki od razu, przepis pod przyciskiem")
         await click("[data-click=kidExtraAdd][data-w=tomat]")
         ok(await until("document.querySelectorAll('#panel [data-click=kidExtraDel]').length===1"), "dodatek tylko dla dziecka dopisany jednym dotknięciem")
         await shot("3_dzien")
@@ -400,7 +412,11 @@ async def ui():
         await A.ev("closeSheet()")
         await A.ev("goTab('shop')")
         await asyncio.sleep(0.5)
-        ok("60 g pasta" in await txt("#main") and "Barn: fiskekaker i makaron" in await txt("#main"), "zakupy: jej składniki z nazwą jej dania")
+        seen = await txt("#main")
+        ok(re.search(r"30 g skinke\w+ · Barn: fiskekaker i makaron", seen), "zakupy: jej składnik z nazwą jej dania")
+        # makaron jest i w jej daniu (60 g), i w daniu dorosłych z bazy: jeden wiersz na produkt, z sumą i liczbą dań
+        ok(f"{pasta} g PL pastaw 2 daniach" in seen and "60 g pasta" not in seen and "60 g PL pasta" not in seen,
+           f"zakupy: makaron dziecka i dorosłych w jednym wierszu ({pasta} g, 2 dania)")
         ok(await n("#main .shop .kt") == 0, "zakupy: zwykła lista, bez znaczków dziecka")
         await shot("5_zakupy")
         await A.ev("goTab('plan')")
