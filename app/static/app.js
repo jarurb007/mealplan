@@ -157,7 +157,7 @@ const ACT={
   openBook:d=>openSheet({kind:'book',id:+d.id}),togglePick:d=>takeRec(+d.id,!bookPicked().has(+d.id)),useDay:d=>{sheet.day=+d.d;render()},
   useRec:d=>useRec(+d.id,+d.d),delRecAsk:byId(delRecAsk),
   bookTab:d=>{bookTab=d.k;render()},insFilter:d=>{insF=d.k;render()},openInspo:d=>openSheet({kind:'inspo',id:d.id}),inspoPick:d=>inspoPick(d.id),
-  inspoOn:d=>inspoSet({on:d.v==='1'}),inspoN:d=>inspoSet({n:+d.n}),
+  inspoOn:d=>inspoSet({on:d.v==='1'}),mixNew:d=>inspoSet({new:+d.n}),
   tPick:byId(tPick),tListNew:()=>openSheet({kind:'tlist'}),tListMenu:d=>openSheet({kind:'tlist',id:+d.id}),tNewList:d=>tNewList(d.n),
   tListSave:byId(tListSave),tListDelAsk:byId(tListDelAsk),addT:()=>addT(),openT:byId(openT),tDone:d=>tDone(+d.id,d.on==='1'),
   tMove:d=>tMove(+d.id,+d.i),tStep:d=>tStep(+d.id,d.on==='1'),tStepDel:byId(tStepDel),tStepAdd:byId(tStepAdd),tDueClear:d=>tDue(+d.id,''),
@@ -241,8 +241,9 @@ function menuHtml(){const dl=S.dislikes||[],dark=document.documentElement.getAtt
   <div class="mrow"><span>${t('langT')}</span><span class="seg">${['no','pl','en'].map(l=>`<button class="${l===lang?'on':''}" data-click="setLang" data-l="${l}">${l.toUpperCase()}</button>`).join('')}</span></div>
   <div class="mrow"><span>${t('themeT')}</span><span class="seg"><button class="${dark?'':'on'}" data-click="setTheme" data-th="light">${ic('sun')} ${t('thLight')}</button><button class="${dark?'on':''}" data-click="setTheme" data-th="dark">${ic('moon')} ${t('thDark')}</button></span></div>
   <div class="mrow"><span>${t('pDef')}</span><span class="stp"><button class="b" data-click="setDef" data-n="${S.servings_default-1}" aria-label="−">−</button><b>${S.servings_default}</b><button class="b" data-click="setDef" data-n="${S.servings_default+1}" aria-label="+">+</button></span></div>
-  ${S.inspo&&S.inspo.have?`<div class="mrow"><span>${t('inspoSetL')}<span class="desc" style="display:block">${esc(t('inspoSetD').replace('{n}',S.inspo.count))}</span></span>${kSw('inspoOn',S.inspo.on)}</div>
-  ${S.inspo.on?`<div class="mrow"><span>${t('inspoNL')}</span><span class="stp"><button class="b" data-click="inspoN" data-n="${S.inspo.n-1}" aria-label="−" ${S.inspo.n<=1?'disabled':''}>−</button><b>${S.inspo.n}</b><button class="b" data-click="inspoN" data-n="${S.inspo.n+1}" aria-label="+" ${S.inspo.n>=S.inspo.max?'disabled':''}>+</button></span></div>`:''}`:''}
+  ${S.inspo&&S.inspo.new!=null?`<div class="mrow"><span>${t('mixNewL')}</span><span class="stp"><button class="b" data-click="mixNew" data-n="${S.inspo.new-1}" aria-label="−" ${S.inspo.new<=0?'disabled':''}>−</button><b>${S.inspo.new}</b><button class="b" data-click="mixNew" data-n="${S.inspo.new+1}" aria-label="+" ${S.inspo.new>=7?'disabled':''}>+</button></span></div>
+  <div class="desc mixc">${esc(t('mixCost').replace('{c}',S.inspo.cost.calls).replace('{n}',S.inspo.cost.new).replace('{b}',S.inspo.cost.base).replace('{h}',S.inspo.cost.home))}</div>`:''}
+  ${S.inspo&&S.inspo.have&&S.inspo.new!=null?`<div class="mrow"><span>${t('inspoSetL')}<span class="desc" style="display:block">${esc(t('inspoSetD').replace('{n}',S.inspo.count))}</span></span>${kSw('inspoOn',S.inspo.on)}</div>`:''}
   ${priceMenu()}
   <button class="act" data-click="openKidProf">${ic('ppl')} ${t('kidProfT')}${kOn()?' · '+esc(S.kid.name):''}</button>
   <div class="msec"><b>${ic('bad')} ${t('dislikesT')}</b> <span class="desc">${t('dislikesSub')}</span>
@@ -575,6 +576,9 @@ function bookList(){const rs=S.recipes||[],q=bookQ.trim().toLowerCase(),picked=b
   if(!list.length)return `<div class="card">${t('bookNone')}</div>`;
   return list.map(r=>{const v=rv(r),on=picked.has(r.id);return `<div class="brow" data-rid="${r.id}"><button class="nmb" data-click="openBook" data-id="${r.id}"><span class="name">${esc(v.name)}</span><span class="desc">${esc([r.time_min?r.time_min+' min':'',v.description].filter(Boolean).join(' · '))}</span></button>
    <button class="chip ${on?'on':''}" data-click="togglePick" data-id="${r.id}" aria-pressed="${on}">${on?'✓ '+t('inPlan'):ic('plus')+' '+t('toPlan')}</button></div>`}).join('')}
+// Dania domu: ugotowane dania, które same wracają do planu. Jedna pozycja na danie, warianty nazwy pod spodem.
+function homeList(){const hs=(S.home||[]);if(!hs.length||!S.inspo||S.inspo.new==null)return '';
+  return `<div class="lbl hlbl">${t('homeT')} · ${hs.length}</div><div class="desc bhint">${t('homeHint')}</div>`+hs.map(d=>`<div class="hrow"><span class="name">${esc(d.name)}</span><span class="desc">${esc([d.n?t('homeN').replace('{n}',d.n):'',d.last?t('homeLast').replace('{d}',dm(d.last)):'',d.also.length?t('homeAlso').replace('{x}',d.also.join(', ')):''].filter(Boolean).join(' · '))}</span></div>`).join('')}
 // Baza inspiracji w zakładce przepisów: lista pobierana raz (nie zmienia się między wdrożeniami), filtr po białku.
 let bookTab='ours',INS=null,insF='all',insBusy=false;
 const INS_F={all:x=>x.pool==='main',legume:x=>x.pool==='main'&&x.kind==='legume',egg:x=>x.pool==='main'&&['egg','cheese','dairy'].includes(x.kind),
@@ -605,7 +609,7 @@ function book(){if(!insOn())bookTab='ours';
    <div class="chips ifl">${Object.keys(INS_F).map(k=>`<button class="chip ${insF===k?'on':''}" data-click="insFilter" data-k="${k}" aria-pressed="${insF===k}">${t(`inspoF_${k}`)}</button>`).join('')}</div>
    <div class="desc bhint">${t('inspoHint')}</div><div id="blist">${insList()}</div></div>`;
   return `<div class="book">${bookTabs()}<div class="inrow"><input id="bq" placeholder="${esc(t('bookSearch'))}" value="${esc(bookQ)}" data-input="bookQ" autocomplete="off"><button class="b" data-click="toggleCust">${ic('plus')} ${t('custBtn')}</button></div>
-  ${custOpen?custPanel():''}<div class="desc bhint">${t('bookHint')}</div><div id="blist">${bookList()}</div></div>`}
+  ${custOpen?custPanel():''}<div class="desc bhint">${t('bookHint')}</div><div id="blist">${bookList()}</div>${homeList()}</div>`}
 // Podgląd przepisu z książki. „Wstaw na dzień” ma dwa kroki: wybór dnia pokazuje, jakie danie zostanie zastąpione, dopiero „Wstaw tutaj” zapisuje.
 function bookSheet(r){const v=rv(r),on=bookPicked().has(r.id),D=t('days');let use='';
   if(S.week){const k=sheet.day,m=k!=null?S.meals.find(x=>x.day===k):null;
