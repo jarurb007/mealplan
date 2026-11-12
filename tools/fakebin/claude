@@ -77,7 +77,7 @@ elif "nie spełnia bilansu talerza" in p:
     # poprawka bilansu: przepis z promptu + fasola. Danie z "Uforbederlig" w nazwie wraca bez zmian (model nie pomógł).
     m = json.loads(p[p.index("Przepis:\n") + 9:])
     if "Uforbederlig" not in m["name"]:
-        m["ingredients"].append({"name": "hvite bønner", "qty": 800, "unit": "g", "aisle": "Tørrvarer og hermetikk", "from_pantry": False})
+        m["ingredients"].append({"name": "hvite bønner", "qty": 400, "unit": "g", "aisle": "Tørrvarer og hermetikk", "from_pantry": False})
         m["steps"].append("ha i bønnene")
         m["description"] = "med hvite bønner"
     out = {"meal": m}
