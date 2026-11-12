@@ -156,6 +156,8 @@ const ACT={
   copyList:()=>copyList(),addP:()=>addP(),delP:byId(delP),addC:()=>addC(),delC:byId(delC),gen:()=>gen(),jbAdd:()=>jbAdd(),
   openBook:d=>openSheet({kind:'book',id:+d.id}),togglePick:d=>takeRec(+d.id,!bookPicked().has(+d.id)),useDay:d=>{sheet.day=+d.d;render()},
   useRec:d=>useRec(+d.id,+d.d),delRecAsk:byId(delRecAsk),
+  bookTab:d=>{bookTab=d.k;render()},insFilter:d=>{insF=d.k;render()},openInspo:d=>openSheet({kind:'inspo',id:d.id}),inspoPick:d=>inspoPick(d.id),
+  inspoOn:d=>inspoSet({on:d.v==='1'}),inspoN:d=>inspoSet({n:+d.n}),
   tPick:byId(tPick),tListNew:()=>openSheet({kind:'tlist'}),tListMenu:d=>openSheet({kind:'tlist',id:+d.id}),tNewList:d=>tNewList(d.n),
   tListSave:byId(tListSave),tListDelAsk:byId(tListDelAsk),addT:()=>addT(),openT:byId(openT),tDone:d=>tDone(+d.id,d.on==='1'),
   tMove:d=>tMove(+d.id,+d.i),tStep:d=>tStep(+d.id,d.on==='1'),tStepDel:byId(tStepDel),tStepAdd:byId(tStepAdd),tDueClear:d=>tDue(+d.id,''),
@@ -169,7 +171,7 @@ const ACT={
   chk:(d,el)=>chk(d.k,el.checked),tDue:(d,el)=>tDue(+d.id,el.value),addImgs:(d,el)=>{addImgs(el.files);el.value=''}},
  enter:{offPost:()=>offPost(),addT:()=>addT(),tNewList:()=>tNewList(),tListSave:byId(tListSave),tStepAdd:byId(tStepAdd),tRenameSave:byId(tRenameSave),findAlts:d=>findAlts(+d.id),dislikeSave:byId(dislikeSave),priceSearch:d=>priceSearch(d.k),addX:()=>addX(),addP:()=>addP(),addC:()=>addC(),jbAdd:()=>jbAdd(),
   kidCustom:byId(kidCustom),kidExtraType:byId(kidExtraType),kidName:()=>kidName(),kidWordAdd:d=>kidWordAdd(d.f)},
- input:{custText:(d,el)=>{custText=el.value},bookQ:(d,el)=>{bookQ=el.value;const b=$('#blist');if(b)b.innerHTML=bookList()}}};
+ input:{custText:(d,el)=>{custText=el.value},bookQ:(d,el)=>{bookQ=el.value;const b=$('#blist');if(b)b.innerHTML=bookTab==='inspo'?insList():bookList()}}};
 function dispatch(kind,e){
   const el=e.target&&e.target.closest?e.target.closest('[data-'+kind+']'):null;if(!el)return;
   const name=el.dataset[kind];if(!Object.prototype.hasOwnProperty.call(ACT[kind],name))return;
@@ -205,6 +207,7 @@ function sheetBody(){
   if(sheet.kind==='confirm')return `${sheetHead(esc(sheet.title))}<p class="ptxt">${esc(sheet.text)}</p>
    <div class="row"><button class="b danger" data-click="confirmYes">${esc(sheet.yes)}</button><button class="b" data-click="closeSheet">${t('cancel')}</button></div>`;
   if(sheet.kind==='book')return bookSheet(S.recipes.find(r=>r.id===sheet.id));
+  if(sheet.kind==='inspo'){const x=(INS||[]).find(r=>r.id===sheet.id);return x?insSheet(x):sheetHead('…')}
   if(sheet.kind==='xitem'){const x=extraItem(sheet.id);   // własny produkt: dział sklepu (poprawka zostaje zapamiętana) i usunięcie
     return `${sheetHead(esc(x.name))}<p class="ptxt">${t('aisleQ')}</p>
      ${AISLES.map(a=>`<button class="act" data-click="setAisle" data-id="${x.extra_id}" data-a="${esc(a)}" aria-pressed="${a===x.aisle}">${esc(t(a))}${a===x.aisle?' ✓':''}</button>`).join('')}
@@ -238,6 +241,8 @@ function menuHtml(){const dl=S.dislikes||[],dark=document.documentElement.getAtt
   <div class="mrow"><span>${t('langT')}</span><span class="seg">${['no','pl','en'].map(l=>`<button class="${l===lang?'on':''}" data-click="setLang" data-l="${l}">${l.toUpperCase()}</button>`).join('')}</span></div>
   <div class="mrow"><span>${t('themeT')}</span><span class="seg"><button class="${dark?'':'on'}" data-click="setTheme" data-th="light">${ic('sun')} ${t('thLight')}</button><button class="${dark?'on':''}" data-click="setTheme" data-th="dark">${ic('moon')} ${t('thDark')}</button></span></div>
   <div class="mrow"><span>${t('pDef')}</span><span class="stp"><button class="b" data-click="setDef" data-n="${S.servings_default-1}" aria-label="−">−</button><b>${S.servings_default}</b><button class="b" data-click="setDef" data-n="${S.servings_default+1}" aria-label="+">+</button></span></div>
+  ${S.inspo&&S.inspo.have?`<div class="mrow"><span>${t('inspoSetL')}<span class="desc" style="display:block">${esc(t('inspoSetD').replace('{n}',S.inspo.count))}</span></span>${kSw('inspoOn',S.inspo.on)}</div>
+  ${S.inspo.on?`<div class="mrow"><span>${t('inspoNL')}</span><span class="stp"><button class="b" data-click="inspoN" data-n="${S.inspo.n-1}" aria-label="−" ${S.inspo.n<=1?'disabled':''}>−</button><b>${S.inspo.n}</b><button class="b" data-click="inspoN" data-n="${S.inspo.n+1}" aria-label="+" ${S.inspo.n>=S.inspo.max?'disabled':''}>+</button></span></div>`:''}`:''}
   ${priceMenu()}
   <button class="act" data-click="openKidProf">${ic('ppl')} ${t('kidProfT')}${kOn()?' · '+esc(S.kid.name):''}</button>
   <div class="msec"><b>${ic('bad')} ${t('dislikesT')}</b> <span class="desc">${t('dislikesSub')}</span>
@@ -295,6 +300,11 @@ function mealState(m){   // dopisek pod nazwą, tylko gdy z daniem coś się dzi
   if(m.draft&&(m.draft_error||S.week.confirmed))return '⚠ '+t('recNone');
   if(m.overdue&&m.status==='planned')return '⚠ '+t('overdueS');
   return ''}
+// Danie z bazy inspiracji: serwis i ocena (ocena tylko wtedy, gdy ma dość głosów); po 👍 albo ⭐ domowników „sprawdzone u was”.
+const fmtR=r=>lang==='en'?r.toFixed(1):r.toFixed(1).replace('.',',');
+const srcRate=x=>x.rating?` · ★ ${fmtR(x.rating)} (${x.votes})`:'';
+function srcTag(m){return !m.src?'':(m.liked||m.fav)?t('inspoOurs'):m.src.site+srcRate(m.src)}
+function srcLine(x){return `<div class="desc isrc">${t('inspoBy')} <a class="lnk" href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.site)} ↗</a>${esc(srcRate(x))}</div>`}
 function mealCard(m){const v=mv(m),id=m.id,isT=m.date===S.today,done=m.status==='done';
   const d=`<span class="d handle"><small>${esc(isT?t('today'):t('daysS')[m.day])}</small><b>${m.date.slice(8)}</b></span>`;
   const more=`<button class="mb" data-click="sheetMeal" data-id="${id}" aria-label="${esc(t('actions'))}">${ic('more')}</button>`;
@@ -302,7 +312,7 @@ function mealCard(m){const v=mv(m),id=m.id,isT=m.date===S.today,done=m.status===
    <button class="nmb" data-click="sheetMeal" data-id="${id}"><span class="name">${t('dayOffS')}</span><span class="desc"><s>${esc(v.name)}</s></span></button>
    <button class="mb" data-click="st" data-id="${id}" data-s="planned" aria-label="${esc(t('restore'))}" title="${esc(t('restore'))}">${ic('undo')}</button></div></div>`;
   let sub=[mealState(m),...(isT?[m.time_min?m.time_min+' min':'',m.servings_eff+' '+t('por'),m.is_fish?t('fish'):'']:[]),
-    m.status==='skipped'?t('tSkip'):'',m.owned?t('tCarry'):'',m.bal&&m.bal.level==='none'?t('balNoneS'):''].filter(Boolean).map(esc).join(' · ').replace(/^⏳ /,ic('wait')+' ').replace(/^⚠ /,ic('warn')+' ');
+    m.status==='skipped'?t('tSkip'):'',m.owned?t('tCarry'):'',m.bal&&m.bal.level==='none'?t('balNoneS'):'',srcTag(m)].filter(Boolean).map(esc).join(' · ').replace(/^⏳ /,ic('wait')+' ').replace(/^⚠ /,ic('warn')+' ');
   if(isT&&done)sub=`<b>${esc(t('tDoneT'))}</b>`+(sub?' · '+sub:'');   // dziś: stan także słowem, nie tylko kółkiem
   const ck=`<button class="ck ${done?'on':''}" data-click="toggleDone" data-id="${id}" aria-pressed="${done}" aria-label="${esc(t('markDoneA'))}"></button>`;
   return `<div class="meal ${done?'done':''} ${m.overdue&&m.status==='planned'?'late':''}" data-id="${id}"><div class="dr">${d}
@@ -340,7 +350,7 @@ function kidSheet(m){const k=m.kid,id=m.id,own=kOwn(k),hints=(S.kid_extras||[]).
    ${sheet.back?`<button class="lnk" data-click="openKidWeek">‹ ${t('kidWeekBack')}</button>`:''}`;
   const custom=`<div class="row"><button class="b" data-click="kidMore" data-id="${id}">${t('kidMoreB')}</button><button class="b" data-click="kidType">${t('kidTypeB')}</button></div>
    ${sheet.type?`<div class="inrow"><input id="kidtxt" placeholder="${esc(t('kidTypePh'))}" data-enter="kidCustom" data-id="${id}" autocomplete="off"><button class="b p" data-click="kidCustom" data-id="${id}">${t('add')}</button></div>`:''}`;
-  const dish=own?`<h3>${esc(k.pick.name)}</h3><ul class="ings">${k.pick.ingredients.map(i=>i.shared?`<li>${esc(nm(i.name))} <span class="desc">(${t('kidFromYours')})</span></li>`:`<li>${esc(i.qty??'')} ${esc(i.unit)} ${esc(nm(i.name))}</li>`).join('')}</ul>
+  const dish=own?`<h3>${esc(k.pick.name)}</h3>${okUrl(k.pick.source)?`<a class="lnk" href="${esc(k.pick.source)}" target="_blank" rel="noopener">${t('src')} ↗</a>`:''}<ul class="ings">${k.pick.ingredients.map(i=>i.shared?`<li>${esc(nm(i.name))} <span class="desc">(${t('kidFromYours')})</span></li>`:`<li>${esc(i.qty??'')} ${esc(i.unit)} ${esc(nm(i.name))}</li>`).join('')}</ul>
    ${k.pick.steps.length?`<ol class="steps">${k.pick.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>`:`<div class="row"><button class="b" data-click="kidRecipe" data-id="${id}">${ic('pen')} ${t('kidRecB')}</button></div>`}`:'';
   return `${head}
    <button class="kopt" data-click="kidMode" data-id="${id}" data-m="same" aria-pressed="${!own}"><span class="rb ${own?'':'on'}"></span><span class="li"><b>${t('kidSameL')}</b><span class="desc">${t('kidSameD')}</span></span></button>
@@ -447,8 +457,8 @@ function recSheet(m){const v=mv(m),id=m.id;let body;
     body+=`<h3>${t('sectIng')}</h3>${ingList(m.ingredient_names||[])}`;
   }else body=`<h3>${t('sectIng')}</h3><ul class="ings">${m.ingredients.map((i,k)=>`<li>${esc(m.qv[k]??'')} ${esc(i.unit)} ${esc(v.ing[k]||i.name)}</li>`).join('')}</ul>
    ${kidRecBox(m)}<h3>${t('sectStp')}</h3><ol class="steps">${v.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>
-   ${okUrl(m.source)?`<a class="lnk" href="${esc(m.source)}" target="_blank" rel="noopener">${t('src')} ↗</a>`:''}`;
-  return `${sheetHead(esc(v.name))}<div class="desc">${[v.description,m.time_min?m.time_min+' min':'',m.servings_eff+' '+t('por'),m.is_fish?t('fish'):''].filter(Boolean).map(esc).join(' · ')}</div>${balLine(m)}
+   ${okUrl(m.source)&&!m.src?`<a class="lnk" href="${esc(m.source)}" target="_blank" rel="noopener">${t('src')} ↗</a>`:''}`;
+  return `${sheetHead(esc(v.name))}<div class="desc">${[v.description,m.time_min?m.time_min+' min':'',m.servings_eff+' '+t('por'),m.is_fish?t('fish'):''].filter(Boolean).map(esc).join(' · ')}</div>${m.src?srcLine(m.src):''}${balLine(m)}
    <div class="row">${m.draft?'':`<button class="b p" data-click="openCook" data-id="${id}">${ic('pot')} ${t('cookBtn')}</button>`}<button class="b" data-click="sheetMeal" data-id="${id}">${ic('more')} ${t('actions')}</button></div>
    ${body}`}
 // Arkusz akcji dania: zamiana (podpowiedzi, własne życzenie, propozycje), przeniesienie, porcje, przepisy, 👎, usunięcie.
@@ -565,7 +575,36 @@ function bookList(){const rs=S.recipes||[],q=bookQ.trim().toLowerCase(),picked=b
   if(!list.length)return `<div class="card">${t('bookNone')}</div>`;
   return list.map(r=>{const v=rv(r),on=picked.has(r.id);return `<div class="brow" data-rid="${r.id}"><button class="nmb" data-click="openBook" data-id="${r.id}"><span class="name">${esc(v.name)}</span><span class="desc">${esc([r.time_min?r.time_min+' min':'',v.description].filter(Boolean).join(' · '))}</span></button>
    <button class="chip ${on?'on':''}" data-click="togglePick" data-id="${r.id}" aria-pressed="${on}">${on?'✓ '+t('inPlan'):ic('plus')+' '+t('toPlan')}</button></div>`}).join('')}
-function book(){return `<div class="book"><div class="inrow"><input id="bq" placeholder="${esc(t('bookSearch'))}" value="${esc(bookQ)}" data-input="bookQ" autocomplete="off"><button class="b" data-click="toggleCust">${ic('plus')} ${t('custBtn')}</button></div>
+// Baza inspiracji w zakładce przepisów: lista pobierana raz (nie zmienia się między wdrożeniami), filtr po białku.
+let bookTab='ours',INS=null,insF='all',insBusy=false;
+const INS_F={all:x=>x.pool==='main',legume:x=>x.pool==='main'&&x.kind==='legume',egg:x=>x.pool==='main'&&['egg','cheese','dairy'].includes(x.kind),
+  tofu:x=>x.pool==='main'&&x.kind==='tofu',fish:x=>x.pool==='main'&&x.is_fish,taco:x=>x.pool==='main'&&x.taco,kid:x=>x.pool==='kid'};
+const insOn=()=>!!(S&&S.inspo&&S.inspo.on);
+async function loadInspo(){if(INS||insBusy)return;insBusy=true;
+  try{const r=await fetch('/api/inspo');if(r.ok)INS=(await r.json()).recipes}catch(e){}
+  insBusy=false;if(S)render()}
+function insPicked(x){return S.cravings.find(c=>!c.used&&!c.recipe_id&&c.text.trim().toLowerCase()===x.name.toLowerCase())}
+function insMeta(x){return [x.ours?t('inspoOurs'):x.site+srcRate(x),x.time_min?x.time_min+' min':''].filter(Boolean).join(' · ')}
+function insList(){if(!INS){loadInspo();return `<div class="card">${ic('wait')} ${t('inspoLoad')}</div>`}
+  const q=bookQ.trim().toLowerCase(),list=INS.filter(x=>!x.disliked&&INS_F[insF](x)&&(!q||[x.name,x.description,x.protein,...x.ingredients.map(i=>i.name)].join(' ').toLowerCase().includes(q)));
+  if(!list.length)return `<div class="card">${t('bookNone')}</div>`;
+  return list.map(x=>{const on=!!insPicked(x);return `<div class="brow" data-iid="${esc(x.id)}"><button class="nmb" data-click="openInspo" data-id="${esc(x.id)}"><span class="name">${esc(x.name)}</span><span class="desc">${esc(insMeta(x))}</span></button>
+   <button class="chip ${on?'on':''}" data-click="inspoPick" data-id="${esc(x.id)}" aria-pressed="${on}">${on?'✓ '+t('inPlan'):ic('plus')+' '+t('toPlan')}</button></div>`}).join('')}
+function insSheet(x){const on=!!insPicked(x);
+  return `${sheetHead(esc(x.name))}<div class="desc">${esc([x.description,x.time_min?x.time_min+' min':'',x.servings+' '+t('por'),x.is_fish?t('fish'):''].filter(Boolean).join(' · '))}</div>
+   ${srcLine(x)}${x.bal==='low'||x.bal==='none'?`<div class="desc bal">${esc(t(x.bal==='none'?'balNone':'balLow'))}</div>`:''}
+   <button class="act" data-click="inspoPick" data-id="${esc(x.id)}" aria-pressed="${on}">${on?'✓ '+t('inPlan'):ic('plus')+' '+t('toPlan')}</button>
+   <h3>${t('sectIng')}</h3><ul class="ings">${x.ingredients.map(i=>`<li>${esc(i.q)} ${esc(i.unit)} ${esc(nm(i.name))}</li>`).join('')}</ul>
+   <div class="desc">${t('inspoStepsNote')}</div>`}
+async function inspoPick(id){const x=(INS||[]).find(r=>r.id===id);if(!x)return;const ex=insPicked(x);
+  const r=ex?await api('/api/cravings/'+ex.id,'DELETE'):await api('/api/cravings','POST',{text:x.name});if(r)set(r)}
+async function inspoSet(body){const r=await api('/api/inspo/settings','POST',W(body));if(r)set(r)}
+function bookTabs(){return insOn()?`<div class="seg btabs"><button class="${bookTab==='ours'?'on':''}" data-click="bookTab" data-k="ours" aria-pressed="${bookTab==='ours'}">${t('inspoOursTab')} · ${(S.recipes||[]).length}</button><button class="${bookTab==='inspo'?'on':''}" data-click="bookTab" data-k="inspo" aria-pressed="${bookTab==='inspo'}">${t('inspoTab')} · ${S.inspo.count}</button></div>`:''}
+function book(){if(!insOn())bookTab='ours';
+  if(bookTab==='inspo')return `<div class="book">${bookTabs()}<div class="inrow"><input id="bq" placeholder="${esc(t('bookSearch'))}" value="${esc(bookQ)}" data-input="bookQ" autocomplete="off"></div>
+   <div class="chips ifl">${Object.keys(INS_F).map(k=>`<button class="chip ${insF===k?'on':''}" data-click="insFilter" data-k="${k}" aria-pressed="${insF===k}">${t(`inspoF_${k}`)}</button>`).join('')}</div>
+   <div class="desc bhint">${t('inspoHint')}</div><div id="blist">${insList()}</div></div>`;
+  return `<div class="book">${bookTabs()}<div class="inrow"><input id="bq" placeholder="${esc(t('bookSearch'))}" value="${esc(bookQ)}" data-input="bookQ" autocomplete="off"><button class="b" data-click="toggleCust">${ic('plus')} ${t('custBtn')}</button></div>
   ${custOpen?custPanel():''}<div class="desc bhint">${t('bookHint')}</div><div id="blist">${bookList()}</div></div>`}
 // Podgląd przepisu z książki. „Wstaw na dzień” ma dwa kroki: wybór dnia pokazuje, jakie danie zostanie zastąpione, dopiero „Wstaw tutaj” zapisuje.
 function bookSheet(r){const v=rv(r),on=bookPicked().has(r.id),D=t('days');let use='';

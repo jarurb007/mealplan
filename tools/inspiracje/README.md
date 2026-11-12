@@ -1,6 +1,6 @@
 # Baza inspiracji: sprawdzone obiady wegetariańskie i rybne
 
-Zebrane 12.11.2026. Materiał badawczy do domowego użytku; aplikacja jeszcze z niego nie korzysta.
+Zebrane 12.11.2026 do domowego użytku. Aplikacja czyta z tego katalogu tylko wynik: `app/inspiracje.json`.
 
 ## Pliki
 
@@ -10,6 +10,10 @@ Zebrane 12.11.2026. Materiał badawczy do domowego użytku; aplikacja jeszcze z 
 - `pobierz.py`: grzeczne pobieranie stron i odczyt faktów ze schema.org/Recipe.
 - `wybor.py`: lista wybranych adresów oraz pola dopisane ręcznie (białko, dla dziecka, technika).
 - `zbuduj.py`: składa oba pliki JSON z faktów ze stron i z `wybor.py`.
+- `normalizuj.py`: z obu plików robi `app/inspiracje.json`, czyli to, co czyta aplikacja: opakowania przeliczone na gramy
+  i dl (puszka 400 g, karton 380 g), nazwy składników jak w aplikacji, dział sklepu przy każdym składniku. Bez sieci.
+  Pomija dwie pozycje: „Fritert tofu med søt chilisaus” (w składnikach ze strony nie ma tofu) i „Middagspannekaker med
+  Kesam” (12 porcji to 12 naleśników). Dania z mniejszą ilością białka zostają; aplikacja pokazuje przy nich uwagę.
 
 ## Źródła i liczba pozycji
 
