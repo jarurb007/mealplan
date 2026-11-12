@@ -7,6 +7,8 @@ FAKE_TR=1 -> prompt tłumaczenia dostaje prawdziwą odpowiedź (każdy tekst z p
 FAKE_TIMES=plik -> po każdym wywołaniu dopisuje wiersz "rodzaj początek koniec" (do liczenia równoległości).
 Prompt z "price_pick" (wybór produktu do ceny) dostaje drugi produkt z listy każdego składnika.
 FAKE_FAIL_FILE=plik -> jeśli plik istnieje, a prompt zawiera jego treść, atrapa kończy się błędem (model zawiódł).
+Bilans talerza: przepis na danie z "Soppstroganoff" lub "Uforbederlig" w nazwie nie ma białka, z "Risotto" ma go mało,
+z "Linsegryte" jest w porządku; prompt poprawki ("nie spełnia bilansu talerza") dokłada fasolę (poza "Uforbederlig").
 Prompt dopasowania gazetek ("offer_match") dostaje pary wyliczone prostą regułą wspólnych słów,
 prompt odczytu gazetki KIWI ("leaflet_offers") kilka stałych ofert."""
 import json, os, re, sys, time
@@ -70,6 +72,26 @@ elif '"options"' in p:
     # pierwsza propozycja celowo = danie z listy 👎 (serwer ma ją odfiltrować)
     out = {"options": [{"name": "Szkic 2", "description": "zablokowane?", "is_fish": False, "ingredients": ing}] +
                       [{"name": f"Alt {i+1} testowy", "description": "opis testowy", "is_fish": False, "ingredients": ing} for i in range(3)]}
+elif "nie spełnia bilansu talerza" in p:
+    kind = "fix"
+    # poprawka bilansu: przepis z promptu + fasola. Danie z "Uforbederlig" w nazwie wraca bez zmian (model nie pomógł).
+    m = json.loads(p[p.index("Przepis:\n") + 9:])
+    if "Uforbederlig" not in m["name"]:
+        m["ingredients"].append({"name": "hvite bønner", "qty": 800, "unit": "g", "aisle": "Tørrvarer og hermetikk", "from_pantry": False})
+        m["steps"].append("ha i bønnene")
+        m["description"] = "med hvite bønner"
+    out = {"meal": m}
+elif '"meal": {' in p and re.search(r"Napisz pełny przepis na danie: [^\n]*(Soppstroganoff|Uforbederlig|Risotto|Linsegryte)", p):
+    kind = "meal"
+    # dania do testów bilansu: bez białka (Soppstroganoff, Uforbederlig), z małą ilością (Risotto), w porządku (Linsegryte)
+    nm = re.search(r"Napisz pełny przepis na danie: (.*?) \(", p).group(1)
+    I = lambda n, q, u, a="Frukt og grønt": {"name": n, "qty": q, "unit": u, "aisle": a, "from_pantry": False}
+    base = [I("løk", 2, "stk"), I("gulrot", 2, "stk"), I("ris", 225, "g", "Tørrvarer og hermetikk")]
+    extra = ([I("røde linser", 300, "g", "Tørrvarer og hermetikk"), I("hakkede tomater", 400, "g", "Tørrvarer og hermetikk")] if "Linsegryte" in nm
+             else [I("sjampinjong", 300, "g"), I("grana padano", 40, "g", "Meieri og kjøl")] if "Risotto" in nm
+             else [I("sjampinjong", 400, "g"), I("rømme", 3, "dl", "Meieri og kjøl")])
+    out = {"meal": {"name": nm, "time_min": 30, "description": "d", "is_fish": False, "ingredients": base + extra,
+                    "steps": ["krok 1", "krok 2"]}}
 elif '"meal": {' in p:
     kind = "meal"
     out = {"meal": {"name": "Test", "time_min": 30, "description": "d", "is_fish": False,
