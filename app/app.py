@@ -102,6 +102,10 @@ def init_db():
         CREATE TABLE IF NOT EXISTS price_map(canon TEXT PRIMARY KEY, ean TEXT, name TEXT, pack REAL, fam TEXT,
                                              price REAL, pdate TEXT, chain TEXT, source TEXT, cands TEXT,
                                              checked TEXT);
+        CREATE TABLE IF NOT EXISTS kid_memo(norm TEXT PRIMARY KEY, mode TEXT, pick TEXT, extras TEXT,
+                                            updated TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS kid_dishes(norm TEXT PRIMARY KEY, name TEXT, data TEXT, n INTEGER DEFAULT 0,
+                                              updated TEXT DEFAULT CURRENT_TIMESTAMP);
         """)
 
     for table, col in (("meals", "tr TEXT"), ("meals", "servings INTEGER"),
@@ -109,7 +113,7 @@ def init_db():
                        ("checks", "label TEXT"), ("checks", "qty REAL"),
                        ("cravings", "day INTEGER"), ("pantry", "day INTEGER"), ("pantry", "week_id INTEGER"),
                        ("weeks", "confirmed INTEGER DEFAULT 1"), ("meals", "pre TEXT"),
-                       ("extras", "aisle TEXT")):
+                       ("extras", "aisle TEXT"), ("meals", "kid TEXT"), ("weeks", "kid_step INTEGER DEFAULT 1")):
         try:
             with db() as c:
                 c.execute(f"ALTER TABLE {table} ADD COLUMN {col}")
@@ -573,7 +577,10 @@ Jeśli któreś danie już je wykorzystuje, nie zmieniaj go. Zwróć WYŁĄCZNIE
 def meal_row(r, bad=None):
     """bad: znormalizowane nazwy dań z 👎; bez niego funkcja pyta bazę sama (wołający z pętli powinni podać)."""
     d = json.loads(r["data"])
-    return {"id": r["id"], "day": r["day"], "status": r["status"], "locked": bool(r["locked"]),
+    kid = json.loads(r["kid"]) if "kid" in r.keys() and r["kid"] else None
+    if kid and kid.get("for") != norm_name(d.get("name")):
+        kid = None  # danie dorosłych zostało zamienione: plan dziecka dla tego dnia powstanie od nowa
+    return {"id": r["id"], "day": r["day"], "status": r["status"], "locked": bool(r["locked"]), "kid": kid,
             "alts": ([{**{k: v for k, v in o.items() if k != "recipe"}, "ready": "recipe" in o}
                       for o in json.loads(r["alts"])] if r["alts"] else None),
             "tr": json.loads(r["tr"]) if r["tr"] else {}, "servings": r["servings"],
@@ -877,14 +884,18 @@ def shop_agg(c, week, meals=None, dflt=None):
     stock = pantry_stock(pantry_names(c, week["id"]))
     dflt = dflt or default_servings()
     agg, have = {}, {}
+    kid = kid_on(kid_profile(c))
 
-    def add(tgt, m, i, cn, q, fam):
+    def add(tgt, m, i, cn, q, fam, kid_dish=None):
         e = tgt.setdefault((cn, fam), {"canon": cn, "fam": fam, "qty": 0, "aisles": Counter(), "uses": []})
         if q is not None:
             e["qty"] += q
         e["aisles"][i["aisle"]] += 1
         uq, uu = show_qty(q, fam) if q else ("", fam)
-        e["uses"].append({"meal": m["id"], "day": m["day"], "qty": uq, "unit": uu})
+        use = {"meal": m["id"], "day": m["day"], "qty": uq, "unit": uu}
+        if kid_dish is not None:
+            use["kid"] = kid_dish  # nazwa własnego dania dziecka; "" = dodatek do dania dorosłych
+        e["uses"].append(use)
 
     for m in meals:
         if m["status"] in ("skipped", "removed") or m.get("owned"):
@@ -899,6 +910,11 @@ def shop_agg(c, week, meals=None, dflt=None):
                 add(have, m, i, cn, q * share if q is not None else None, fam)
             if share < 1:
                 add(agg, m, i, cn, q * (1 - share) if q is not None else None, fam)
+        if kid:  # porcja dziecka ma stałą wielkość: nie skaluje się z porcjami dorosłych i nie sięga do lodówki
+            for i, dish in kid_shop_items(m.get("kid")):
+                cn = canon(i["name"], i["unit"], i["aisle"])
+                q, fam = shop_qty(cn, i["qty"] if isinstance(i["qty"], (int, float)) else None, i["unit"])
+                add(agg, m, i, cn, q, fam, dish)
     return agg, have
 
 
@@ -2243,8 +2259,10 @@ def build_state(week=None, meals=None, shop=None):
             dislikes.append({"id": x["id"], "name": x["name"], "reason": x["reason"]})
             bad.add(x["norm"])
         todo = todo_state(c)
+        kid = kid_profile(c)
+        kid_info = {"kid": kid, "kid_dishes": kid_dish_list(c), "kid_extras": kid_extra_hints(c)}
         if not w:
-            return {"week": None, "meals": [], "pantry": pantry, "carry": carry, "cravings": cravings,
+            return {"week": None, "meals": [], "pantry": pantry, "carry": carry, "cravings": cravings, **kid_info,
                     "recipes": recipes, "weeks": [], "current_id": None, "dislikes": dislikes, "todo": todo,
                     "offers": offers_info(c),
                     "servings_default": dflt, "price_cfg": price_cfg(c),
@@ -2262,6 +2280,10 @@ def build_state(week=None, meals=None, shop=None):
             fct = scale_factor(m, dflt)
             m["servings_eff"] = m["servings"] or dflt
             m["qv"] = [fmt_qty(scale_qty(i["qty"], i["unit"], fct)) for i in m["ingredients"]]
+        if kid_on(kid) and start + timedelta(days=6) >= today:
+            kid_kick([m["id"] for m in meals if m["status"] != "removed" and not m["kid"]])
+        for m in meals:
+            m["kid_busy"] = m["id"] in KID_BUSY
         groups, have, gone = shop_rows(c, w, *(shop or shop_agg(c, w, meals, dflt)))
         offers = attach_offers(c, w, groups)
         pending = sum(1 for m in meals if m["draft"] and m["status"] != "removed")
@@ -2269,8 +2291,8 @@ def build_state(week=None, meals=None, shop=None):
             gone = []
         return {"pending": pending,
                 "week": {"id": w["id"], "start": w["start"], "end": str(start + timedelta(days=6)),
-                         "confirmed": bool(w["confirmed"])},
-                "meals": meals, "pantry": pantry, "carry": carry, "cravings": cravings, "recipes": recipes,
+                         "confirmed": bool(w["confirmed"]), "kid_step": bool(w["kid_step"])},
+                **kid_info, "meals": meals, "pantry": pantry, "carry": carry, "cravings": cravings, "recipes": recipes,
                 "dislikes": dislikes, "todo": todo, "offers": offers,
                 "servings_default": dflt, "price_cfg": price_cfg(c), "prices": week_prices(c, w, meals, dflt),
                 "trmap": build_trmap(meals), "shopping": groups, "gone": gone,
@@ -2773,7 +2795,9 @@ def confirm_week(req: ConfirmReq):
         w = current_week(c, req.week)
         if not w:
             raise HTTPException(400, "brak planu")
-        c.execute("UPDATE weeks SET confirmed=1 WHERE id=?", (w["id"],))
+        # z profilem dziecka: po zatwierdzeniu aplikacja pyta, co dziecko je w każdy dzień (kid_step=0, dopóki nie odpowiedzą)
+        c.execute("UPDATE weeks SET confirmed=1, kid_step=? WHERE id=?",
+                  (0 if kid_on(kid_profile(c)) and not w["confirmed"] else w["kid_step"], w["id"]))
         names, mids = pantry_names(c, w["id"]), []
         for r in c.execute("SELECT * FROM meals WHERE week_id=? ORDER BY day", (w["id"],)).fetchall():
             d = json.loads(r["data"])
@@ -2986,6 +3010,425 @@ def carry_over(mid: int):
 class PantryReq(BaseModel):
     name: str
     note: str = ""
+
+
+# ---------- plan dziecka ----------
+# Planer dorosłych się nie zmienia. Gdy powstaje szkic tygodnia, w tle dla każdego dnia model proponuje kilka prostych
+# dań dla dziecka, podobnych do dania dorosłych (wspólny ryż, makaron, blacha). Po zatwierdzeniu planu domownicy
+# wybierają na każdy dzień: „to samo” albo „własne danie”, plus ewentualny dodatek tylko dla dziecka. Wybór przy danym
+# daniu dorosłych jest pamiętany (kid_memo) i wraca przy następnym planie; wybrane i wpisane dania trafiają na listę dań
+# dziecka (kid_dishes). Plan dnia leży w meals.kid (JSON): {"for": nazwa dania dorosłych, "mode": "same"|"own",
+# "pick": danie albo None, "props": [dania], "extras": [składniki], "away": bool, "last": bool, "touched": bool}.
+KID_DEFAULT = {"on": False, "name": "", "likes": [], "dislikes": [], "fish_max": 3, "meat": False, "novelty": True}
+KID_PROPS = 3            # tyle propozycji własnego dania naraz
+KID_EXTRA_HINTS = ["agurk", "paprika", "tomat"]
+KID_BUSY: set = set()    # dania, dla których propozycje właśnie powstają
+KID_LOCK = threading.Lock()
+
+
+def kid_profile(c) -> dict:
+    r = c.execute("SELECT value FROM settings WHERE key='kid'").fetchone()
+    try:
+        saved = json.loads(r["value"]) if r else {}
+    except (ValueError, TypeError):
+        saved = {}
+    return {**KID_DEFAULT, **{k: v for k, v in saved.items() if k in KID_DEFAULT}}
+
+
+def kid_on(p: dict) -> bool:
+    return bool(p.get("on") and str(p.get("name") or "").strip())
+
+
+def kid_ing(i: dict) -> dict:
+    aisle = i.get("aisle") if i.get("aisle") in AISLES else "Krydder og basis"
+    q = i.get("qty")
+    return tidy_ing({"name": str(i.get("name", "")).strip(), "qty": q if isinstance(q, (int, float)) else None,
+                     "unit": str(i.get("unit") or "").strip(), "aisle": aisle, "shared": bool(i.get("shared"))})
+
+
+def kid_dish(o: dict) -> dict:
+    mins = o.get("extra_min")
+    return {"name": str(o.get("name") or "").strip()[:80], "is_new": bool(o.get("is_new")), "is_fish": bool(o.get("is_fish")),
+            "shares": str(o.get("shares") or "").strip()[:40], "extra_min": int(mins) if isinstance(mins, (int, float)) else None,
+            "ingredients": [x for x in (kid_ing(i) for i in (o.get("ingredients") or []) if isinstance(i, dict)) if x["name"]][:12],
+            "steps": [str(x).strip() for x in (o.get("steps") or []) if str(x).strip()][:8]}
+
+
+def kid_shop_items(k) -> list:
+    """[(składnik, nazwa własnego dania albo "")] do listy zakupów: dodatki i własne danie bez tego, co bierze z dania dorosłych."""
+    if not k or k.get("away"):
+        return []
+    out = [(i, "") for i in k.get("extras") or []]
+    if k.get("mode") == "own" and k.get("pick"):
+        out += [(i, k["pick"]["name"]) for i in k["pick"].get("ingredients", []) if not i.get("shared")]
+    return out
+
+
+def kid_dish_list(c) -> list:
+    return [{"name": r["name"], "n": r["n"]} for r in c.execute("SELECT name, n FROM kid_dishes ORDER BY n DESC, updated DESC")]
+
+
+def kid_extra_hints(c) -> list:
+    """Podpowiedzi dodatków: najczęściej dopisywane, a na początek kilka surowych warzyw."""
+    cnt = Counter()
+    for r in c.execute("SELECT extras FROM kid_memo WHERE extras IS NOT NULL"):
+        cnt.update(i["name"] for i in json.loads(r["extras"]) if i.get("name"))
+    out = [n for n, _ in cnt.most_common(6)]
+    return (out + [x for x in KID_EXTRA_HINTS if x not in out])[:6]
+
+
+def kid_rules(p: dict, fish_n: int) -> str:
+    fish = ("Nie proponuj ryby." if not p["fish_max"] or fish_n >= p["fish_max"] else
+            f"Ryba jest dozwolona (w tym tygodniu jest już {fish_n} razy, limit {p['fish_max']}).")
+    meat = "Mięso jest dozwolone." if p["meat"] else "Nie proponuj mięsa ani wędlin."
+    return (f"Dziecko: {p['name']}. Lubi: {', '.join(p['likes']) or 'brak danych'}. "
+            f"Nie lubi: {', '.join(p['dislikes']) or 'brak danych'}.\n{fish} {meat}")
+
+
+KID_DISH_SCHEMA = """{"name": "...", "is_new": false, "is_fish": false, "shares": "ris", "extra_min": 5,
+ "ingredients": [{"name": "agurk", "qty": 0.25, "unit": "stk", "aisle": "Frukt og grønt", "shared": false}]}
+Reguły pól: name i nazwy składników po norwesku (bokmål, jak w sklepie), metryczne jednostki (g, dl, ml, stk, ss, ts).
+Ilości na JEDNĄ porcję dziecka. Składnik brany z dania dorosłych (np. ugotowany ryż, makaron, pieczone warzywa)
+ma "shared": true i qty null: nie trafia na listę zakupów. "shares" to nazwa głównego wspólnego składnika albo "".
+"extra_min" to dodatkowe minuty pracy ponad danie dorosłych. Soli, pieprzu i oleju nie podawaj.
+aisle dokładnie jedna z: """ + ", ".join(AISLES) + "."
+
+
+def kid_prompt(p: dict, d: dict, dishes: list, fish_n: int, n: int, avoid: list) -> str:
+    ings = d.get("ingredient_names") or [i.get("name") for i in d.get("ingredients", [])]
+    new = ('Dokładnie jedna propozycja ma być nowością ("is_new": true): danie, którego nie ma wśród sprawdzonych, '
+           'złożone głównie z tego, co dziecko lubi. Pozostałe mają "is_new": false.' if p["novelty"] else 'Wszystkie mają "is_new": false.')
+    return f"""Jesteś planerem obiadów dla rodziny. Dorośli jedzą: {d.get("name")} ({d.get("description", "")}).
+Składniki dania dorosłych: {", ".join(str(x) for x in ings if x) or "brak danych"}.
+{kid_rules(p, fish_n)}
+Sprawdzone dania dziecka (użyj, jeśli pasują do dania dorosłych): {dishes or "brak"}.
+Zaproponuj {n} prostych obiadów dla dziecka na ten dzień. Każdy ma być podobny do dania dorosłych i mało pracochłonny:
+wykorzystaj to, co i tak jest gotowane (ten sam ryż, makaron, ziemniaki, ta sama blacha), najwyżej jedna dodatkowa
+patelnia lub garnek i do 10 minut dodatkowej pracy. Na talerzu ma być źródło białka i warzywo, które dziecko je.
+{new}
+Nie powtarzaj tych dań: {avoid or "brak"}.
+"same_ok": true, jeśli dziecko najpewniej zje danie dorosłych bez zmian (lubi jego główne składniki i nie ma w nim
+niczego z listy „nie lubi”), w przeciwnym razie false.
+Zwróć WYŁĄCZNIE JSON: {{"same_ok": false, "kid_options": [ {KID_DISH_SCHEMA} ]}} z dokładnie {n} elementami w "kid_options"."""
+
+
+def kid_custom_prompt(p: dict, d: dict, text: str) -> str:
+    return f"""Rodzic wpisał danie dla dziecka na dziś: «{text}». Dorośli jedzą: {d.get("name")}.
+Składniki dania dorosłych: {", ".join(str(i.get("name")) for i in d.get("ingredients", [])) or "brak danych"}.
+{kid_rules(p, 0)}
+Nazwij to danie krótko po norwesku i wypisz jego składniki. Trzymaj się tego, co wpisał rodzic: nie zamieniaj dania
+na inne i nie dokładaj składników, których nie potrzeba (wpisane mięso lub ryba zostają).
+Zwróć WYŁĄCZNIE JSON: {{"kid_dish": {KID_DISH_SCHEMA} }}"""
+
+
+def kid_steps_prompt(dish: dict, d: dict) -> str:
+    ings = ", ".join(f'{fmt_qty(i["qty"]) if i["qty"] is not None else ""} {i["unit"]} {i["name"]}'.strip()
+                     + (" (z dania dorosłych)" if i.get("shared") else "") for i in dish["ingredients"])
+    return f"""Napisz krótki przepis (2-5 kroków, po norwesku) na danie dla dziecka: {dish["name"]}. Składniki: {ings}.
+Gotowane obok dania dorosłych: {d.get("name")}; to, co jest oznaczone „z dania dorosłych”, bierze się z ich garnka.
+Zwróć WYŁĄCZNIE JSON: {{"kid_steps": ["...", "..."]}}"""
+
+
+def kid_week_fish(c, week_id, skip_mid=None) -> int:
+    """Ile razy dziecko ma w tym tygodniu rybę: wspólne danie rybne albo własne danie z rybą."""
+    n = 0
+    for r in c.execute("SELECT id, data, kid, status FROM meals WHERE week_id=?", (week_id,)):
+        if r["status"] == "removed" or r["id"] == skip_mid:
+            continue
+        d, k = json.loads(r["data"]), json.loads(r["kid"]) if r["kid"] else None
+        own = k and k.get("for") == norm_name(d.get("name")) and k.get("mode") == "own" and k.get("pick")
+        n += bool(k["pick"].get("is_fish")) if own else bool(d.get("is_fish"))
+    return n
+
+
+def kid_get(r) -> dict:
+    """Plan dziecka dla dania z wiersza bazy; nieaktualny (inne danie dorosłych) albo brak = pusty plan „to samo”."""
+    nn = norm_name(json.loads(r["data"]).get("name"))
+    k = json.loads(r["kid"]) if r["kid"] else {}
+    if k.get("for") != nn:
+        k = {}
+    return {"for": nn, "mode": "same", "pick": None, "props": [], "extras": [], "away": False, "last": False,
+            "touched": False, **k}
+
+
+def kid_other_dish(a, b) -> bool:
+    """Czy dwa odczyty wiersza dania to już inne danie dorosłych. Sam przepis może się w tle dopisać (szkic -> pełny),
+    plan dziecka wiąże się z nazwą dania."""
+    return norm_name(json.loads(a["data"]).get("name")) != norm_name(json.loads(b["data"]).get("name"))
+
+
+def kid_save(c, mid, k, remember=False, bump=False):
+    c.execute("UPDATE meals SET kid=? WHERE id=?", (json.dumps(k, ensure_ascii=False), mid))
+    if not remember:
+        return
+    c.execute("INSERT OR REPLACE INTO kid_memo(norm, mode, pick, extras) VALUES(?,?,?,?)",
+              (k["for"], k["mode"], json.dumps(k["pick"], ensure_ascii=False) if k["mode"] == "own" and k["pick"] else None,
+               json.dumps(k["extras"], ensure_ascii=False)))
+    if k["mode"] == "own" and k["pick"]:
+        kid_dish_put(c, k["pick"], bump=bump)
+
+
+def kid_dish_put(c, dish, bump=False):
+    nn = norm_name(dish["name"])
+    old = c.execute("SELECT n FROM kid_dishes WHERE norm=?", (nn,)).fetchone()
+    c.execute("INSERT OR REPLACE INTO kid_dishes(norm, name, data, n) VALUES(?,?,?,?)",
+              (nn, dish["name"], json.dumps(dish, ensure_ascii=False), (old["n"] if old else 0) + (1 if bump else 0)))
+
+
+def kid_ask_props(c_row, p, dishes, fish_n, avoid):
+    d = json.loads(c_row["data"])
+    res = llm.ask_json(kid_prompt(p, d, dishes, fish_n, KID_PROPS, avoid))
+    seen = {norm_name(x) for x in avoid}
+    props = []
+    for o in res.get("kid_options") or []:
+        x = kid_dish(o) if isinstance(o, dict) else None
+        if x and x["name"] and x["ingredients"] and norm_name(x["name"]) not in seen:
+            seen.add(norm_name(x["name"]))
+            props.append(x)
+    return props[:KID_PROPS], bool(res.get("same_ok"))
+
+
+def kid_fill(mid):
+    """Propozycje dla jednego dnia (w tle). Wyboru domowników nie rusza; bez wyboru bierze zapamiętany przy tym daniu
+    dorosłych, a gdy go nie ma: „to samo”, jeśli model uzna, że dziecko to zje, inaczej pierwszą propozycję."""
+    try:
+        with db() as c:
+            r = c.execute("SELECT * FROM meals WHERE id=?", (mid,)).fetchone()
+            p = kid_profile(c)
+            if not r or not kid_on(p):
+                return
+            dishes = [x["name"] for x in kid_dish_list(c)][:12]
+            fish_n = kid_week_fish(c, r["week_id"], mid)
+        try:
+            props, same_ok = kid_ask_props(r, p, dishes, fish_n, [])
+            err = not props
+        except Exception:
+            props, same_ok, err = [], True, True
+        with db() as c:
+            cur = c.execute("SELECT * FROM meals WHERE id=?", (mid,)).fetchone()
+            if not cur or kid_other_dish(cur, r):
+                return  # danie zmieniło się w trakcie: następne odświeżenie stanu zamówi propozycje od nowa
+            k = kid_get(cur)
+            k["props"] = [x for x in k["props"] if x.get("custom")] + props
+            k["error"] = err
+            if not k["touched"]:
+                memo = c.execute("SELECT * FROM kid_memo WHERE norm=?", (k["for"],)).fetchone()
+                if memo:
+                    k.update(mode=memo["mode"], pick=json.loads(memo["pick"]) if memo["pick"] else None,
+                             extras=json.loads(memo["extras"] or "[]"), last=True)
+                    if k["mode"] == "own" and not k["pick"]:
+                        k["mode"] = "same"
+                elif props and not same_ok:
+                    k.update(mode="own", pick=props[0])
+            kid_save(c, mid, k)
+    finally:
+        with KID_LOCK:
+            KID_BUSY.discard(mid)
+
+
+def kid_kick(mids: list):
+    """Zamów propozycje dla dań, które ich nie mają; jeden wątek na paczkę, dania po kolei (małe zapytania)."""
+    with KID_LOCK:
+        todo = [m for m in mids if m not in KID_BUSY]
+        KID_BUSY.update(todo)
+    if todo:
+        threading.Thread(target=lambda: [kid_fill(m) for m in todo], daemon=True, name="plan-dziecka").start()
+
+
+class KidProfileReq(BaseModel):
+    on: bool | None = None
+    name: str | None = None
+    likes: list[str] | None = None
+    dislikes: list[str] | None = None
+    fish_max: int | None = None
+    meat: bool | None = None
+    novelty: bool | None = None
+    week: int | None = None
+
+
+def _words(xs) -> list:
+    out = []
+    for x in xs or []:
+        x = " ".join(str(x).split())[:40]
+        if x and x.lower() not in (y.lower() for y in out):
+            out.append(x)
+    return out[:40]
+
+
+@app.post("/api/kid/profile")
+def kid_profile_set(req: KidProfileReq):
+    with db() as c:
+        p = kid_profile(c)
+        for k in ("on", "meat", "novelty"):
+            if getattr(req, k) is not None:
+                p[k] = bool(getattr(req, k))
+        if req.name is not None:
+            p["name"] = " ".join(req.name.split())[:30]
+        if req.likes is not None:
+            p["likes"] = _words(req.likes)
+        if req.dislikes is not None:
+            p["dislikes"] = _words(req.dislikes)
+        if req.fish_max is not None:
+            if not 0 <= req.fish_max <= 7:
+                raise HTTPException(400, "ryba: 0-7 razy w tygodniu")
+            p["fish_max"] = req.fish_max
+        if p["on"] and not p["name"]:
+            raise HTTPException(400, "podaj imię dziecka")
+        c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('kid', ?)", (json.dumps(p, ensure_ascii=False),))
+    return state(req.week)
+
+
+class KidDishReq(BaseModel):
+    name: str
+    week: int | None = None
+
+
+@app.post("/api/kid/dish/delete")
+def kid_dish_delete(req: KidDishReq):
+    with db() as c:
+        c.execute("DELETE FROM kid_dishes WHERE norm=?", (norm_name(req.name),))
+    return state(req.week)
+
+
+class KidReq(BaseModel):
+    mode: str | None = None       # "same" | "own"
+    pick: int | None = None       # numer propozycji z props
+    away: bool | None = None
+    extra_add: str | None = None
+    extra_del: str | None = None
+
+
+@app.post("/api/meal/{mid}/kid")
+def kid_choose(mid: int, req: KidReq):
+    with db() as c:
+        r = get_meal(c, mid)
+        k = kid_get(r)
+        was = k["pick"]["name"] if k["mode"] == "own" and k["pick"] else None
+        if req.pick is not None:
+            if not 0 <= req.pick < len(k["props"]):
+                raise HTTPException(400, "nie ma takiej propozycji")
+            k.update(mode="own", pick=k["props"][req.pick])
+        elif req.mode == "own":
+            if not k["pick"] and not k["props"]:
+                raise HTTPException(409, "propozycje jeszcze powstają – spróbuj za chwilę")
+            k.update(mode="own", pick=k["pick"] or k["props"][0])
+        elif req.mode == "same":
+            k["mode"] = "same"
+        elif req.mode is not None:
+            raise HTTPException(400, "tryb: same albo own")
+        if req.away is not None:
+            k["away"] = bool(req.away)
+        if req.extra_add is not None:
+            name = " ".join(req.extra_add.split())[:40]
+            if not name:
+                raise HTTPException(400, "pusta nazwa")
+            if norm_name(name) not in {norm_name(i["name"]) for i in k["extras"]}:
+                k["extras"].append(kid_ing({"name": name, "qty": 1, "unit": "stk",
+                                            "aisle": guess_aisle(c, name) or "Frukt og grønt"}))
+        if req.extra_del is not None:
+            k["extras"] = [i for i in k["extras"] if norm_name(i["name"]) != norm_name(req.extra_del)]
+        k.update(touched=True, last=False)
+        now = k["pick"]["name"] if k["mode"] == "own" and k["pick"] else None
+        kid_save(c, mid, k, remember=True, bump=now != was)  # licznik „jej dań” rośnie przy wyborze, nie przy każdej zmianie dodatku
+    return state(r["week_id"])
+
+
+@app.post("/api/meal/{mid}/kid/more")
+def kid_more(mid: int):
+    """„Więcej pomysłów”: kolejne propozycje własnego dania, inne niż dotychczasowe."""
+    with db() as c:
+        r = get_meal(c, mid)
+        p = kid_profile(c)
+        dishes = [x["name"] for x in kid_dish_list(c)][:12]
+        fish_n = kid_week_fish(c, r["week_id"], mid)
+        have = [x["name"] for x in kid_get(r)["props"]]
+    try:
+        props, _ = kid_ask_props(r, p, dishes, fish_n, have)
+    except Exception as e:
+        raise HTTPException(502, f"nie udało się wymyślić kolejnych dań: {str(e)[:120]}")
+    if not props:
+        raise HTTPException(502, "model nie podał nowych propozycji")
+    with db() as c:
+        cur = get_meal(c, mid)
+        if kid_other_dish(cur, r):
+            raise HTTPException(409, "danie zmieniło się w międzyczasie – odśwież i spróbuj jeszcze raz")
+        k = kid_get(cur)
+        seen = {norm_name(x["name"]) for x in k["props"]}
+        k["props"] += [x for x in props if norm_name(x["name"]) not in seen]
+        k["error"] = False
+        kid_save(c, mid, k)
+    return state(r["week_id"])
+
+
+class KidCustomReq(BaseModel):
+    text: str
+
+
+@app.post("/api/meal/{mid}/kid/custom")
+def kid_custom(mid: int, req: KidCustomReq):
+    """Danie wpisane przez domowników: model dopisuje norweską nazwę i składniki; przepis powstaje dopiero na żądanie."""
+    text = " ".join(req.text.split())[:120]
+    if len(text) < 2:
+        raise HTTPException(400, "wpisz danie")
+    with db() as c:
+        r = get_meal(c, mid)
+        p = kid_profile(c)
+    try:
+        res = llm.ask_json(kid_custom_prompt(p, json.loads(r["data"]), text))
+        dish = kid_dish(res.get("kid_dish") or {})
+    except Exception as e:
+        raise HTTPException(502, f"nie udało się dopisać składników: {str(e)[:120]}")
+    if not dish["name"] or not dish["ingredients"]:
+        raise HTTPException(502, "model nie podał składników tego dania")
+    dish.update(custom=True, is_new=False)
+    with db() as c:
+        cur = get_meal(c, mid)
+        if kid_other_dish(cur, r):
+            raise HTTPException(409, "danie zmieniło się w międzyczasie – odśwież i spróbuj jeszcze raz")
+        k = kid_get(cur)
+        k["props"] = [dish] + [x for x in k["props"] if norm_name(x["name"]) != norm_name(dish["name"])]
+        k.update(mode="own", pick=dish, touched=True, last=False)
+        kid_save(c, mid, k, remember=True, bump=True)
+    return state(r["week_id"])
+
+
+@app.post("/api/meal/{mid}/kid/recipe")
+def kid_recipe(mid: int):
+    """„Napisz przepis” dla wybranego własnego dania dziecka."""
+    with db() as c:
+        r = get_meal(c, mid)
+        k = kid_get(r)
+    if k["mode"] != "own" or not k["pick"]:
+        raise HTTPException(409, "dziecko nie ma tego dnia własnego dania")
+    try:
+        res = llm.ask_json(kid_steps_prompt(k["pick"], json.loads(r["data"])))
+        steps = [str(x).strip() for x in (res.get("kid_steps") or []) if str(x).strip()][:8]
+    except Exception as e:
+        raise HTTPException(502, f"nie udało się napisać przepisu: {str(e)[:120]}")
+    if not steps:
+        raise HTTPException(502, "model nie napisał przepisu")
+    with db() as c:
+        cur = get_meal(c, mid)
+        k2 = kid_get(cur)
+        if kid_other_dish(cur, r) or not k2["pick"] or k2["pick"]["name"] != k["pick"]["name"]:
+            raise HTTPException(409, "danie zmieniło się w międzyczasie – odśwież i spróbuj jeszcze raz")
+        k2["pick"]["steps"] = steps
+        for x in k2["props"]:
+            if x["name"] == k2["pick"]["name"]:
+                x["steps"] = steps
+        kid_save(c, mid, k2, remember=True)
+    return state(r["week_id"])
+
+
+@app.post("/api/week/kid_done")
+def kid_step_done(req: WeekReq):
+    """Krok „dziecko w tym tygodniu” obejrzany: aplikacja nie otwiera go już sama."""
+    with db() as c:
+        w = current_week(c, req.week)
+        if not w:
+            raise HTTPException(400, "brak planu")
+        c.execute("UPDATE weeks SET kid_step=1 WHERE id=?", (w["id"],))
+    return state(w["id"])
 
 
 class SetReq(BaseModel):
