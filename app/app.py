@@ -315,7 +315,7 @@ BALANCE_FIX = os.getenv("BALANCE_FIX", "1") != "0"
 BALANCE_GOAL, BALANCE_LOW = 20, 18  # g białka na porcję: cel w poleceniach i próg uwagi „mało”
 
 BALANCE_RULE = """Bilans talerza (obowiązuje każdy obiad):
-1) wyraźne źródło białka: strączki (soczewica, fasola, ciecierzyca, groch, edamame), jajka, ser lub inny białkowy nabiał
+1) wyraźne źródło białka: strączki (soczewica, fasola, ciecierzyca, groch, edamame), tofu, jajka, ser lub inny białkowy nabiał
    (feta, mozzarella, halloumi, cottage cheese, skyr/kesam, twardy ser) albo ryba (w ramach limitu). Śmietana, masło,
    mleko kokosowe, grzyby i same warzywa NIE są źródłem białka; orzechy i nasiona liczą się tylko jako dodatek do innego
    źródła. Gotowych zamienników mięsa (vegetarfarse, quorn, kawałki sojowe) nie używaj, chyba że domownicy wprost o nie proszą;
@@ -332,7 +332,8 @@ BALANCE_FIELD = ', "protein": "główne źródło białka: nazwa składnika"'
 # Szacunek, nie tabela wartości odżywczych: strączki z puszki liczone razem z zalewą, soczewica jako sucha.
 PROTEIN = [(re.compile(p), g, kind, stk) for p, g, kind, stk in [
     (r"buljong|kraft|fond|saus|pulver|krydder", 0, None, None),  # „fiskebuljong” to nie ryba
-    (r"vegetarfarse|quorn|soya(bit|farse|kjøtt|strimler)|tempeh|seitan|vegetarpølse|vegetarburger|vegetarkjøtt|tofu", 15, "sub", None),
+    (r"vegetarfarse|quorn|soya(bit|farse|kjøtt|strimler)|tempeh|seitan|vegetarpølse|vegetarburger|vegetarkjøtt", 15, "sub", None),
+    (r"tofu", 13, "tofu", None),
     (r"hermetisk\w* linse|linser? på boks", 6, "legume", None),
     (r"linse", 24, "legume", None),
     (r"tørk\w* (bønne|kikert|ert)", 21, "legume", None),
@@ -368,7 +369,7 @@ PROTEIN = [(re.compile(p), g, kind, stk) for p, g, kind, stk in [
     (r"\bmais\b", 3, None, None),
     (r"brød|pita|naan", 9, None, 40),
 ]]
-PROTEIN_MAIN = ("legume", "egg", "cheese", "dairy", "fish", "sub")  # orzechy i nasiona to tylko dodatek
+PROTEIN_MAIN = ("legume", "tofu", "egg", "cheese", "dairy", "fish", "sub")  # orzechy i nasiona to tylko dodatek
 VEG_RE = re.compile(r"gulrot|aubergine|paprika(?!pulver|krydder)|tomat(?!pur)|brokkoli|blomkål|spinat|squash|søtpotet|"
                     r"pastinakk|agurk|salat|rucola|ruccola|sukkererter|purre|kål|selleri|sopp|sjampinjong|champignon|"
                     r"\bmais\b|avokado|gresskar|rødbete|asparges|fennikel|kålrot|vårløk|reddik|bønnespirer")
