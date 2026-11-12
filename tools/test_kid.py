@@ -7,7 +7,8 @@ Test SAM uruchamia serwer na kopii pustej bazy w katalogu tymczasowym, więc por
     UKES_PORT=8113 python3 tools/test_kid.py
     UKES_PORT=8113 python3 tools/test_kid.py ui     interfejs w Chromium (CDP), zrzuty ekranu do UKES_SHOTS
 Czyta z otoczenia to samo, co test_recipes_pipeline.py."""
-import json, os, shutil, signal, socket, sqlite3, subprocess, sys, tempfile, threading, time, urllib.error, urllib.request
+import json, os, re, shutil, signal, socket, sqlite3, subprocess, sys, tempfile, threading, time, urllib.error, urllib.request
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -204,22 +205,27 @@ def main():
 
     # ---------- B. profil: propozycje w tle przy szkicu, krok po zatwierdzeniu
     print("# B. propozycje w tle, krok po zatwierdzeniu")
-    st = api("/api/kid/profile", body={"on": True, "name": "Luna", "likes": ["kikerter", "feta", "hummus", "feta"],
+    st = api("/api/kid/profile", body={"on": True, "name": "Luna", "likes": ["mais", "feta", "hummus", "feta"],
                                        "dislikes": ["gryteretter"], "week": w1})
-    ok(st["kid"] == {"on": True, "name": "Luna", "likes": ["kikerter", "feta", "hummus"], "dislikes": ["gryteretter"],
+    ok(st["kid"] == {"on": True, "name": "Luna", "likes": ["mais", "feta", "hummus"], "dislikes": ["gryteretter"],
                      "fish_max": 3, "meat": False, "novelty": True}, f"profil zapisany, bez powtórek: {st['kid']}")
     kid_ready(w1)  # trwający tydzień też dostaje propozycje; czekamy, żeby nie mieszały się z liczeniem pytań niżej
     clear_logs()
-    names = ["Laks med poteter", "Soppstroganoff med ris", "Pastasalat", "Barnfeil gryte", "Ny 2", "Ny 3", "Ny 4"]
+    names = ["Laks med poteter", "Pastasalat", "Soppstroganoff med ris", "Barnfeil gryte", "Ny 2", "Ny 3", "Ny 4"]
     w2 = gen(names)
     st = kid_ready(w2)
     ok(st["week"]["confirmed"] is False and all(m["kid"] for m in st["meals"]), "szkic: każdy dzień ma już plan dziecka")
     ps = prompts(KID)
     ok(len(ps) == 7, f"jedno pytanie o dania dziecka na dzień: {len(ps)}")
     p = next(x for x in ps if "Dorośli jedzą: Soppstroganoff med ris" in x)
-    ok("Dziecko: Luna. Lubi: kikerter, feta, hummus. Nie lubi: gryteretter." in p and "Nie proponuj mięsa" in p
-       and "limit 3" in p and "nowością" in p and "podobny do dania dorosłych" in p,
-       "polecenie: profil, bez mięsa, limit ryby, jedna nowość, danie podobne do dania dorosłych")
+    ok("Dziecko: Luna." in p and "lubi szczególnie: mais, feta, hummus." in p and "nie może być: gryteretter." in p
+       and "Nie proponuj mięsa" in p and "limit 3" in p and "nowością" in p,
+       "polecenie: profil, bez mięsa, limit ryby, jedna nowość")
+    order = [p.find(x) for x in ("1. Punkt wyjścia to danie dorosłych", "2. Zbilansowany talerz", "3. Upodobania to tylko lekka wskazówka", "4. Zakaz")]
+    ok(-1 not in order and order == sorted(order) and "To, czy jego składniki są wśród ulubionych, nie ma znaczenia" in p
+       and "Każda propozycja ma mieć INNE główne źródło białka" in p and "mogą się powtarzać bez ograniczeń" in p
+       and "Żadna propozycja nie musi zawierać niczego z tej listy" in p,
+       "polecenie: najpierw danie dorosłych, potem zalecenia, potem upodobania, na końcu zakaz; „to samo” nie zależy od ulubionych")
     laks, sopp, feil = (by_name(st, n) for n in ("Laks med poteter", "Soppstroganoff med ris", "Barnfeil gryte"))
     ok(laks["kid"]["mode"] == "same" and len(laks["kid"]["props"]) == 3, "danie, które dziecko zje: zaznaczone „to samo”, propozycje w zapasie")
     k = sopp["kid"]
@@ -245,8 +251,8 @@ def main():
     st = api(f"/api/meal/{sopp['id']}/kid", body={"mode": "same"})
     ok(by_name(st, sopp["name"])["kid"]["mode"] == "same" and use(st, "fiskekaker", sopp["id"]) is None, "„to samo”: jej składniki znikają z zakupów")
     st = api(f"/api/meal/{sopp['id']}/kid", body={"pick": 1})
-    ki = use(st, "kikerter", sopp["id"])
-    ok(by_name(st, sopp["name"])["kid"]["pick"]["name"] == "Barn Soppstroganoff med ris 2" and ki and ki["qty"] == "100",
+    ki = use(st, "egg", sopp["id"])
+    ok(by_name(st, sopp["name"])["kid"]["pick"]["name"] == "Barn Soppstroganoff med ris 2" and ki and ki["qty"] == "2",
        "wybrana druga propozycja: jej składniki na zakupach")
     ok({"name": "Barn Soppstroganoff med ris 2", "n": 1} in st["kid_dishes"], f"wybrane danie trafia na listę dań dziecka: {st['kid_dishes']}")
     st = api(f"/api/meal/{laks['id']}/kid", body={"extra_add": "tomat"})
@@ -267,7 +273,7 @@ def main():
     st = api(f"/api/meal/{sopp['id']}/kid/custom", body={"text": "fiskekaker i makaron"})
     k = by_name(st, sopp["name"])["kid"]
     ok(k["mode"] == "own" and k["pick"]["name"] == "Barn: fiskekaker i makaron" and k["props"][0]["custom"] is True
-       and shop_item(st, "pasta")["qty"] == "60" and use(st, "kikerter", sopp["id"]) is None,
+       and shop_item(st, "pasta")["qty"] == "60" and use(st, "egg", sopp["id"]) is None,
        "wpisane danie: nazwa i składniki od modelu, od razu wybrane i na zakupach")
     ok(k["pick"]["steps"] == [] and not prompts('"kid_steps"'), "wpisane danie: bez przepisu, dopóki nikt o niego nie poprosi")
     st = api(f"/api/meal/{sopp['id']}/kid/recipe")
@@ -307,6 +313,71 @@ def main():
     ok(shop_item(state(w3), "pasta") is not None, "zatwierdzony tydzień: zapamiętane własne danie jest na zakupach")
     st = api("/api/kid/profile", body={"on": False, "week": w3})
     ok(shop_item(st, "pasta") is None and st["kid"]["on"] is False, "profil wyłączony: lista zakupów bez dań dziecka")
+
+    # ---------- F. zasady: „lubi” to wskazówka, „nie lubi” to zakaz (atrapa udaje naiwny model, serwer pilnuje)
+    print("# F. zasady: ulubione najwyżej w 2 dniach, zakazy, odświeżenie starych propozycji")
+    stop()
+    start(FAKE_DELAY="0.2", LLM_PARALLEL="2", FAKE_KID_STUFF="feta", FAKE_KID_BAD="oliven")
+    api("/api/kid/profile", body={"on": True, "likes": ["feta"], "dislikes": ["oliven"], "fish_max": 3})
+    kid_ready(w3)
+    clear_logs()
+    w4 = gen(["Regel A", "Regel B", "Regel C", "Regel D", "Regel E", "Regel F", "Laks med ris"])
+    st = kid_ready(w4)
+    has = lambda x, w: any(i["name"] == w for i in x["ingredients"])
+    props = [x for m in st["meals"] for x in m["kid"]["props"]]
+    feta = sum(x["pfam"] == "feta" for x in props)
+    ok(len(props) == 21 and feta == 2, f"model robi z fety białko każdej propozycji, serwer zostawia ją w 2 z 21: {feta} z {len(props)}")
+    ok(all(len({x["pfam"] for x in m["kid"]["props"]}) == len(m["kid"]["props"]) for m in st["meals"]),
+       "trzy propozycje dnia różnią się głównym białkiem")
+    fams = [m["kid"]["pick"]["pfam"] if m["kid"]["mode"] == "own" else "" for m in sorted(st["meals"], key=lambda m: m["day"])]
+    ok(all(a != b or not a for a, b in zip(fams, fams[1:])) and max(Counter(f for f in fams if f and f != "fisk").values()) <= 2,
+       f"plan dziecka: to samo główne białko nie dzień po dniu i najwyżej 2 dni w tygodniu: {fams}")
+    ok(all(has(x, "agurk") for x in props), "warzywo może być codziennie: bez limitu")
+    ok(not any(has(x, "oliven") for x in props), "składnik z „nie lubi” nie przechodzi do żadnej propozycji")
+    ok(any(re.search(r"Głównym źródłem białka nie może być dziś: [^(]*feta", x) for x in prompts(KID)),
+       "polecenie samo mówi, którego białka dziś nie proponować")
+    laks2 = by_name(st, "Laks med ris")
+    ok(laks2["kid"]["mode"] == "same", "danie dorosłych bez zakazanych składników: „to samo”, gdy model tak uzna")
+    cdb = sqlite3.connect(DB, timeout=10)  # to samo danie, ale z oliwkami w składnikach: plan dziecka od nowa
+    d = json.loads(cdb.execute("SELECT data FROM meals WHERE id=?", (laks2["id"],)).fetchone()[0])
+    d["ingredient_names"] = ["laks", "ris", "oliven"]
+    cdb.execute("UPDATE meals SET data=?, kid=NULL WHERE id=?", (json.dumps(d, ensure_ascii=False), laks2["id"]))
+    cdb.commit()
+    cdb.close()
+    state(w4)
+    st = kid_ready(w4)
+    k = by_name(st, "Laks med ris")["kid"]
+    ok(k["mode"] == "own" and k["pick"], "danie dorosłych z zakazanym składnikiem: nie „to samo”, choć model tak uznał")
+    ok(all(m["kid"]["ver"] == 2 for m in st["meals"]), "propozycje noszą wersję zasad")
+    api("/api/kid/profile", body={"likes": []})
+    clear_logs()
+    api(f"/api/meal/{by_name(st, 'Regel A')['id']}/kid/more")
+    ok("lubi szczególnie: nie podano." in prompts(KID)[0] and "zwykłe proste dania dla kilkulatka" in prompts(KID)[0],
+       "pusta lista „lubi”: polecenie prosi o zwykłe proste dania oparte na daniu dorosłych")
+    # propozycje zapisane po staremu: jeden dzień z wyborem domowników, drugi z zaznaczeniem aplikacji
+    old = {"name": "Gammel fetarett", "is_new": False, "is_fish": False, "shares": "", "extra_min": 5, "steps": [],
+           "ingredients": [{"name": "feta", "qty": 50, "unit": "g", "aisle": "Meieri og kjøl", "shared": False}]}
+    a, b = by_name(st, "Regel B"), by_name(st, "Regel C")
+    cdb = sqlite3.connect(DB, timeout=10)
+    for m, touched in ((a, True), (b, False)):
+        cdb.execute("UPDATE meals SET kid=? WHERE id=?", (json.dumps({"for": m["name"].lower(), "mode": "own", "pick": old, "props": [old, old, old],
+                                                                  "extras": [], "away": False, "last": False, "touched": touched}), m["id"]))
+    cdb.commit()
+    cdb.close()
+    st = state(w4)
+    st = kid_ready(w4)
+    wait(lambda: all(m["kid"].get("ver") == 2 for m in state(w4)["meals"]), 30)
+    st = state(w4)
+    ka, kb = by_name(st, "Regel B")["kid"], by_name(st, "Regel C")["kid"]
+    ok(ka["mode"] == "own" and ka["pick"]["name"] == "Gammel fetarett" and ka["props"][0]["name"] == "Gammel fetarett" and len(ka["props"]) == 4,
+       "stare propozycje odświeżone same: wybór domowników zostaje, obok trzy nowe propozycje")
+    ok(kb["pick"]["name"] != "Gammel fetarett" and all(x["name"] != "Gammel fetarett" for x in kb["props"]),
+       "stare propozycje odświeżone same: zaznaczenie aplikacji ustępuje nowym zasadom")
+    clear_logs()
+    st = api("/api/kid/profile", body={"dislikes": ["oliven", "kikerter"], "week": w4})
+    props = [x for m in st["meals"] for x in m["kid"]["props"]]
+    ok(not any(has(x, "kikerter") for x in props) and not prompts(KID) and by_name(st, "Regel B")["kid"]["pick"]["name"] == "Gammel fetarett",
+       "nowe „nie lubi” działa od razu i bez modelu: propozycje z tym składnikiem znikają, wybór domowników zostaje")
     stop()
     log = SRV_LOG.read_text()
     ok("Traceback" not in log, "log serwera bez wyjątków")
@@ -322,7 +393,7 @@ async def ui():
     import test_two_users as T
     shutil.copy(EMPTY_DB, DB)
     start(FAKE_DELAY="0.2", LLM_PARALLEL="2")
-    api("/api/kid/profile", body={"on": True, "name": "Luna", "likes": ["kikerter", "feta"], "dislikes": ["gryteretter"]})
+    api("/api/kid/profile", body={"on": True, "name": "Luna", "likes": ["mais", "feta"], "dislikes": ["gryteretter"]})
     wid = gen(["Laks med poteter", "Soppstroganoff med ris", "Pastasalat", "Ny 1", "Ny 2", "Ny 3", "Ny 4"])
     kid_ready(wid)
     A = T.Tab(9471, "kid")
@@ -377,6 +448,9 @@ async def ui():
         await click("[data-click=kidExtraAdd][data-w=tomat]")
         ok(await until("document.querySelectorAll('#panel [data-click=kidExtraDel]').length===1"), "dodatek tylko dla dziecka dopisany jednym dotknięciem")
         await shot("3_dzien")
+        await click("[data-click=kidRefresh]")
+        ok(await until(f"S.meals.find(m=>m.id==={laks}).kid.props.length===4&&S.meals.find(m=>m.id==={laks}).kid.pick.name==='Barn: fiskekaker i makaron'"),
+           "„Odśwież propozycje”: trzy nowe propozycje, wpisane i wybrane danie zostaje")
         await click("[data-click=kidRecipe]")
         ok(await until("document.querySelectorAll('#panel ol.steps li').length===2"), "„Napisz przepis” dopisuje kroki")
         await click("[data-click=openKidWeek]")
@@ -402,9 +476,11 @@ async def ui():
         await click("[data-click=openKidProf]")
         ok(await until("document.querySelector('#kidname')&&document.querySelector('#kidname').value==='Luna'"), "profil dziecka otwiera się z ustawień")
         ok("Barn: fiskekaker i makaron" in await txt("#panel"), "profil: lista jej dań rośnie z wyborów")
+        ok("Punktem wyjścia jest wasze danie: Luna je to samo" in await txt("#panel .kbox") and "wskazówka, nie jadłospis" in await txt("#panel"),
+           "profil: zasady prostymi słowami i podpis, że „lubi” to wskazówka")
         await A.ev("document.querySelector('#kid_likes').value='hummus, egg'")
         await click("[data-click=kidWordAdd][data-f=likes]")
-        ok(await until("S.kid.likes.join()==='kikerter,feta,hummus,egg'"), "profil: kilka pozycji naraz po przecinku")
+        ok(await until("S.kid.likes.join()==='mais,feta,hummus,egg'"), "profil: kilka pozycji naraz po przecinku")
         await shot("6_profil")
         await click("[data-click=kidProfSet][data-f=on]")
         ok(await until("S.kid.on===false"), "profil: wyłączenie planu dziecka")
