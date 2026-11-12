@@ -312,7 +312,7 @@ W kolejnych daniach możesz użyć go tylko wtedy, gdy podana ilość na to wyst
 # szacuje białko z ilości w przepisie: danie bez źródła białka dostaje jedną prośbę o poprawkę, a przy daniu z małą
 # ilością zostaje tylko dyskretna uwaga w aplikacji (sprawdzonych dań sami nie zmieniamy).
 BALANCE_FIX = os.getenv("BALANCE_FIX", "1") != "0"
-BALANCE_GOAL, BALANCE_LOW = 20, 18  # g białka na porcję: cel w poleceniach i próg uwagi „mało”
+BALANCE_GOAL, BALANCE_LOW = 20, 15  # g białka na porcję: cel w poleceniach i próg uwagi „mało” (celowo łagodny)
 
 BALANCE_RULE = """Bilans talerza (obowiązuje każdy obiad):
 1) wyraźne źródło białka: strączki (soczewica, fasola, ciecierzyca, groch, edamame), tofu, jajka, ser lub inny białkowy nabiał
@@ -324,23 +324,24 @@ BALANCE_RULE = """Bilans talerza (obowiązuje każdy obiad):
 Jeśli tradycyjna wersja dania nie ma białka (np. soppstroganoff, grønnsakscurry, risotto), dodaj je tak, żeby pasowało
 do dania, i nazwij je w nazwie albo opisie."""
 BALANCE_WEEK = "W skali tygodnia: różne źródła białka; to samo główne źródło najwyżej 2 razy i nie dzień po dniu."
-BALANCE_QTY = f"""Ilość: około {BALANCE_GOAL} g białka na porcję. Dla orientacji tyle daje na porcję: 70 g suchej soczewicy,
-pół puszki (200 g) fasoli lub ciecierzycy razem z serem albo jajkiem, 2-3 jajka, 80-100 g sera, 150 g cottage cheese."""
+BALANCE_QTY = f"""Ilość: 15-{BALANCE_GOAL} g białka na porcję, bez przesady. Dla orientacji na porcję wystarcza: 50-60 g suchej soczewicy,
+120-150 g fasoli lub ciecierzycy z puszki (czyli 1 puszka 400 g na 3 porcje, gdy w daniu jest też ser, jajko albo nabiał;
+inaczej najwyżej półtorej puszki), 2 jajka, 60-80 g sera, 100 g tofu. Zwykłe domowe porcje, nie więcej."""
 BALANCE_FIELD = ', "protein": "główne źródło białka: nazwa składnika"'
 
 # (wzorzec nazwy składnika, g białka na 100 g, rodzaj źródła albo None dla tła, gramy na sztukę)
-# Szacunek, nie tabela wartości odżywczych: strączki z puszki liczone razem z zalewą, soczewica jako sucha.
+# Szacunek, nie tabela wartości odżywczych: strączki liczone jak ugotowane (z puszki lub kartonu), soczewica jako sucha.
 PROTEIN = [(re.compile(p), g, kind, stk) for p, g, kind, stk in [
     (r"buljong|kraft|fond|saus|pulver|krydder", 0, None, None),  # „fiskebuljong” to nie ryba
     (r"vegetarfarse|quorn|soya(bit|farse|kjøtt|strimler)|tempeh|seitan|vegetarpølse|vegetarburger|vegetarkjøtt", 15, "sub", None),
     (r"tofu", 13, "tofu", None),
-    (r"hermetisk\w* linse|linser? på boks", 6, "legume", None),
+    (r"hermetisk\w* linse|linser? på boks|kokte \w*linse|linser?, kokt", 8, "legume", None),
     (r"linse", 24, "legume", None),
     (r"tørk\w* (bønne|kikert|ert)", 21, "legume", None),
     (r"falafel", 13, "legume", None),
     (r"hummus", 7, "legume", None),
     (r"edamame", 11, "legume", None),
-    (r"bønne|kikert", 5, "legume", None),
+    (r"bønne|kikert", 7.5, "legume", None),
     (r"\berter\b|gule erter|grønne erter", 5, "legume", None),
     (r"eggnudl", 12, None, None),
     (r"\begg\b|eggehvite", 12.5, "egg", 60),
@@ -421,7 +422,7 @@ def balance(m: dict, portion: float = 1.0, goal: float = BALANCE_GOAL) -> dict:
         level = None
     elif main_g < 3 * f:  # śladowa ilość (łyżka parmezanu) to jeszcze nie źródło białka
         level = "none"
-    elif per < BALANCE_LOW * f or main_g < 10 * f:
+    elif per < BALANCE_LOW * f or main_g < 7 * f:
         level = "low"
     else:
         level = "ok"
@@ -446,8 +447,8 @@ def fix_prompt(m: dict, why: str) -> str:
 Poniższy przepis nie spełnia bilansu talerza: {why}.
 {BALANCE_RULE}
 {BALANCE_QTY}
-Popraw przepis, zmieniając jak najmniej: zachowaj charakter dania i jego nazwę, dodaj brakujący element albo zwiększ
-ilość tego, który już jest (składniki i kroki), dopasuj opis. Pola from_pantry istniejących składników zostaw bez zmian.
+Popraw przepis, zmieniając jak najmniej: zachowaj charakter dania i jego nazwę, dodaj JEDEN brakujący element albo trochę
+zwiększ ilość tego, który już jest (składniki i kroki), dopasuj opis. Dodaj tylko tyle, ile brakuje do celu, nie więcej. Pola from_pantry istniejących składników zostaw bez zmian.
 Zwróć WYŁĄCZNIE JSON: {{"meal": {schema()} }}
 
 Przepis:
