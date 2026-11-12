@@ -165,7 +165,7 @@ const ACT={
   openKid:d=>openSheet({kind:'kid',id:+d.id,back:d.back==='1'||(sheet&&sheet.kind==='kidweek')}),openKidWeek:()=>openSheet({kind:'kidweek'}),openKidProf:()=>openSheet({kind:'kidprof'}),
   kidMode:d=>kidSet(+d.id,{mode:d.m}),kidPick:d=>kidSet(+d.id,{pick:+d.i}),kidAway:d=>kidSet(+d.id,{away:d.on==='1'}),
   kidExtraAdd:d=>kidSet(+d.id,{extra_add:d.w}),kidExtraDel:d=>kidSet(+d.id,{extra_del:d.w}),kidExtraType:byId(kidExtraType),
-  kidMore:byId(kidMore),kidType:()=>{sheet.type=!sheet.type;render();const i=$('#kidtxt');if(i)i.focus()},kidCustom:byId(kidCustom),kidRecipe:byId(kidRecipe),kidDone:()=>kidDone(),
+  kidMore:byId(kidMore),kidRefresh:byId(kidRefresh),kidType:()=>{sheet.type=!sheet.type;render();const i=$('#kidtxt');if(i)i.focus()},kidCustom:byId(kidCustom),kidRecipe:byId(kidRecipe),kidDone:()=>kidDone(),
   kidName:()=>kidName(),kidProfSet:d=>kidProf({[d.f]:d.v==='1'}),kidFish:d=>kidProf({fish_max:+d.n}),kidWordAdd:d=>kidWordAdd(d.f),kidWordDel:d=>kidWordDel(d.f,d.w),kidDishDel:d=>kidDishDel(d.w)},
  change:{
   chk:(d,el)=>chk(d.k,el.checked),tDue:(d,el)=>tDue(+d.id,el.value),addImgs:(d,el)=>{addImgs(el.files);el.value=''}},
@@ -349,7 +349,7 @@ function kidWeekSheet(){const D=t('days'),n=S.kid.name;
 function kidSheet(m){const k=m.kid,id=m.id,own=kOwn(k),hints=(S.kid_extras||[]).filter(x=>!(k&&k.extras.some(i=>i.name.toLowerCase()===x.toLowerCase())));
   const head=`${sheetHead(esc(S.kid.name+' · '+t('days')[m.day]))}<div class="desc">${t('kidYou')}: ${esc(mv(m).name)}</div>
    ${sheet.back?`<button class="lnk" data-click="openKidWeek">‹ ${t('kidWeekBack')}</button>`:''}`;
-  const custom=`<div class="row"><button class="b" data-click="kidMore" data-id="${id}">${t('kidMoreB')}</button><button class="b" data-click="kidType">${t('kidTypeB')}</button></div>
+  const custom=`<div class="row"><button class="b" data-click="kidMore" data-id="${id}">${t('kidMoreB')}</button><button class="b" data-click="kidType">${t('kidTypeB')}</button><button class="b" data-click="kidRefresh" data-id="${id}">${t('kidRefreshB')}</button></div>
    ${sheet.type?`<div class="inrow"><input id="kidtxt" placeholder="${esc(t('kidTypePh'))}" data-enter="kidCustom" data-id="${id}" autocomplete="off"><button class="b p" data-click="kidCustom" data-id="${id}">${t('add')}</button></div>`:''}`;
   const dish=own?`<h3>${esc(k.pick.name)}</h3>${okUrl(k.pick.source)?`<a class="lnk" href="${esc(k.pick.source)}" target="_blank" rel="noopener">${t('src')} ↗</a>`:''}<ul class="ings">${k.pick.ingredients.map(i=>i.shared?`<li>${esc(nm(i.name))} <span class="desc">(${t('kidFromYours')})</span></li>`:`<li>${esc(i.qty??'')} ${esc(i.unit)} ${esc(nm(i.name))}</li>`).join('')}</ul>
    ${k.pick.steps.length?`<ol class="steps">${k.pick.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>`:`<div class="row"><button class="b" data-click="kidRecipe" data-id="${id}">${ic('pen')} ${t('kidRecB')}</button></div>`}`:'';
@@ -369,16 +369,19 @@ const kSw=(act,on,extra)=>`<button class="sw ${on?'on':''}" role="switch" aria-c
 function kidProfSheet(){const p=S.kid,ds=S.kid_dishes||[];
   const words=f=>`<div class="chips">${p[f].map(w=>`<button class="chip" data-click="kidWordDel" data-f="${f}" data-w="${esc(w)}">${esc(w)} ×</button>`).join('')}</div>
    <div class="inrow"><input id="kid_${f}" placeholder="${esc(t('kidWordPh'))}" data-enter="kidWordAdd" data-f="${f}" autocomplete="off"><button class="b" data-click="kidWordAdd" data-f="${f}" aria-label="${esc(t('add'))}">+</button></div>`;
+  const who=p.name||t('kidWord');
   return `${sheetHead(t('kidProfT'))}
+   <div class="kbox"><b>${t('kidRulesT')}</b><div class="krules">${esc(t('kidRules').replaceAll('{n}',who))}</div></div>
    <div class="inrow"><input id="kidname" value="${esc(p.name)}" placeholder="${esc(t('kidNamePh'))}" data-enter="kidName" autocomplete="off"><button class="b p" data-click="kidName">${t('save')}</button></div>
    <div class="mrow"><span>${t('kidOnL')}</span>${kSw('kidProfSet',p.on,'data-f="on"')}</div>
-   <div class="lbl">${t('kidLikes')}</div>${words('likes')}
-   <div class="lbl">${t('kidDislikes')}</div>${words('dislikes')}
+   <div class="lbl">${t('kidLikes')}</div><div class="desc">${t('kidLikesD')}</div>${words('likes')}
+   <div class="lbl">${t('kidDislikes')}</div><div class="desc">${t('kidDislikesD')}</div>${words('dislikes')}
    <div class="lbl">${t('kidDishes')}</div>${ds.length?ds.map(d=>`<div class="mrow"><span>${esc(d.name)}</span><button class="mb" data-click="kidDishDel" data-w="${esc(d.name)}" aria-label="${esc(t('del'))}">${ic('x')}</button></div>`).join(''):`<div class="desc">${t('kidDishesNone')}</div>`}
    <div class="mrow"><span>${t('kidFishL')}</span><span class="stp"><button class="b" data-click="kidFish" data-n="${p.fish_max-1}" aria-label="−" ${p.fish_max<=0?'disabled':''}>−</button><b>${p.fish_max}</b><button class="b" data-click="kidFish" data-n="${p.fish_max+1}" aria-label="+" ${p.fish_max>=7?'disabled':''}>+</button></span></div>
    <div class="mrow"><span>${t('kidMeatL')}</span>${kSw('kidProfSet',p.meat,'data-f="meat"')}</div>
    <div class="mrow" style="border:0"><span>${t('kidNovL')}</span>${kSw('kidProfSet',p.novelty,'data-f="novelty"')}</div>`}
 async function kidSet(id,body){const r=await api(`/api/meal/${id}/kid`,'POST',body);if(r)set(r)}
+async function kidRefresh(id){const r=await api(`/api/meal/${id}/kid/refresh`,'POST',undefined,t('kidThinking'));if(r)set(r)}
 async function kidMore(id){const r=await api(`/api/meal/${id}/kid/more`,'POST',undefined,t('kidThinking'));if(r)set(r)}
 async function kidCustom(id){const v=(($('#kidtxt')||{}).value||'').trim();if(v.length<2)return;
   const r=await api(`/api/meal/${id}/kid/custom`,'POST',{text:v},t('kidThinking'));if(r){if(sheet)sheet.type=false;set(r)}}

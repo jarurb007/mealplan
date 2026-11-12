@@ -395,6 +395,9 @@ def main():
     KOK = "Linsegryte med kokosmelk, chili og ingefær"
     api("/api/cravings", body={"text": KOK})                            # dobre dla dziecka
     api("/api/cravings", body={"text": "Linse-curry med sopp"})         # ma coś z listy „nie lubi”
+    # dzień po nim bez ryby: plan dziecka nie proponuje tego samego głównego białka dzień po dniu
+    api("/api/cravings", body={"text": next(x["name"] for x in BASE if x["pool"] != "kid" and not x["is_fish"] and "sopp" not in json.dumps(x).lower()
+                                            and x["name"] not in (KOK, "Linse-curry med sopp") and "linse" not in x["name"].lower())})
     w = gen(fresh())
     st = {}
     wait(lambda: st.update(state(w)) or (all(m["kid"] for m in st["meals"]) and not any(m["kid_busy"] for m in st["meals"])), 40)
@@ -403,9 +406,11 @@ def main():
     ok(dal["kid"]["mode"] == "same" and dal["kid"]["props"] == [] and not dal["kid"].get("error"),
        "danie z bazy dobre dla dziecka: „to samo” bez propozycji od modelu")
     ok(not any("Dorośli jedzą: " + KOK in p for p in prompts(KID)), "o to danie nikt nie pytał modelu")
-    ok(len(sopp["kid"]["props"]) == 3 and any("Dorośli jedzą: Linse-curry med sopp" in p for p in prompts(KID)),
-       "danie z bazy ze składnikiem z listy „nie lubi” idzie do modelu jak dotąd")
-    ok(len(auto) >= 1 and calls("kid") == 7 - len(auto), f"plan dziecka: {calls('kid')} pytań zamiast 7 ({len(auto)} dań z bazy dobrych dla dziecka)")
+    # atrapa nazywa propozycje „Barn <danie dorosłych> N”, więc tu każda poza daniem z bazy ma „sopp” w nazwie:
+    # serwer je odrzuca (twardy zakaz „nie lubi”) i pyta model jeszcze raz, stąd jedno pytanie więcej
+    ok([x["name"] for x in sopp["kid"]["props"]] == ["Hjemmelagde fiskepinner"] and any("Dorośli jedzą: Linse-curry med sopp" in p for p in prompts(KID)),
+       "danie z bazy ze składnikiem z listy „nie lubi” idzie do modelu, a propozycje z tym składnikiem w nazwie odpadają")
+    ok(len(auto) >= 1 and calls("kid") == 7 - len(auto) + 1, f"plan dziecka: {calls('kid')} pytań zamiast 7 ({len(auto)} dań z bazy dobrych dla dziecka, jedno powtórzone)")
     kp = next(p for p in prompts(KID) if "Linse-curry med sopp" in p)
     ok("Sprawdzone przepisy dla dzieci z bazy" in kp and any(x["name"] in kp for x in BASE if x["pool"] == "kid"),
        "pytanie o plan dziecka podsuwa dania z listy dziecięcej")
