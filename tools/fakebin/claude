@@ -14,7 +14,9 @@ prompt odczytu gazetki KIWI ("leaflet_offers") kilka stałych ofert.
 Plan dziecka: prompt z "kid_options" dostaje trzy dania "Barn <danie dorosłych> N" (numeracja idzie dalej za daniami z listy
 „nie powtarzaj”), pierwsze z rybą (z jajkiem, gdy prompt zakazuje ryby), ostatnie jako nowość, gdy prompt o nią prosi;
 "same_ok" jest prawdą dla dania dorosłych z "1" lub "Laks" w nazwie. "kid_dish" (wpisane danie) i "kid_steps" (przepis)
-dostają stałe odpowiedzi. Danie dorosłych z "Barnfeil" w nazwie kończy się błędem modelu."""
+dostają stałe odpowiedzi. Danie dorosłych z "Barnfeil" w nazwie kończy się błędem modelu.
+Baza inspiracji: prompt z "inspo_steps" (same kroki dania z bazy) dostaje trzy stałe kroki. FAKE_KID_BASE=nazwa ->
+pierwsza propozycja planu dziecka nosi tę nazwę (model „wybrał” danie z bazy)."""
 import json, os, re, sys, time
 t0 = time.time()
 p = sys.stdin.read()
@@ -77,11 +79,16 @@ elif '"kid_options"' in p:
                             "ingredients": [prot if i == 0 else I("kikerter", 100, "g", "Tørrvarer og hermetikk"),
                                             I("ris", None, "", "Tørrvarer og hermetikk", True), I("agurk", 0.25, "stk", "Frukt og grønt")]}
                            for i in range(3)]}
+    if os.environ.get("FAKE_KID_BASE"):
+        out["kid_options"][0]["name"] = os.environ["FAKE_KID_BASE"]
 elif '"kid_dish"' in p:
     kind = "kiddish"
     out = {"kid_dish": {"name": "Barn: " + re.search(r"«(.*?)»", p).group(1), "is_fish": False, "shares": "", "extra_min": 5,
                         "ingredients": [{"name": "pasta", "qty": 60, "unit": "g", "aisle": "Tørrvarer og hermetikk", "shared": False},
                                         {"name": "skinke", "qty": 30, "unit": "g", "aisle": "Kjøtt og fisk", "shared": False}]}}
+elif '"inspo_steps"' in p:
+    kind = "inspo"
+    out = {"inspo_steps": ["steg 1", "steg 2", "steg 3"]}
 elif '"kid_steps"' in p:
     kind = "kidsteps"
     out = {"kid_steps": ["steg 1", "steg 2"]}

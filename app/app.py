@@ -3,6 +3,7 @@ import math
 import html as htmllib
 import ipaddress
 import os
+import random
 import re
 import shutil
 import socket
@@ -106,6 +107,7 @@ def init_db():
                                             updated TEXT DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS kid_dishes(norm TEXT PRIMARY KEY, name TEXT, data TEXT, n INTEGER DEFAULT 0,
                                               updated TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS inspo_skip(id TEXT PRIMARY KEY, n INTEGER DEFAULT 0);
         """)
 
     for table, col in (("meals", "tr TEXT"), ("meals", "servings INTEGER"),
@@ -496,8 +498,16 @@ def memory_lines(recent: list | None, favs: list | None, fav_rule: str) -> str:
 
 
 def plan_prompt(n: int, pantry: list, avoid: list, fixed: list, cravings: list,
-                recent: list | None = None, favs: list | None = None, proven: int = 0) -> str:
-    """proven: tyle sprawdzonych dań (książka przepisów i 👍) ma wrócić do planu; reszta to nowe propozycje."""
+                recent: list | None = None, favs: list | None = None, proven: int = 0,
+                cands: list | None = None, k: int = 0) -> str:
+    """proven: tyle sprawdzonych dań (książka przepisów i 👍) ma wrócić do planu; reszta to nowe propozycje.
+    cands, k: kandydaci z bazy inspiracji i liczba dań, które model ma z nich wstawić (0 = baza wyłączona)."""
+    base = "" if not (cands and k) else f"""
+Przepisy z bazy inspiracji (nazwa · główne białko · czas · ocena w serwisie):
+{chr(10).join(inspo_line(x) for x in cands)}
+Wstaw dokładnie {k} z nich: te, które najlepiej pasują do reszty tygodnia, lodówki i życzeń. Liczą się do nowych propozycji.
+Użyj dokładnie tej nazwy i niczego w tych daniach nie zmieniaj; ich składniki i ilości są już znane, więc w "ingredients"
+wystarczy pusta lista. Danie z dopiskiem „taco” pasuje tylko na piątek, „ryba” liczy się do limitu ryby."""
     fav_rule = (f"To sprawdzone dania domowników: wstaw {proven} z nich, jeśli pasują do reszty tygodnia, a pozostałe "
                 f"propozycje mają być nowe; użyj wtedy dokładnie tej nazwy i niczego w tych daniach nie zmieniaj." if proven else
                 "Możesz wstawić najwyżej 1-2 z nich, jeśli pasują do reszty tygodnia; użyj wtedy dokładnie tej nazwy.")
@@ -507,7 +517,7 @@ def plan_prompt(n: int, pantry: list, avoid: list, fixed: list, cravings: list,
 Ułóż {n} różnych obiadów (kolacji) na kolejne dni. Średni wysiłek, 30-45 min.
 Te dania już są w tym tygodniu (NIE powtarzaj ich ani podobnych): {fixed or 'brak'}.
 Nie powtarzaj podobnych dań z rzędu. Ryba maks. 1 raz w tygodniu (już zaplanowane: {avoid or 'brak'}).
-{memory_lines(recent, favs, fav_rule)}
+{memory_lines(recent, favs, fav_rule)}{base}
 Składniki z lodówki do wykorzystania (użyj, jeśli pasuje): {pantry or 'brak'}.
 {PANTRY_RULE}
 Na co domownicy mają ochotę (uwzględnij, ma pierwszeństwo): {cravings or 'brak'}.
@@ -2260,7 +2270,7 @@ def build_state(week=None, meals=None, shop=None):
             bad.add(x["norm"])
         todo = todo_state(c)
         kid = kid_profile(c)
-        kid_info = {"kid": kid, "kid_dishes": kid_dish_list(c), "kid_extras": kid_extra_hints(c)}
+        kid_info = {"kid": kid, "kid_dishes": kid_dish_list(c), "kid_extras": kid_extra_hints(c), "inspo": inspo_cfg(c)}
         if not w:
             return {"week": None, "meals": [], "pantry": pantry, "carry": carry, "cravings": cravings, **kid_info,
                     "recipes": recipes, "weeks": [], "current_id": None, "dislikes": dislikes, "todo": todo,
@@ -2274,6 +2284,7 @@ def build_state(week=None, meals=None, shop=None):
             m["fav"] = m["name"].lower() in favnames
             m["draft"] = bool(m.get("draft"))
             m["bal"] = balance(m)
+            m["src"] = inspo_src(m)
             m["filling"] = m["id"] in FILLING
             m["overdue"] = (cur is not None and w["id"] == cur["id"] and m["status"] == "planned"
                             and start + timedelta(days=m["day"]) < today)
@@ -2310,6 +2321,215 @@ class GenReq(BaseModel):
 
 
 JOBS: dict = {}
+# ---------- Baza inspiracji ----------
+# Plik app/inspiracje.json (buduje go tools/inspiracje/normalizuj.py) to sprawdzone przepisy z norweskich serwisów,
+# zapisane jako fakty: nazwa, składniki z ilościami, czas, ocena, adres. Aplikacja wczytuje go przy starcie i niczego
+# z tych serwisów nie pobiera. Serwer wybiera kandydatów, model wstawia kilku z nich do planu w tym samym pytaniu,
+# w którym układa tydzień. Składniki i ilości idą z pliku (bez modelu), model pisze tylko kroki, własnymi słowami,
+# raz na danie: potem przepis zostaje w aplikacji jak każdy inny.
+INSPO_PATH = Path(os.getenv("INSPO_PATH", str(BASE / "inspiracje.json")))
+INSPO_DEFAULT_N = int(os.getenv("INSPO_DEFAULT_N", "1"))  # tyle dań z bazy na tydzień, dopóki nikt nie zmieni; 0 = baza wyłączona
+INSPO_MAX = 5           # górna granica w ustawieniach
+INSPO_CANDS = 12        # tylu kandydatów widzi model w pytaniu o plan
+INSPO_SITE_CANDS = 3    # najwyżej tylu kandydatów z jednego serwisu
+INSPO_SITE_MAX = 2      # najwyżej tyle dań z jednego serwisu w tygodniu, gdy dobiera serwer
+INSPO_SKIP_OUT = 2      # danie z bazy zamienione tyle razy przed gotowaniem przestaje być proponowane
+KID_SHARE = 0.5         # porcja dziecka względem porcji dorosłego w daniach z bazy
+TACO_RE = re.compile(r"taco|burrito|nachos|quesadilla")
+
+
+def inspo_load(path=None) -> list:
+    try:
+        rows = json.loads(Path(path or INSPO_PATH).read_text()).get("recipes") or []
+    except (OSError, ValueError, AttributeError):
+        return []
+    return [x for x in rows if isinstance(x, dict) and x.get("id") and x.get("name") and x.get("ingredients")]
+
+
+INSPO = inspo_load()
+INSPO_ID = {x["id"]: x for x in INSPO}
+INSPO_BY = {" ".join(x["name"].lower().split()): x for x in INSPO}
+
+
+def inspo_cfg(c) -> dict:
+    rows = {r["key"]: r["value"] for r in c.execute("SELECT key, value FROM settings WHERE key IN ('inspo_on', 'inspo_n')")}
+    n = int(rows["inspo_n"]) if str(rows.get("inspo_n", "")).isdigit() else INSPO_DEFAULT_N
+    on = rows["inspo_on"] == "1" if "inspo_on" in rows else INSPO_DEFAULT_N > 0
+    return {"on": bool(on and INSPO), "n": max(1, min(INSPO_MAX, n)), "max": INSPO_MAX, "have": bool(INSPO),
+            "count": sum(1 for x in INSPO if x["pool"] == "main")}
+
+
+def inspo_src(d: dict):
+    """Źródło dania z bazy do pokazania przy daniu: serwis, ocena (tylko gdy ma dość głosów) i adres oryginału."""
+    x = INSPO_ID.get(d.get("inspo")) if d.get("inspo") else None
+    return {"site": x["site"], "rating": x["rating"], "votes": x["votes"], "url": x["url"]} if x else None
+
+
+def inspo_line(x: dict) -> str:
+    return (f'- {x["name"]} · {x["protein"]}' + (f' · {x["time_min"]} min' if x.get("time_min") else "")
+            + (f' · {x["rating"]}' if x.get("rating") else "") + (" · taco" if x["taco"] else "") + (" · ryba" if x["is_fish"] else ""))
+
+
+def inspo_skips(c) -> dict:
+    return {r["id"]: r["n"] for r in c.execute("SELECT id, n FROM inspo_skip")}
+
+
+def inspo_cands(c, skip: list, fish_ok: bool = True, k: int = INSPO_CANDS) -> list:
+    """Kandydaci do planu: bez 👎, bez dań z listy skip (jedzone ostatnio, już w tygodniu, sprawdzone dania domu, bo te
+    wracają własną drogą) i bez dwukrotnie zamienionych. Losowanie z wagą: lepiej oceniane dania trafiają częściej,
+    dania bez oceny rzadziej; najwyżej dwa taco (tylko na piątek), dwie ryby i trzy dania z jednego serwisu."""
+    no = {norm_name(x) for x in skip} | disliked_set()
+    out_n = inspo_skips(c)
+    pool = [x for x in INSPO if x["pool"] == "main" and norm_name(x["name"]) not in no
+            and out_n.get(x["id"], 0) < INSPO_SKIP_OUT and (fish_ok or not x["is_fish"])]
+    weight = lambda x: 3 if (x.get("rating") or 0) >= 4.3 else 2 if (x.get("rating") or 0) >= 4 else 1.5 if x.get("rating") else 1
+    pool.sort(key=lambda x: -(random.random() ** (1 / weight(x))))  # losowanie ważone bez zwracania
+    out, sites, taco, fish = [], Counter(), 0, 0
+    for x in pool:
+        if len(out) >= k:
+            break
+        if sites[x["site"]] >= INSPO_SITE_CANDS or (x["taco"] and taco >= 2) or (x["is_fish"] and fish >= 2):
+            continue
+        sites[x["site"]] += 1
+        taco += x["taco"]
+        fish += x["is_fish"]
+        out.append(x)
+    return out
+
+
+def inspo_place(plan: list, spare: list, cands: list, k: int, protected=lambda o: False) -> list:
+    """Pilnuje, żeby w planie było dokładnie k dań z bazy (o ile się da). plan: dania wybrane z odpowiedzi modelu
+    (danie z bazy ma klucz "inspo"), spare: propozycje modelu, które się nie zmieściły. Nadmiarowe dania z bazy
+    ustępują zapasowym propozycjom modelu. Brakujące dobiera serwer z kandydatów: zastępuje ostatnią nową propozycję
+    modelu, ale nie rybę, nie taco, nie sprawdzone danie domu i nie danie, o które ktoś prosił (protected)."""
+    plan, spare = list(plan), [o for o in spare if not o.get("inspo")]
+    for i in [i for i, o in enumerate(plan) if o.get("inspo")][k:]:
+        if spare:
+            plan[i] = spare.pop(0)
+    have = {o["inspo"]["id"] for o in plan if o.get("inspo")}
+    sites = Counter(o["inspo"]["site"] for o in plan if o.get("inspo"))
+    fish = any(o.get("is_fish") for o in plan)
+    for x in cands:
+        if len(have) >= k:
+            break
+        if x["id"] in have or x["taco"] or (x["is_fish"] and fish) or sites[x["site"]] >= INSPO_SITE_MAX:
+            continue
+        free = [i for i, o in enumerate(plan) if not o.get("inspo") and not o.get("is_fish")
+                and not TACO_RE.search(o["name"].lower()) and not protected(o)]
+        if not free:
+            break
+        plan[free[-1]] = {"name": x["name"], "is_fish": x["is_fish"], "inspo": x}
+        have.add(x["id"])
+        sites[x["site"]] += 1
+        fish = fish or x["is_fish"]
+    return plan
+
+
+def inspo_draft(x: dict) -> dict:
+    """Danie z bazy jako szkic w planie: nazwy składników są od razu, przepis dopisuje się w tle jak każdy inny."""
+    return {"name": x["name"], "description": x["method"], "is_fish": bool(x["is_fish"]), "time_min": x.get("time_min"),
+            "ingredients": [], "steps": [], "owned": False, "draft": True,
+            "ingredient_names": [i["name"] for i in x["ingredients"]], "uses_pantry": [],
+            "protein": str(x.get("protein") or "")[:40], "servings_base": default_servings(),
+            "inspo": x["id"], "source": x["url"]}
+
+
+def inspo_meal(x: dict, steps: list, pantry: list) -> dict:
+    """Pełny przepis dania z bazy: składniki i ilości z pliku (na tyle porcji, ile podaje źródło), kroki od modelu."""
+    stock = [canon(parse_pantry(p)[2]) for p in pantry]
+    m = clean_meal({"name": x["name"], "time_min": x.get("time_min"), "description": x["method"], "is_fish": x["is_fish"],
+                    "ingredients": [{**i, "from_pantry": any(_same_item(s, canon(i["name"])) for s in stock)}
+                                    for i in x["ingredients"]],
+                    "steps": steps, "servings_base": x["servings"]})
+    return {**m, "inspo": x["id"], "source": x["url"]}
+
+
+def inspo_steps_prompt(x: dict) -> str:
+    ings = ", ".join(" ".join(str(v) for v in (fmt_qty(i["qty"]), i["unit"], i["name"]) if v) for i in x["ingredients"])
+    return f"""Napisz własnymi słowami sposób przygotowania dania: {x["name"]} ({x["servings"]} porcje{f', ok. {x["time_min"]} min' if x.get("time_min") else ''}).
+Składniki (dokładnie te i w tych ilościach, niczego nie dodawaj): {ings}.
+Technika w skrócie: {x["method"]}
+Sól, pieprz i olej są w domu. Napisz 4-8 krótkich kroków po norwesku (bokmål), z czasami i temperaturami tam, gdzie
+są potrzebne. Każdy składnik z listy ma się pojawić w którymś kroku, ale bez ilości: lista składników pokazuje je osobno
+i bywa przeliczana na inną liczbę porcji (ilość wody do gotowania możesz podać).
+Zwróć WYŁĄCZNIE JSON: {{"inspo_steps": ["...", "..."]}}"""
+
+
+def inspo_steps(x: dict) -> list:
+    last = None
+    for _ in range(2):
+        try:
+            res = llm.ask_json(inspo_steps_prompt(x), retries=0)
+            steps = [str(s).strip() for s in (res.get("inspo_steps") or []) if str(s).strip()][:12]
+            if len(steps) >= 2:
+                return steps
+            last = "za mało kroków"
+        except Exception as e:
+            last = e
+    raise RuntimeError(f"kroki dania '{x['name']}' nie powstały: {last}")
+
+
+def inspo_kid_clash(p: dict, x: dict) -> bool:
+    """Czy w daniu jest coś z listy „nie lubi” dziecka (porównanie po nazwach, więc tylko dla słów wpisanych po norwesku)."""
+    text = fold(" ".join([x["name"]] + [i["name"] for i in x["ingredients"]]))
+    return any(w and w in text for w in (fold(w) for w in p.get("dislikes") or []))
+
+
+def inspo_kid_names(p: dict, fish_n: int) -> list:
+    """Kilka dań z listy dziecięcej bazy do podsunięcia modelowi przy planie dziecka."""
+    fish_ok = bool(p["fish_max"]) and fish_n < p["fish_max"]
+    pool = [x["name"] for x in INSPO if x["pool"] == "kid" and (fish_ok or not x["is_fish"]) and not inspo_kid_clash(p, x)]
+    return random.sample(pool, min(5, len(pool)))
+
+
+def inspo_kid_dish(x: dict, o: dict) -> dict:
+    """Propozycja dla dziecka, którą model wziął z bazy: składniki i ilości z pliku, na jedną porcję dziecka."""
+    f = KID_SHARE / (x["servings"] or 4)
+    ings = [kid_ing({"name": i["name"], "qty": scale_qty(i["qty"], i["unit"], f), "unit": i["unit"], "aisle": i["aisle"]})
+            for i in x["ingredients"]][:12]
+    return {**o, "name": x["name"], "is_fish": bool(x["is_fish"]), "shares": "", "extra_min": x.get("time_min"),
+            "ingredients": ings, "steps": [], "source": x["url"], "inspo": x["id"]}
+
+
+class InspoReq(BaseModel):
+    on: bool | None = None
+    n: int | None = None
+    week: int | None = None
+
+
+@app.post("/api/inspo/settings")
+def inspo_settings(req: InspoReq):
+    with db() as c:
+        if req.on is not None:
+            c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('inspo_on', ?)", ("1" if req.on else "0",))
+        if req.n is not None:
+            if not 1 <= req.n <= INSPO_MAX:
+                raise HTTPException(400, f"dań z bazy: 1-{INSPO_MAX}")
+            c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('inspo_n', ?)", (str(req.n),))
+    return state(req.week)
+
+
+@app.get("/api/inspo")
+def inspo_list():
+    """Baza do przeglądania w zakładce przepisów: ilości przeliczone na domyślną liczbę porcji domu."""
+    dflt = default_servings()
+    with db() as c:
+        bad = disliked_set()
+        ours = {norm_name(r["name"]) for r in c.execute("SELECT name FROM recipes")}
+        ours |= {norm_name(json.loads(r["data"]).get("name")) for r in c.execute("SELECT data FROM meals WHERE liked=1")}
+    out = []
+    for x in INSPO:
+        b = balance({"ingredients": x["ingredients"], "servings_base": x["servings"]})
+        f = dflt / (x["servings"] or dflt)
+        out.append({k: x[k] for k in ("id", "name", "pool", "site", "rating", "votes", "url", "time_min", "protein",
+                                      "is_fish", "kid_ok", "taco")}
+                   | {"description": x["method"], "servings": dflt, "bal": b["level"], "kind": (b["kinds"] or [None])[0],
+                      "disliked": norm_name(x["name"]) in bad, "ours": norm_name(x["name"]) in ours,
+                      "ingredients": [{"name": tidy_ing(i)["name"], "unit": tidy_ing(i)["unit"],
+                                       "q": fmt_qty(scale_qty(i["qty"], i["unit"], f))} for i in x["ingredients"]]})
+    return {"recipes": out}
+
+
 JOB_LOCK = threading.Lock()
 PARALLEL = int(os.getenv("LLM_PARALLEL", "4"))
 PREFETCH = os.getenv("PREFETCH", "1") != "0"  # przepisy piszą się na zapas, gdy tylko powstanie szkic tygodnia
@@ -2396,6 +2616,8 @@ def _names(x):
 
 
 def draft_meal(o):
+    if o.get("inspo"):
+        return inspo_draft(o["inspo"])
     return {"name": o["name"], "description": o.get("description", ""), "is_fish": bool(o.get("is_fish")),
             "time_min": None, "ingredients": [], "steps": [], "owned": False, "draft": True,
             "ingredient_names": _names(o.get("ingredients")), "uses_pantry": _names(o.get("uses_pantry")),
@@ -2410,13 +2632,18 @@ def pantry_for(d, names):
     return [p for p in names if any(_same_item(canon(parse_pantry(p)[2]), n) for n in used)]
 
 
-def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoid, known, recent=(), favs=(), hard=()):
+def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoid, known, recent=(), favs=(), hard=(),
+                 forced=(), inspo=None):
+    """forced: dania z bazy wybrane ręcznie w zakładce przepisów [(id życzenia, pozycja bazy)]; inspo: (kandydaci, k)
+    albo None, gdy baza jest wyłączona."""
     try:
         plan = []
         if n:
             job["stage"] = "plan"
             proven = min(len(favs), round(n * PROVEN_SHARE))
-            res = llm.ask_json(plan_prompt(n + 2, pantry, avoid, known, cravings, list(recent), list(favs), proven), big=True)
+            cands, k = inspo or ([], 0)
+            res = llm.ask_json(plan_prompt(n + 2, pantry, avoid, known, cravings, list(recent), list(favs), proven,
+                                           cands, k), big=True)
             bad, seen, plan = disliked_set() | {norm_name(k) for k in known}, set(), []
             for o in res.get("meals", []):
                 nm = str(o.get("name", "")).strip()
@@ -2426,17 +2653,29 @@ def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoi
                 plan.append({"name": nm, "description": o.get("description", ""),
                              "is_fish": bool(o.get("is_fish")), "ingredients": o.get("ingredients"),
                              "uses_pantry": o.get("uses_pantry"), "protein": o.get("protein")})
-            plan = pick_fresh(plan, set(hard), n, cravings)  # bez powtórek z ostatnich tygodni, ale zawsze n dań
-            if len(plan) < n:
-                raise RuntimeError(f"model zwrócił {len(plan)} dań zamiast {n}")
+            if inspo:  # danie o nazwie z bazy bierze składniki z bazy, także gdy model sam na nie wpadł
+                for o in plan:
+                    x = INSPO_BY.get(norm_name(o["name"]))
+                    if x and x["pool"] == "main":
+                        o.update(inspo=x, is_fish=bool(x["is_fish"]))
+            picked = pick_fresh(plan, set(hard), n, cravings)  # bez powtórek z ostatnich tygodni, ale zawsze n dań
+            if len(picked) < n:
+                raise RuntimeError(f"model zwrócił {len(picked)} dań zamiast {n}")
+            if inspo:
+                keep = {norm_name(x) for x in favs}
+                wishes = [w for w in (norm_name(x) for x in cravings) if len(w) >= 3]
+                asked = lambda o: norm_name(o["name"]) in keep or any(w in norm_name(o["name"]) or norm_name(o["name"]) in w for w in wishes)
+                picked = inspo_place(picked, [o for o in plan if not any(o is q for q in picked)], cands, k, asked)
+            plan = picked
         rows = ([(clean_meal({**m, "owned": True}), None) for _, m in carried]
                 + [(clean_meal({**m, "owned": False}), tr) for _, m, tr in fixed]
+                + [(inspo_draft(x), None) for _, x in forced]
                 + [(draft_meal(o), None) for o in plan])
         with db() as c:
             c.execute("INSERT OR IGNORE INTO weeks(start, confirmed) VALUES(?, 0)", (str(start),))
             wid = c.execute("SELECT id FROM weeks WHERE start=?", (str(start),)).fetchone()["id"]
-            c.execute("UPDATE weeks SET confirmed=? WHERE id=?", (0 if plan else 1, wid))
-            if not plan:
+            c.execute("UPDATE weeks SET confirmed=? WHERE id=?", (0 if plan or forced else 1, wid))
+            if not (plan or forced):
                 attach_used(c, wid)
             c.execute("DELETE FROM meals WHERE week_id=?", (wid,))
             for d, (m, tr) in enumerate(rows):
@@ -2444,7 +2683,7 @@ def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoi
                           (wid, d, json.dumps(m, ensure_ascii=False), tr))
             for cid, _ in carried:
                 c.execute("DELETE FROM carry WHERE id=?", (cid,))
-            for cid, _, _ in fixed:
+            for cid, *_ in list(fixed) + list(forced):
                 c.execute("UPDATE cravings SET used=1 WHERE id=?", (cid,))
             if n:
                 for cid in crav_ids:
@@ -2544,8 +2783,14 @@ def fill_meal(mid):
             attach_used(c, r["week_id"])
             return name
         known = known_recipe(c, d, pantry, mid)
+    base = INSPO_ID.get(d.get("inspo")) if d.get("inspo") else None
     if known:
         m, tr = known
+    elif base:
+        try:
+            m, tr = inspo_meal(base, inspo_steps(base), pantry), None
+        except Exception:
+            m = None
     else:
         try:
             m, tr = gen_recipe(name, desc, pantry), None
@@ -2733,17 +2978,32 @@ def generate(req: GenReq):
             pantry = pantry_names(c)
             crav = [(r["id"], r["text"]) for r in c.execute(
                 "SELECT id, text FROM cravings WHERE used=0 AND recipe_id IS NULL")]
-            known = [m["name"] for _, m in carried] + [m["name"] for _, m, _ in fixed]
+            icfg = inspo_cfg(c)
+            forced = []  # „Do planu” w zakładce Inspiracje: życzenie o nazwie dania z bazy wchodzi do planu bez modelu
+            if icfg["have"]:
+                for cid, text in crav:
+                    x = INSPO_BY.get(norm_name(text))
+                    if x and len(forced) < n and x["id"] not in {f["id"] for _, f in forced}:
+                        forced.append((cid, x))
+                crav = [(i, t) for i, t in crav if i not in {cid for cid, _ in forced}]
+                n -= len(forced)
+            known = [m["name"] for _, m in carried] + [m["name"] for _, m, _ in fixed] + [x["name"] for _, x in forced]
             recent = recent_meals(c, start, RECENT_WEEKS)
             hard = {norm_name(x) for x in recent_meals(c, start, RECENT_HARD)}
             favs = fav_names(c, recent + known)
-        avoid = ["ryba" for _, m in carried if m.get("is_fish")] + ["ryba" for _, m, _ in fixed if m.get("is_fish")]
+            avoid = (["ryba" for _, m in carried if m.get("is_fish")] + ["ryba" for _, m, _ in fixed if m.get("is_fish")]
+                     + ["ryba" for _, x in forced if x["is_fish"]])
+            inspo = None
+            if icfg["on"] and n:
+                # zawsze zostaje miejsce na przynajmniej jedną nową propozycję modelu
+                k = max(0, min(icfg["n"] - len(forced), n - min(len(favs), round(n * PROVEN_SHARE)) - 1))
+                inspo = (inspo_cands(c, recent + known + favs, fish_ok=not avoid) if k else [], k)
         job = {"id": uuid.uuid4().hex[:8], "status": "running", "stage": "plan" if n else "recipes",
                "done": 0, "total": 7, "ready": [], "plan": [], "error": None, "week_id": None, "kind": "plan"}
         add_job(job)
         threading.Thread(target=run_generate, daemon=True,
                          args=(job, start, carried, fixed, [i for i, _ in crav], n, pantry,
-                               [t for _, t in crav], avoid, known, recent, favs, hard)).start()
+                               [t for _, t in crav], avoid, known, recent, favs, hard, forced, inspo)).start()
     return {"job": job["id"]}
 
 
@@ -2945,6 +3205,9 @@ def choose(mid: int, req: ChooseReq):
         if req.name is not None and alts[req.index].get("name") != req.name:
             raise HTTPException(409, "propozycje się zmieniły – odśwież i wybierz jeszcze raz")
         confirmed = week_confirmed(c, r["week_id"])
+        old = json.loads(r["data"])
+        if old.get("inspo") and r["status"] != "done":  # danie z bazy zamienione przed gotowaniem: po dwóch razach przestaje wracać
+            c.execute("INSERT INTO inspo_skip(id, n) VALUES(?, 1) ON CONFLICT(id) DO UPDATE SET n=n+1", (old["inspo"],))
         # pre=NULL: przepis napisany na zapas dotyczył starego dania
         c.execute("""UPDATE meals SET data=?, alts=NULL, tr=NULL, pre=NULL, status='planned', liked=0, servings=NULL
                      WHERE id=?""", (json.dumps(draft_meal(alts[req.index]), ensure_ascii=False), mid))
@@ -3094,14 +3357,16 @@ ma "shared": true i qty null: nie trafia na listę zakupów. "shares" to nazwa g
 aisle dokładnie jedna z: """ + ", ".join(AISLES) + "."
 
 
-def kid_prompt(p: dict, d: dict, dishes: list, fish_n: int, n: int, avoid: list) -> str:
+def kid_prompt(p: dict, d: dict, dishes: list, fish_n: int, n: int, avoid: list, base: list | None = None) -> str:
     ings = d.get("ingredient_names") or [i.get("name") for i in d.get("ingredients", [])]
     new = ('Dokładnie jedna propozycja ma być nowością ("is_new": true): danie, którego nie ma wśród sprawdzonych, '
            'złożone głównie z tego, co dziecko lubi. Pozostałe mają "is_new": false.' if p["novelty"] else 'Wszystkie mają "is_new": false.')
     return f"""Jesteś planerem obiadów dla rodziny. Dorośli jedzą: {d.get("name")} ({d.get("description", "")}).
 Składniki dania dorosłych: {", ".join(str(x) for x in ings if x) or "brak danych"}.
 {kid_rules(p, fish_n)}
-Sprawdzone dania dziecka (użyj, jeśli pasują do dania dorosłych): {dishes or "brak"}.
+Sprawdzone dania dziecka (użyj, jeśli pasują do dania dorosłych): {dishes or "brak"}.{f'''
+Sprawdzone przepisy dla dzieci z bazy (pełne osobne dania; najwyżej jedna propozycja może być stąd i tylko gdy pasuje
+do dnia, wtedy użyj dokładnie tej nazwy): {base}.''' if base else ''}
 Zaproponuj {n} prostych obiadów dla dziecka na ten dzień. Każdy ma być podobny do dania dorosłych i mało pracochłonny:
 wykorzystaj to, co i tak jest gotowane (ten sam ryż, makaron, ziemniaki, ta sama blacha), najwyżej jedna dodatkowa
 patelnia lub garnek i do 10 minut dodatkowej pracy. Na talerzu ma być źródło białka i warzywo, które dziecko je.
@@ -3177,11 +3442,13 @@ def kid_dish_put(c, dish, bump=False):
 
 def kid_ask_props(c_row, p, dishes, fish_n, avoid):
     d = json.loads(c_row["data"])
-    res = llm.ask_json(kid_prompt(p, d, dishes, fish_n, KID_PROPS, avoid))
+    res = llm.ask_json(kid_prompt(p, d, dishes, fish_n, KID_PROPS, avoid, inspo_kid_names(p, fish_n)))
     seen = {norm_name(x) for x in avoid}
     props = []
     for o in res.get("kid_options") or []:
         x = kid_dish(o) if isinstance(o, dict) else None
+        if x and INSPO_BY.get(norm_name(x["name"])):  # propozycja z bazy: składniki i ilości z pliku
+            x = inspo_kid_dish(INSPO_BY[norm_name(x["name"])], x)
         if x and x["name"] and x["ingredients"] and norm_name(x["name"]) not in seen:
             seen.add(norm_name(x["name"]))
             props.append(x)
@@ -3199,11 +3466,17 @@ def kid_fill(mid):
                 return
             dishes = [x["name"] for x in kid_dish_list(c)][:12]
             fish_n = kid_week_fish(c, r["week_id"], mid)
-        try:
-            props, same_ok = kid_ask_props(r, p, dishes, fish_n, [])
-            err = not props
-        except Exception:
-            props, same_ok, err = [], True, True
+        d0 = json.loads(r["data"])
+        bx = INSPO_ID.get(d0.get("inspo")) if d0.get("inspo") else None
+        if bx and bx["kid_ok"] and not inspo_kid_clash(p, bx):
+            # danie z bazy oznaczone jako dobre dla dziecka: „to samo” bez pytania modelu (własne propozycje na życzenie)
+            props, same_ok, err = [], True, False
+        else:
+            try:
+                props, same_ok = kid_ask_props(r, p, dishes, fish_n, [])
+                err = not props
+            except Exception:
+                props, same_ok, err = [], True, True
         with db() as c:
             cur = c.execute("SELECT * FROM meals WHERE id=?", (mid,)).fetchone()
             if not cur or kid_other_dish(cur, r):
@@ -3783,6 +4056,8 @@ def add_craving(req: CravReq):
             text = rc["name"]
         if not text:
             raise HTTPException(400, "pusty tekst")
+        if norm_name(text) in INSPO_BY:  # ktoś sam wybrał danie z bazy: znów może być proponowane
+            c.execute("DELETE FROM inspo_skip WHERE id=?", (INSPO_BY[norm_name(text)]["id"],))
         c.execute("INSERT INTO cravings(text, recipe_id) VALUES(?,?)", (text, req.recipe_id))
     return state()
 
