@@ -2,7 +2,7 @@
 
 - Vegetar, fisk maks 1 gang i uken. 2 voksne + 1 barn, Norge, metriske mål, middels innsats.
 - Uka går lørdag til fredag. Aldri pizza. Fredag = vegetarisk fredagstaco.
-- Ikke tofu (har ikke).
+- Tofu er greit.
 - Liker: KIWI-risotto med bakte rotgrønnsaker (gulrot, pastinakk, grana padano, mandler), pastasalat med feta,
   linsebolognese, stekte poteter med ovnsbakte kikerter og brokkoli (rømmedip).
 - Unngå to like retter på rad (f.eks. to linserretter).
