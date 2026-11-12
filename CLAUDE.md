@@ -36,6 +36,10 @@ DB_PATH=/tmp/moja-kopia.db BACKUP_DIR=/tmp/moje-kopie \
 - Plan dziecka (`tools/test_kid.py`, sam uruchamia serwer; tryb `ui` steruje Chromium) działa tylko z włączonym profilem
   dziecka (ustawienia → „Plan dziecka”, klucz `kid` w tabeli `settings`). Bez profilu aplikacja nie pyta modelu o dania
   dziecka i wygląda jak dawniej, więc pozostałe testy go nie widzą. Profil to dane prywatne: nie wpisuj go do repo.
+  Zasady propozycji (kolejność: danie dorosłych, zalecenia, „lubi” jako wskazówka, „nie lubi” jako zakaz) są w `kid_prompt`,
+  a po odpowiedzi modelu `kid_screen` odrzuca „nie lubi” i pilnuje głównego źródła białka (różne w propozycjach dnia, w planie
+  dziecka najwyżej 2 dni w tygodniu i nie dzień po dniu; warzywa i dodatki bez limitu). Po zmianie zasad podnieś `KID_VER`: propozycje zapisane
+  starszą wersją odświeżą się same, wybory domowników zostają.
 - Baza inspiracji (`app/inspiracje.json`, sprawdzone przepisy z norweskich serwisów jako fakty: składniki, ilości, ocena,
   link) jest wczytywana przy starcie; aplikacja niczego z tych serwisów nie pobiera. Plik buduje
   `tools/inspiracje/normalizuj.py` z `tools/inspiracje/przepisy*.json` (nie edytuj go ręcznie).
