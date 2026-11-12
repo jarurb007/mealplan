@@ -1,0 +1,4487 @@
+[
+ {
+  "name": "Linsegryte med kokosmelk, chili og ingefær",
+  "url": "https://meny.no/oppskrifter/vegetar/linsegryte-med-chili-og-ingefar",
+  "site": "meny.no",
+  "rating": 4.12,
+  "votes": 40,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "linser",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "fersk ingefær",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "rød chili",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "tørkede linser",
+    "qty": 4,
+    "unit": "dl"
+   },
+   {
+    "name": "karri",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "grønnsakskraft",
+    "qty": 4,
+    "unit": "dl"
+   },
+   {
+    "name": "hermetiske hakkede tomater (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "kokosmelk",
+    "qty": 4,
+    "unit": "dl"
+   },
+   {
+    "name": "limesaft",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "vårløk",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk koriander",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Linsene kokes møre i en gryte med kokosmelk, hermetiske tomater og karri. Chili kan dempes for barn."
+ },
+ {
+  "name": "Rask linsegryte",
+  "url": "https://meny.no/oppskrifter/gryte/rask-linsegryte",
+  "site": "meny.no",
+  "rating": 4.43,
+  "votes": 30,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 15,
+  "protein": "linser",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "gul løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "gulrot",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rød curry paste",
+    "qty": 3,
+    "unit": "ts"
+   },
+   {
+    "name": "hermetiske tomater (boks)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "soltørkede tomater",
+    "qty": 1,
+    "unit": "dl"
+   },
+   {
+    "name": "kokosmelk",
+    "qty": 2.5,
+    "unit": "dl"
+   },
+   {
+    "name": "grønnsaksbuljong",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "linser (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk spinat (neve)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "rømme",
+    "qty": 4,
+    "unit": "ts"
+   },
+   {
+    "name": "koriander",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Løk og gulrot surres med currypaste, så småkoker hermetiske linser i tomat og kokosmelk. Spinat vendes inn til slutt."
+ },
+ {
+  "name": "Chili sin carne",
+  "url": "https://meny.no/oppskrifter/vegetar/chili-sin-carne",
+  "site": "meny.no",
+  "rating": 4.17,
+  "votes": 46,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "kidneybønner",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "kidneybønner",
+    "qty": 800,
+    "unit": "g"
+   },
+   {
+    "name": "hakkede tomater (boks)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "tomatpuré",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "rød paprika",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "gul paprika",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "rød chili",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "spisskummen",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "paprikapulver",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "kanel",
+    "qty": 0.5,
+    "unit": "ts"
+   },
+   {
+    "name": "oregano",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "sukker",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "bakekakao",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "frisk koriander (potte)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "kokt ris (porsjon)",
+    "qty": 4,
+    "unit": "stk"
+   }
+  ],
+  "method": "Paprika og løk surres med krydder, og kidneybønnene småkoker i tomatsaus med litt kakao. Serveres med ris."
+ },
+ {
+  "name": "Meksikansk vegetargryte",
+  "url": "https://meny.no/oppskrifter/vegetar/meksikansk-vegetargryte",
+  "site": "meny.no",
+  "rating": 4.22,
+  "votes": 9,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "kidneybønner",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "gulrøtter",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "søtpotet",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "paprika",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "grønnsakskraft",
+    "qty": 6,
+    "unit": "dl"
+   },
+   {
+    "name": "hermetiske tomater (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "basmatiris",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "hermetisk mais (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "malt spisskummin",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "hermetiske kidneybønner (boks)",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Alt i én gryte: rotgrønnsaker og ris koker i kraft og tomat, bønner og mais varmes med til slutt."
+ },
+ {
+  "name": "Spicy kikertgryte",
+  "url": "https://meny.no/oppskrifter/vegetar/spicy-kikertgryte",
+  "site": "meny.no",
+  "rating": 4.14,
+  "votes": 21,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "kikerter, linser og bønner",
+  "is_fish": false,
+  "child_friendly": false,
+  "ingredients": [
+   {
+    "name": "ris (porsjon)",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rød chili",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hermetiske kikerter (boks)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "hermetiske linser (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hermetiske bønner (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hermetiske tomater (boks)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "grønnsakskraft",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "vårløk",
+    "qty": 2,
+    "unit": "dl"
+   }
+  ],
+  "method": "Hermetiske kikerter, linser og bønner småkoker i tomatsaus med chili. Serveres over ris."
+ },
+ {
+  "name": "Indisk curry med kikerter og spinat",
+  "url": "https://meny.no/oppskrifter/vegetar/indisk-curry-med-kikerter-og-spinat",
+  "site": "meny.no",
+  "rating": 4.53,
+  "votes": 17,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "kikerter",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk koriander (potte)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk ingefær",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "rød chili",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rødløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "garam masala",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "spisskummen",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "gurkemeie",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "fersk spinat",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "plommetomater",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "kikerter",
+    "qty": 600,
+    "unit": "g"
+   },
+   {
+    "name": "matyoghurt",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "grønnsakskraft",
+    "qty": 2,
+    "unit": "dl"
+   }
+  ],
+  "method": "Løk, ingefær og indisk krydder surres, kikerter og tomat kokes i kraft, og yoghurt og spinat røres inn til slutt."
+ },
+ {
+  "name": "Vegetar quesadillas med kikerter",
+  "url": "https://meny.no/oppskrifter/vegetar/vegetar-quesadillas",
+  "site": "meny.no",
+  "rating": 4.29,
+  "votes": 17,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 15,
+  "protein": "kikerter og ost",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "hermetiske kikerter (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rødløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rød chili",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "tacokrydder",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "tacosaus",
+    "qty": 4,
+    "unit": "ss"
+   },
+   {
+    "name": "tortillalefser",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "vårløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "revet ost",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "rømme",
+    "qty": 1,
+    "unit": "dl"
+   }
+  ],
+  "method": "Krydrede, lett moste kikerter legges med ost mellom tortillalefser og stekes sprø i panne."
+ },
+ {
+  "name": "Falafel i pitabrød",
+  "url": "https://meny.no/oppskrifter/vegetar/falafel-i-pitabrod",
+  "site": "meny.no",
+  "rating": 4.11,
+  "votes": 35,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 15,
+  "protein": "kikerter",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "kikerter (boks)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "spisskummen",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "chilipulver",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "potetmel",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "egg",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "agurk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "yoghurt naturell",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "lime",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk mynte",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "pitabrød",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "tomat",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk salat",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "jalapeño",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Kikerter moses med krydder og egg, formes til små kaker og stekes. Serveres i pitabrød med yoghurtsaus og salat."
+ },
+ {
+  "name": "Halloumisalat",
+  "url": "https://meny.no/oppskrifter/vegetar/halloumisalat",
+  "site": "meny.no",
+  "rating": 4.57,
+  "votes": 14,
+  "weak_rating": false,
+  "servings": 2,
+  "time_min": 15,
+  "protein": "halloumi og borlottibønner",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "halloumi",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "ruccola (pose)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "liten rødløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "plommetomater",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "brokkoli",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "hermetiske borlottibønner (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "sitronsaft",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "revet sitronskall",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "ristede pinjekjerner",
+    "qty": 2,
+    "unit": "ss"
+   }
+  ],
+  "method": "Halloumi stekes gyllen og legges varm på salat med brokkoli, tomat og bønner, med sitrondressing."
+ },
+ {
+  "name": "Baked feta pasta",
+  "url": "https://meny.no/oppskrifter/pasta/baked-feta-pasta",
+  "site": "meny.no",
+  "rating": 4.41,
+  "votes": 222,
+  "weak_rating": false,
+  "servings": 2,
+  "time_min": 30,
+  "protein": "fetaost",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "små, søte tomater",
+    "qty": 250,
+    "unit": "g"
+   },
+   {
+    "name": "fetaost",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "tørket oregano",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "revet sitronskall",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "frisk basilikum",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "pasta (porsjon)",
+    "qty": 2,
+    "unit": "stk"
+   }
+  ],
+  "method": "En hel fetaost bakes i ovnen sammen med småtomater og hvitløk, røres til saus og blandes med nykokt pasta."
+ },
+ {
+  "name": "Salat med kikerter og feta",
+  "url": "https://meny.no/oppskrifter/salat/salat-med-kikerter-og-feta",
+  "site": "meny.no",
+  "rating": 4.29,
+  "votes": 14,
+  "weak_rating": false,
+  "servings": 2,
+  "time_min": 15,
+  "protein": "fetaost og kikerter",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "agurk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rødløk",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "gode tomater",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "avokado",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "fetaost (pakke)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "kalmata oliven",
+    "qty": 150,
+    "unit": "g"
+   },
+   {
+    "name": "kikerter (pakke)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk persille (potte)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "valnøtter",
+    "qty": 50,
+    "unit": "g"
+   },
+   {
+    "name": "dijon sennep",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "eddik",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "honning",
+    "qty": 1,
+    "unit": "ts"
+   }
+  ],
+  "method": "Kald, mettende salat: kikerter, feta, oliven og grønnsaker blandes med en sennepsdressing."
+ },
+ {
+  "name": "Omelett med spinat og cherrytomater",
+  "url": "https://meny.no/oppskrifter/egg/omelett-med-spinat-og-cherrytomater",
+  "site": "meny.no",
+  "rating": 4.33,
+  "votes": 6,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 15,
+  "protein": "egg",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "egg",
+    "qty": 8,
+    "unit": "stk"
+   },
+   {
+    "name": "lettmelk",
+    "qty": 8,
+    "unit": "ss"
+   },
+   {
+    "name": "cherrytomater",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "rødløk",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "spinat",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "margarin",
+    "qty": 1,
+    "unit": "ss"
+   }
+  ],
+  "method": "Egg vispes med melk og stekes som omelett i panne med spinat, rødløk og cherrytomater."
+ },
+ {
+  "name": "Middagsbowl med rødbeter, halloumi og syltet rødløk",
+  "url": "https://meny.no/oppskrifter/vegetar/middagsbowl-med-rodbeter-halloumi-og-syltet-rodlok",
+  "site": "meny.no",
+  "rating": 5.0,
+  "votes": 5,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "halloumi og fetaost",
+  "is_fish": false,
+  "child_friendly": false,
+  "ingredients": [
+   {
+    "name": "mel",
+    "qty": 250,
+    "unit": "g"
+   },
+   {
+    "name": "bakepulver",
+    "qty": 1.5,
+    "unit": "ts"
+   },
+   {
+    "name": "flytende honning",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "kaldt vann",
+    "qty": 1.75,
+    "unit": "dl"
+   },
+   {
+    "name": "rødløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "sukker (klype)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "lime",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "sous vide kokte rødbeter",
+    "qty": 500,
+    "unit": "g"
+   },
+   {
+    "name": "balsamicoeddik",
+    "qty": 3,
+    "unit": "ss"
+   },
+   {
+    "name": "yoghurt naturell",
+    "qty": 4,
+    "unit": "ss"
+   },
+   {
+    "name": "fetaost",
+    "qty": 150,
+    "unit": "g"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "halloumi",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "onna mamma mia mix",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "friske urter",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "ristede nøtter",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Bowl med stekt halloumi, ferdigkokte rødbeter, fetakrem og hurtigsyltet rødløk, med hjemmestekt pannebrød til."
+ },
+ {
+  "name": "Vegetartaco med sopp og bønner",
+  "url": "https://meny.no/oppskrifter/vegetar/vegetartaco-med-sopp-og-bonner",
+  "site": "meny.no",
+  "rating": 4.0,
+  "votes": 4,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "bønner",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "tortillalefser",
+    "qty": 8,
+    "unit": "stk"
+   },
+   {
+    "name": "ruccula (pose)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "bønner (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "sopp",
+    "qty": 150,
+    "unit": "g"
+   },
+   {
+    "name": "tacokrydder (pose)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "maiskolber",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "rød chili",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "koriander (neve)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "gode tomater",
+    "qty": 500,
+    "unit": "g"
+   },
+   {
+    "name": "chili",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rødløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "lime",
+    "qty": 0.5,
+    "unit": "stk"
+   }
+  ],
+  "method": "Sopp og bønner stekes med tacokrydder og serveres i tortillalefser med mais og hjemmelaget tomatsalsa."
+ },
+ {
+  "name": "Pasta med proteinrik tomatsaus",
+  "url": "https://www.tine.no/oppskrifter/middag-og-hovedretter/pasta-og-ris/pasta-med-kremet-proteinrik-tomatsaus",
+  "site": "tine.no",
+  "rating": 4.0,
+  "votes": 75,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 40,
+  "protein": "cottage cheese",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "mager cottage cheese",
+    "qty": 300,
+    "unit": "g"
+   },
+   {
+    "name": "lettmelk",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 12,
+    "unit": "stk"
+   },
+   {
+    "name": "hakkede hermetiske tomater (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk oregano",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "frisk basilikum",
+    "qty": 4,
+    "unit": "ss"
+   },
+   {
+    "name": "tørket chiliflak",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "balsamicoeddik",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "sukker",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "cherrytomat",
+    "qty": 250,
+    "unit": "g"
+   },
+   {
+    "name": "sitron",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "kapers",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "fullkornpasta",
+    "qty": 400,
+    "unit": "g"
+   },
+   {
+    "name": "frisk spinat",
+    "qty": 50,
+    "unit": "g"
+   },
+   {
+    "name": "norsk alpeost blokk",
+    "qty": 150,
+    "unit": "g"
+   }
+  ],
+  "method": "Cottage cheese kjøres glatt med melk og kokes inn i en tomatsaus. Serveres med fullkornpasta og ovnsbakte cherrytomater."
+ },
+ {
+  "name": "Ovnsbakt omelett med cottage cheese",
+  "url": "https://www.tine.no/oppskrifter/middag-og-hovedretter/pizza-og-pai/ovnsbakt-omelett-med-cottage-cheese",
+  "site": "tine.no",
+  "rating": 4.0,
+  "votes": 50,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 45,
+  "protein": "egg og cottage cheese",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "grønnkål",
+    "qty": 100,
+    "unit": "g"
+   },
+   {
+    "name": "spinat",
+    "qty": 100,
+    "unit": "g"
+   },
+   {
+    "name": "purre",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "meierismør",
+    "qty": 3,
+    "unit": "ss"
+   },
+   {
+    "name": "frosne erter",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "egg",
+    "qty": 6,
+    "unit": "stk"
+   },
+   {
+    "name": "matfløte",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "muskatnøtt",
+    "qty": 0.25,
+    "unit": "ts"
+   },
+   {
+    "name": "cottage cheese original (beger)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "ekte revet ost 4 oster",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "cherrytomat",
+    "qty": 10,
+    "unit": "stk"
+   },
+   {
+    "name": "løk",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "hjertesalat",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitvinseddik",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "grovt brød (skive)",
+    "qty": 4,
+    "unit": "stk"
+   }
+  ],
+  "method": "Grønnkål, spinat og erter freses i panne, dekkes med eggeblanding med cottage cheese og ost og stekes ferdig i ovnen."
+ },
+ {
+  "name": "Paneer i spinatsaus",
+  "url": "https://www.tine.no/oppskrifter/middag-og-hovedretter/gronnsaker-og-poteter/paneer-i-spinatsaus",
+  "site": "tine.no",
+  "rating": 4.1,
+  "votes": 69,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "paneer",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "paneer",
+    "qty": 400,
+    "unit": "g"
+   },
+   {
+    "name": "meierismør",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk ingefær (cm)",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "spisskummen",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "garam masala",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "gurkemeie",
+    "qty": 0.5,
+    "unit": "ts"
+   },
+   {
+    "name": "tomat",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk spinat",
+    "qty": 600,
+    "unit": "g"
+   },
+   {
+    "name": "matfløte",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "frisk koriander",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Paneer stekes gyllen i smør. Spinat, tomat og indisk krydder kokes til en kremet saus som osten vendes inn i."
+ },
+ {
+  "name": "Kikertsuppe med ostechips",
+  "url": "https://www.tine.no/oppskrifter/middag-og-hovedretter/supper/kikertsuppe-med-ostechips",
+  "site": "tine.no",
+  "rating": 4.2,
+  "votes": 17,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "kikerter",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "hermetiske kikerter",
+    "qty": 600,
+    "unit": "g"
+   },
+   {
+    "name": "hermetiske tomater",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "grønnsaksbuljong",
+    "qty": 10,
+    "unit": "dl"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "laurbærblad",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "liten kanelstang",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "tørket timian",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "kremfløte",
+    "qty": 1,
+    "unit": "dl"
+   },
+   {
+    "name": "grønnkål",
+    "qty": 100,
+    "unit": "g"
+   },
+   {
+    "name": "eple",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "sitronsaft",
+    "qty": 3,
+    "unit": "ss"
+   },
+   {
+    "name": "revet norvegia",
+    "qty": 100,
+    "unit": "g"
+   },
+   {
+    "name": "paprikapulver",
+    "qty": 0.5,
+    "unit": "ts"
+   },
+   {
+    "name": "valnøtter",
+    "qty": 2,
+    "unit": "ss"
+   }
+  ],
+  "method": "Kikerter småkoker i buljong med tomat, fløte og grønnkål. Revet ost stekes til sprø chips i ovnen og serveres til."
+ },
+ {
+  "name": "Brokkoliburger med mangosalsa",
+  "url": "https://www.tine.no/oppskrifter/middag-og-hovedretter/gronnsaker-og-poteter/brokkoliburger-med-mangosalsa",
+  "site": "tine.no",
+  "rating": 4.2,
+  "votes": 35,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 45,
+  "protein": "kikerter",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "hermetiske kikerter",
+    "qty": 300,
+    "unit": "g"
+   },
+   {
+    "name": "brokkoli",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rå cashewnøtter",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "rød chili",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "worcestershiresaus",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "dijonsennep",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "saltredusert soyasaus",
+    "qty": 4,
+    "unit": "ss"
+   },
+   {
+    "name": "chiafrø",
+    "qty": 4,
+    "unit": "ss"
+   },
+   {
+    "name": "mango",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "agurk",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "vårløk",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "limesaft",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "flytende honning",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "grove hamburgerbrød",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "salatblanding",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "norvegia lett & smakfull (skive)",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "sennep",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "lett crème fraîche",
+    "qty": 1,
+    "unit": "ss"
+   }
+  ],
+  "method": "Brokkoli og kikerter bakes i ovnen, kjøres til burgerdeig med cashewnøtter og stekes. Serveres i brød med mangosalsa."
+ },
+ {
+  "name": "Veggis-taco",
+  "url": "https://www.tine.no/oppskrifter/middag-og-hovedretter/gronnsaker-og-poteter/veggis-taco",
+  "site": "tine.no",
+  "rating": 3.9,
+  "votes": 80,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 35,
+  "protein": "kidneybønner og cottage cheese",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "bønner (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "tacokrydder",
+    "qty": 0.5,
+    "unit": "ss"
+   },
+   {
+    "name": "meierismør",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "rødløk",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "purre",
+    "qty": 0.25,
+    "unit": "stk"
+   },
+   {
+    "name": "bete",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "gulrot",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "liten tortillalefse",
+    "qty": 8,
+    "unit": "stk"
+   },
+   {
+    "name": "småbladet salat",
+    "qty": 100,
+    "unit": "g"
+   },
+   {
+    "name": "cottage cheese original",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "avokado",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "lime",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "chilisaus",
+    "qty": 4,
+    "unit": "ss"
+   },
+   {
+    "name": "lettrømme",
+    "qty": 3,
+    "unit": "dl"
+   }
+  ],
+  "method": "Rotgrønnsaker bakes sprø i ovnen, bønnene varmes og moses med tacokrydder, og alt fylles i lefser med cottage cheese."
+ },
+ {
+  "name": "Eggepanne med cottage cheese",
+  "url": "https://www.tine.no/oppskrifter/lunsj-og-smaretter/omeletter-og-pannekaker/eggepanne-med-cottage-cheese",
+  "site": "tine.no",
+  "rating": 3.8,
+  "votes": 94,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 20,
+  "protein": "egg og cottage cheese",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "egg",
+    "qty": 8,
+    "unit": "stk"
+   },
+   {
+    "name": "mager cottage cheese",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "meierismør",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "paprika",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "plommetomat",
+    "qty": 12,
+    "unit": "stk"
+   },
+   {
+    "name": "vårløk",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Paprika og tomat stekes lett, egg vispet med cottage cheese helles over og stivner i pannen under lokk."
+ },
+ {
+  "name": "Smaksrik vegetargryte med kikerter og søtpotet",
+  "url": "https://www.coop.no/oppskrifter/vegetar/smaksrik-vegetargryte-med-kikerter-og-sotpotet",
+  "site": "coop.no",
+  "rating": null,
+  "votes": 0,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "kikerter",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "basmatiris",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "gul løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "stor søtpotet",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "revet ingefær",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "garam masala",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "hermetiske kikerter (boks)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "tomat passata (glass)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "grønnsakskraft",
+    "qty": 4,
+    "unit": "dl"
+   },
+   {
+    "name": "flytende honning",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "fersk spinat",
+    "qty": 100,
+    "unit": "g"
+   },
+   {
+    "name": "limebåter",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "kokosflak",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "frisk koriander (klype)",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Søtpotet i terninger surres med garam masala og koker mør med kikerter i tomatpassata og kraft. Serveres med ris."
+ },
+ {
+  "name": "Minestronesuppe med linser",
+  "url": "https://www.coop.no/oppskrifter/vegansk/Minestronesuppe-med-linser",
+  "site": "coop.no",
+  "rating": 4.0,
+  "votes": 1,
+  "weak_rating": true,
+  "servings": 4,
+  "time_min": 25,
+  "protein": "linser",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "gul løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "gulrøtter",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "tørket oregano",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "tørket timian",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "hakkede tomater (boks)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "vann",
+    "qty": 8,
+    "unit": "dl"
+   },
+   {
+    "name": "grønnsaksbuljongterning",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "spagetti",
+    "qty": 100,
+    "unit": "g"
+   },
+   {
+    "name": "røde linser (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "squash",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "fersk timian (potte)",
+    "qty": 0.5,
+    "unit": "stk"
+   }
+  ],
+  "method": "Grønnsakssuppe på hakkede tomater der spagettibiter og hermetiske linser koker med. Serveres gjerne med brød."
+ },
+ {
+  "name": "Shakshouka - Bakte egg i spicy tomatsaus",
+  "url": "https://www.coop.no/oppskrifter/egg/shakshouka-bakte-egg-i-spicy-tomatsaus",
+  "site": "coop.no",
+  "rating": null,
+  "votes": 0,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 35,
+  "protein": "egg",
+  "is_fish": false,
+  "child_friendly": false,
+  "ingredients": [
+   {
+    "name": "egg",
+    "qty": 5,
+    "unit": "stk"
+   },
+   {
+    "name": "chili",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "løk",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "paprika",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "hakkede tomater (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "tacokrydder",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "koriander (klype)",
+    "qty": 2,
+    "unit": "stk"
+   }
+  ],
+  "method": "Løk og paprika kokes til en krydret tomatsaus i panne, og eggene posjeres i fordypninger i sausen."
+ },
+ {
+  "name": "Frittata med asparges",
+  "url": "https://www.coop.no/oppskrifter/egg/frittata-med-asparges",
+  "site": "coop.no",
+  "rating": null,
+  "votes": 0,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "egg",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "egg",
+    "qty": 6,
+    "unit": "stk"
+   },
+   {
+    "name": "sjalottløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "smør",
+    "qty": 20,
+    "unit": "g"
+   },
+   {
+    "name": "asparges (bunt)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "kremost",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "gressløk",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "revet ost",
+    "qty": 100,
+    "unit": "g"
+   }
+  ],
+  "method": "Asparges og sjalottløk stekes i en ovnssikker panne, eggeblanding med kremost helles over og stekes ferdig i ovnen."
+ },
+ {
+  "name": "Vegetartaco med bønner",
+  "url": "https://www.coop.no/oppskrifter/vegetar/vegetartaco-med-bonner",
+  "site": "coop.no",
+  "rating": 4.5,
+  "votes": 2,
+  "weak_rating": true,
+  "servings": 4,
+  "time_min": 25,
+  "protein": "bønner og linser",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "hermetiske bønner (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hermetiske linser (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "gul løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "tacokrydder",
+    "qty": 5,
+    "unit": "ss"
+   },
+   {
+    "name": "vann",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "guacamole (porsjon)",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "cherrytomat",
+    "qty": 8,
+    "unit": "stk"
+   },
+   {
+    "name": "agurk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "mais (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rømme (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "revet ost",
+    "qty": 100,
+    "unit": "g"
+   }
+  ],
+  "method": "Hermetiske bønner og linser freses med løk og tacokrydder til tacofyll. Serveres i lefser med vanlig tacotilbehør."
+ },
+ {
+  "name": "Vegetar burrito med krydrede bønner og Kavli Cheddar Dipp",
+  "url": "https://www.coop.no/oppskrifter/vegetar/vegetar-burrito-med-krydrede-bonner-og-kavli-cheddar-dipp",
+  "site": "coop.no",
+  "rating": null,
+  "votes": 0,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 40,
+  "protein": "bønner",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "store tortillalefser",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "svarte bønner (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "kidneybønner (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rød paprika",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "maiskorn (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "spisskummen",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "paprikapulver",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "kokt ris",
+    "qty": 100,
+    "unit": "g"
+   },
+   {
+    "name": "kavli cheddar dipp (pakke)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "tomater",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "rødløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "limejuice",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "hakket frisk koriander",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "frisk koriander",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "limebåter",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Bønner, mais og paprika stekes med krydder, rulles i store lefser med ris og ostedipp og stekes lett. Tomatsalsa til."
+ },
+ {
+  "name": "Salat med grillet halloumi og melon",
+  "url": "https://www.coop.no/oppskrifter/salat/salat-med-grillet-halloumi-og-melon",
+  "site": "coop.no",
+  "rating": null,
+  "votes": 0,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "halloumi",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "halloumi",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "hjertesalat",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "agurk",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "cantaloupemelon",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "pinjekjerner (neve)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "granateplekjerner (neve)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "dijonsennep",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "flytende honning",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "sitron",
+    "qty": 0.5,
+    "unit": "stk"
+   }
+  ],
+  "method": "Halloumi i skiver grilles eller stekes gyllen og serveres varm på salat med melon og honning-sennepsdressing."
+ },
+ {
+  "name": "Søtpoteter med linsechili",
+  "url": "https://kiwi.no/oppskrifter/vegetarmiddag/sotpoteter-med-linsechili",
+  "site": "kiwi.no",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "linser",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "søtpoteter",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "koriander (neve)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "drømmelett",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rød paprika",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "gulrot",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rød chili",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "paprikapulver",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "cumin",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "tomatpuré",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "hakkede tomater (pakke)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "røde linser (pakke)",
+    "qty": 2,
+    "unit": "stk"
+   }
+  ],
+  "method": "Søtpotetene bakes i ovnen mens linsene småkoker til en chili med tomat og paprika. Chilien fylles i søtpotetene."
+ },
+ {
+  "name": "Taco bowl med kidneybønner",
+  "url": "https://kiwi.no/oppskrifter/vegetarmiddag/taco-bowl-med-kidneybonner",
+  "site": "kiwi.no",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "kidneybønner",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "quinoa",
+    "qty": 4,
+    "unit": "dl"
+   },
+   {
+    "name": "gulrøtter",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "cherrytomater",
+    "qty": 20,
+    "unit": "stk"
+   },
+   {
+    "name": "avokado",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "mais (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hjertesalat",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "kidneybønner",
+    "qty": 760,
+    "unit": "g"
+   },
+   {
+    "name": "tacokrydder (pose)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "revet ost",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "tacosalsa (glass)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "lettrømme",
+    "qty": 4,
+    "unit": "ss"
+   },
+   {
+    "name": "tortillachips",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "koriander",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Kidneybønner varmes med tacokrydder og serveres i skål på quinoa med grønnsaker, ost og salsa."
+ },
+ {
+  "name": "Barnetaco i ovn",
+  "url": "https://kiwi.no/oppskrifter/vegetarmiddag/barnetaco-i-ovn",
+  "site": "kiwi.no",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "kidneybønner",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "chilipulver",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "cumin",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "paprikapulver",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "hvitløkspulver",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "paprika",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "mais (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "kidneybønner (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "couscous",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "tomater",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "gul løk",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitvinseddik",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "cayennepepper (knivsodd)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "agurk",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "hjertesalat",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "lettrømme",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "tortilla",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Bønner, mais, paprika og couscous blandes med mildt hjemmeblandet krydder og bakes i form. Serveres med salsa og salat."
+ },
+ {
+  "name": "Kikertcurry med cashewnøtter og tortilla",
+  "url": "https://kiwi.no/oppskrifter/vegetarmiddag/kikertcurry-med-cashewnotter-og-tortilla",
+  "site": "kiwi.no",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "kikerter",
+  "is_fish": false,
+  "child_friendly": false,
+  "ingredients": [
+   {
+    "name": "gul løk",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "revet ingefær",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "lett kokosmelk (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "curry paste red",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "kikerter (pakke)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "saft fra lime",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "cashewnøtter",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "små tortilla (pakke)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "koriander (potte)",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Løk og ingefær surres med rød currypaste, kikertene småkoker i kokosmelk og toppes med cashewnøtter. Lefser til."
+ },
+ {
+  "name": "Blomkålris og kikertstuing",
+  "url": "https://kiwi.no/oppskrifter/vegetarmiddag/blomkalris-og-kikertstuing",
+  "site": "kiwi.no",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "kikerter",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "blomkål",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "mandler",
+    "qty": 1,
+    "unit": "dl"
+   },
+   {
+    "name": "sitronskall",
+    "qty": 0.5,
+    "unit": "ts"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "kikerter (pakke)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "rødløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "cumin",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "paprikapulver",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "hakkede tomater (boks)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "spinat",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "persille (neve)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "tomatpuré",
+    "qty": 1,
+    "unit": "ss"
+   }
+  ],
+  "method": "Kikerter stues i krydret tomatsaus med spinat. Blomkål hakkes til «ris» og stekes raskt med mandler."
+ },
+ {
+  "name": "Linsesuppe med gulrot",
+  "url": "https://kiwi.no/oppskrifter/vegetarmiddag/linsesuppe-med-gulrot",
+  "site": "kiwi.no",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "linser",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "gulrøtter",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "gul løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "tørket koriander",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "cummin",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "gurkemeie",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "paprikapulver",
+    "qty": 0.5,
+    "unit": "ts"
+   },
+   {
+    "name": "kanel",
+    "qty": 0.25,
+    "unit": "ts"
+   },
+   {
+    "name": "raspet ingefær",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "grønnsaksbuljong (terning)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "vann",
+    "qty": 5,
+    "unit": "dl"
+   },
+   {
+    "name": "hakkede tomater (pakke)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "røde linser (pakke)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "lettrømme",
+    "qty": 4,
+    "unit": "ss"
+   },
+   {
+    "name": "koriander (bunt)",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Gulrot og løk surres med krydder, kokes i buljong med tomat og røde linser og kan moses til jevn suppe."
+ },
+ {
+  "name": "Mettende bønnesalat med feta",
+  "url": "https://kiwi.no/oppskrifter/salater/mettende-bonnesalat-med-feta",
+  "site": "kiwi.no",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 15,
+  "protein": "bønner, kikerter og fetaost",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "kidneybønner (boks)",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "kikerter (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "røde linser (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "persille (potte)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "sitron",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "liten rødløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "fetaost",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "ruccula salat (pose)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk timian (neve)",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Kald salat av hermetiske bønner, kikerter og linser med feta, ruccola og sitron. Ingen koking."
+ },
+ {
+  "name": "Pasta med fennikel og cottage cheese",
+  "url": "https://kiwi.no/oppskrifter/pasta/pasta-med-fennikel-og-cottage-cheese",
+  "site": "kiwi.no",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 15,
+  "protein": "cottage cheese",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "pasta (porsjon)",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "pepperrot (tube)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "cottage cheese (boks)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "fennikel",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "purre",
+    "qty": 0.5,
+    "unit": "stk"
+   }
+  ],
+  "method": "Fennikel og purre stekes myke og vendes sammen med nykokt pasta, cottage cheese og litt pepperrot."
+ },
+ {
+  "name": "Mild erte- og potetsuppe med dill og bløtkokt egg",
+  "url": "https://kiwi.no/oppskrifter/supper/mild-erte--ogpotetsuppe-med-dill-og-blotkokt-egg",
+  "site": "kiwi.no",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "egg og erter",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "poteter",
+    "qty": 350,
+    "unit": "g"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "vann",
+    "qty": 15,
+    "unit": "dl"
+   },
+   {
+    "name": "frosne erter",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "sitronsaft",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "bløtkokte egg",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "basilikum (bunt)",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Poteter og hvitløk kokes møre, erter tilsettes og suppen kjøres jevn. Serveres med et bløtkokt egg i hver tallerken."
+ },
+ {
+  "name": "Sriracha-omelett med spinat og mozzarella",
+  "url": "https://kiwi.no/oppskrifter/vegetarmiddag/sriracha-omelett-med-spinat-og-mozzarella",
+  "site": "kiwi.no",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 2,
+  "time_min": 15,
+  "protein": "egg og mozzarella",
+  "is_fish": false,
+  "child_friendly": false,
+  "ingredients": [
+   {
+    "name": "sriracha",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "soyasaus",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "egg",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "spinat (pose)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "mozzarella (pakke)",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Omelett stekt i panne med spinat og mozzarella, smaksatt med soyasaus og sriracha."
+ },
+ {
+  "name": "Heit linsesuppe",
+  "url": "https://vegetarmat.org/oppskrift/heit-linsesuppe/",
+  "site": "vegetarmat.org",
+  "rating": 4.8,
+  "votes": 238,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "røde linser",
+  "is_fish": false,
+  "child_friendly": false,
+  "ingredients": [
+   {
+    "name": "gul løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "fersk chili",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "vårløk",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "garam masala",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "gurkemeie",
+    "qty": 2,
+    "unit": "ml"
+   },
+   {
+    "name": "spisskummen",
+    "qty": 0.5,
+    "unit": "ts"
+   },
+   {
+    "name": "hakkede tomater",
+    "qty": 350,
+    "unit": "g"
+   },
+   {
+    "name": "kokosmelk",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "røde linser",
+    "qty": 1.5,
+    "unit": "dl"
+   },
+   {
+    "name": "vann",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "lime",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "brokkolispirer",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "fersk koriander",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Løk, chili og indisk krydder surres, og røde linser koker møre i tomat og kokosmelk. Sterk; chili kan reduseres."
+ },
+ {
+  "name": "Vegetarnachos",
+  "url": "https://vegetarmat.org/oppskrift/vegetarnachos/",
+  "site": "vegetarmat.org",
+  "rating": 4.7,
+  "votes": 193,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "brune bønner og ost",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "gul løk",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "chili",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "grønn paprika",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "tomatpuré",
+    "qty": 4,
+    "unit": "ts"
+   },
+   {
+    "name": "tomater",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "tacokrydder",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "nachochips",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "tørket oregano",
+    "qty": 0.5,
+    "unit": "ts"
+   },
+   {
+    "name": "røkt paprikapulver",
+    "qty": 2,
+    "unit": "ml"
+   },
+   {
+    "name": "brune bønner",
+    "qty": 250,
+    "unit": "g"
+   },
+   {
+    "name": "mais",
+    "qty": 100,
+    "unit": "g"
+   },
+   {
+    "name": "rømme",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "revet ost",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "lime",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk koriander",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Bønner og mais småkoker i en krydret tomatsaus, fordeles over nachochips med ost og gratineres i ovnen."
+ },
+ {
+  "name": "Bønnekaker",
+  "url": "https://vegetarmat.org/oppskrift/bonnekaker/",
+  "site": "vegetarmat.org",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "bønner",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "bønner",
+    "qty": 350,
+    "unit": "g"
+   },
+   {
+    "name": "aspargesbønner",
+    "qty": 150,
+    "unit": "g"
+   },
+   {
+    "name": "rød paprika",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "chili",
+    "qty": 0.25,
+    "unit": "stk"
+   },
+   {
+    "name": "vårløk",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "brødsmuler",
+    "qty": 75,
+    "unit": "g"
+   },
+   {
+    "name": "egg",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "mel",
+    "qty": 3,
+    "unit": "ss"
+   }
+  ],
+  "method": "Bønner kjøres til farse med stekte grønnsaker, brødsmuler og egg, formes til kaker og stekes i panne."
+ },
+ {
+  "name": "Vegetargryte med hvite bønner",
+  "url": "https://vegetarmat.org/oppskrift/vegetargryte-med-hvite-bonner/",
+  "site": "vegetarmat.org",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "hvite bønner",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "hermetiserte tomater",
+    "qty": 500,
+    "unit": "g"
+   },
+   {
+    "name": "hvite bønner",
+    "qty": 450,
+    "unit": "g"
+   },
+   {
+    "name": "løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "stangselleri",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "gulrøtter",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk persille",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "rømme",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "røkt paprikapulver",
+    "qty": 1,
+    "unit": "ml"
+   },
+   {
+    "name": "kanel",
+    "qty": 1,
+    "unit": "ml"
+   },
+   {
+    "name": "gurkemeie",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "vann",
+    "qty": 4,
+    "unit": "dl"
+   }
+  ],
+  "method": "Løk, selleri og gulrot koker i tomat med milde krydder, og de hvite bønnene varmes med til slutt. Rømme til."
+ },
+ {
+  "name": "Tofu med søt chilisaus og cashewnøtter",
+  "url": "https://vegetarmat.org/oppskrift/tofu-med-sot-chilisaus-og-cashewnotter/",
+  "site": "vegetarmat.org",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 2,
+  "time_min": 30,
+  "protein": "tofu",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "rødløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "rød chili",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "paprika",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "vårløk",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "tamarindpuré",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "søt soyasaus",
+    "qty": 3,
+    "unit": "ss"
+   },
+   {
+    "name": "tofu",
+    "qty": 350,
+    "unit": "g"
+   },
+   {
+    "name": "frisk basilikum",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "ristede cashewnøtter",
+    "qty": 100,
+    "unit": "g"
+   },
+   {
+    "name": "vann",
+    "qty": 4,
+    "unit": "ss"
+   }
+  ],
+  "method": "Tofuen presses for vann og stekes. Paprika og vårløk wokes i en søt og syrlig soyasaus og toppes med cashewnøtter."
+ },
+ {
+  "name": "Fritert tofu med søt chilisaus",
+  "url": "https://vegetarmat.org/oppskrift/fritert-tofu-sot-chilisaus/",
+  "site": "vegetarmat.org",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 3,
+  "time_min": 30,
+  "protein": "tofu",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "egg",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "soyasaus",
+    "qty": 0.5,
+    "unit": "dl"
+   },
+   {
+    "name": "eddik",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "maizena",
+    "qty": 1,
+    "unit": "dl"
+   },
+   {
+    "name": "panko-brødsmuler",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "sesamfrø",
+    "qty": 3,
+    "unit": "ss"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "chili",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "eddik",
+    "qty": 0.5,
+    "unit": "dl"
+   },
+   {
+    "name": "sukker",
+    "qty": 0.5,
+    "unit": "dl"
+   },
+   {
+    "name": "vann",
+    "qty": 1.5,
+    "unit": "dl"
+   },
+   {
+    "name": "maizena",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "ris",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "misopasta",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "rød paprika",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "vårløk",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "rødløk",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "koriander",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Tofu paneres i egg og panko og stekes sprø. Serveres med ris og en hjemmekokt søt chilisaus."
+ },
+ {
+  "name": "Linse-curry med sopp",
+  "url": "https://vegetarmat.org/oppskrift/linse-curry-med-sopp/",
+  "site": "vegetarmat.org",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 5,
+  "time_min": 30,
+  "protein": "grønne linser",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "champignon",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "potet",
+    "qty": 300,
+    "unit": "g"
+   },
+   {
+    "name": "grønne linser",
+    "qty": 230,
+    "unit": "g"
+   },
+   {
+    "name": "oatly imat",
+    "qty": 1,
+    "unit": "dl"
+   },
+   {
+    "name": "ingefær",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "karri",
+    "qty": 3,
+    "unit": "ts"
+   },
+   {
+    "name": "malt koriander",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "kanel",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "gurkemeie",
+    "qty": 0.5,
+    "unit": "ts"
+   },
+   {
+    "name": "cashewnøtter",
+    "qty": 50,
+    "unit": "g"
+   },
+   {
+    "name": "friske korianderblader",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Sopp og løk stekes med karrikrydder, og poteter og linser koker møre i samme gryte med litt havrefløte."
+ },
+ {
+  "name": "Chili con quinoa",
+  "url": "https://vegetarmat.org/oppskrift/chili-con-quinoa/",
+  "site": "vegetarmat.org",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "kikerter",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "gul løk",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "rød paprika",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "squash",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "chili",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "spiskummen",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "tørket oregano",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "koriander",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "røkt paprika",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "kanel",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "chipotle chili",
+    "qty": 0.5,
+    "unit": "ts"
+   },
+   {
+    "name": "hakka tomater",
+    "qty": 400,
+    "unit": "g"
+   },
+   {
+    "name": "gulrot",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "vann",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "kakao",
+    "qty": 3,
+    "unit": "ts"
+   },
+   {
+    "name": "kikerter",
+    "qty": 250,
+    "unit": "g"
+   },
+   {
+    "name": "quinoa",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "sukker",
+    "qty": 2,
+    "unit": "ts"
+   }
+  ],
+  "method": "Grønnsaker stekes med chilikrydder, og quinoa og kikerter koker med i tomatsausen i én gryte."
+ },
+ {
+  "name": "Brokkolisalat med kikerter og tranebær",
+  "url": "https://vegetarmat.org/oppskrift/brokkolisalat-med-kikerter-og-tranebaer/",
+  "site": "vegetarmat.org",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "kikerter",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "brokkoli",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "avocado",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "kikerter (pakke)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rødløk",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "salatblader",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "valnøtter",
+    "qty": 0.5,
+    "unit": "dl"
+   },
+   {
+    "name": "tranebær",
+    "qty": 0.5,
+    "unit": "dl"
+   },
+   {
+    "name": "grov sennep",
+    "qty": 1.5,
+    "unit": "ss"
+   },
+   {
+    "name": "honning",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "sitronsaft",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "vann",
+    "qty": 2,
+    "unit": "ts"
+   }
+  ],
+  "method": "Lun salat: dampet brokkoli blandes med kikerter, avokado, valnøtter og tranebær og vendes i sennepsdressing."
+ },
+ {
+  "name": "Pastasalat med cottage cheese",
+  "url": "https://vegetarmat.org/oppskrift/pastasalat-med-cottage-cheese/",
+  "site": "vegetarmat.org",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 3,
+  "time_min": 15,
+  "protein": "cottage cheese",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "cottage cheese",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "fussili",
+    "qty": 150,
+    "unit": "g"
+   },
+   {
+    "name": "rødløk",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "avocado",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "cherrytomater",
+    "qty": 10,
+    "unit": "stk"
+   },
+   {
+    "name": "salatblanding",
+    "qty": 150,
+    "unit": "g"
+   },
+   {
+    "name": "pinjekjerner",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "frisk persille og timian",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Kokt pasta vendes inn i salat med tomat og avokado og toppes med cottage cheese og ristede pinjekjerner."
+ },
+ {
+  "name": "Halloumigryta med tomat, linser och chili",
+  "url": "https://www.koket.se/halloumigryta-med-tomat-linser-och-chili",
+  "site": "koket.se",
+  "rating": 4.1,
+  "votes": 393,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 25,
+  "protein": "halloumi og linser",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "basmatiris",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "kokosmelk",
+    "qty": 400,
+    "unit": "ml"
+   },
+   {
+    "name": "vann",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "halloumi",
+    "qty": 400,
+    "unit": "g"
+   },
+   {
+    "name": "gul løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "gulrøtter",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "grønn chili",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "tomater",
+    "qty": 6,
+    "unit": "stk"
+   },
+   {
+    "name": "grønnsaksbuljong (terning)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "ferdigkokte linser (pakke)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "salatmiks",
+    "qty": 70,
+    "unit": "g"
+   },
+   {
+    "name": "lime",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk koriander (potte)",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Halloumi i terninger stekes gyllen. Løk, gulrot og friske tomater kokes til en gryte med ferdigkokte linser, og osten vendes inn. Serveres med ris kokt i kokosmelk."
+ },
+ {
+  "name": "Kikärtsgryta",
+  "url": "https://www.arla.se/recept/kikartsgryta/",
+  "site": "arla.se",
+  "rating": 4.2,
+  "votes": 28,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 40,
+  "protein": "kikerter",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "gul løk",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "aubergine",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "kokte kikerter",
+    "qty": 400,
+    "unit": "g"
+   },
+   {
+    "name": "safran (pakke)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "tomatpuré",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "malt spisskummen",
+    "qty": 2,
+    "unit": "ts"
+   },
+   {
+    "name": "malt kanel",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "chiliflak",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "hermetiske cherrytomater",
+    "qty": 400,
+    "unit": "g"
+   },
+   {
+    "name": "vann",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "flytende honning",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "grønnsaksbuljong (terning)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "crème fraîche",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "sitron",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "couscous",
+    "qty": 4,
+    "unit": "dl"
+   },
+   {
+    "name": "granateple",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk mynte (potte)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "mandelflak",
+    "qty": 0.5,
+    "unit": "dl"
+   }
+  ],
+  "method": "Løk og aubergine freses, og kikertene småkoker i tomat med safran, kanel og crème fraîche. Serveres med couscous, granateple og mynte."
+ },
+ {
+  "name": "Dal med röda linser",
+  "url": "https://www.arla.se/recept/dhal-med-roda-linser/",
+  "site": "arla.se",
+  "rating": 4.2,
+  "votes": 74,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "røde linser",
+  "is_fish": false,
+  "child_friendly": false,
+  "ingredients": [
+   {
+    "name": "gul løk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "frisk ingefær",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "grønn chili",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "smør",
+    "qty": 50,
+    "unit": "g"
+   },
+   {
+    "name": "tomatpuré",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "tørkede røde linser",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "kanelstang",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "malt koriander",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "garam masala",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "malt spisskummen",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "vann",
+    "qty": 7,
+    "unit": "dl"
+   },
+   {
+    "name": "basmatiris",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "helmelk",
+    "qty": 5,
+    "unit": "dl"
+   },
+   {
+    "name": "grønnsaksfond",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "malt gurkemeie",
+    "qty": 1,
+    "unit": "ts"
+   },
+   {
+    "name": "sitron",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "tyrkisk yoghurt",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "kokosflak",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "frisk koriander",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "naanbrød",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Løk, ingefær og chili freses i smør med tomatpuré, og linsene koker møre med krydder. Serveres med ris kokt i melk med gurkemeie og yoghurt til."
+ },
+ {
+  "name": "Marinerad tofu med stekta nudlar och grönsaker",
+  "url": "https://www.koket.se/marinerad-tofu-med-stekta-nudlar-och-gronsaker",
+  "site": "koket.se",
+  "rating": 3.7,
+  "votes": 194,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 25,
+  "protein": "tofu",
+  "is_fish": false,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "nudler",
+    "qty": 400,
+    "unit": "g"
+   },
+   {
+    "name": "tofu",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "soyasaus",
+    "qty": 4,
+    "unit": "ss"
+   },
+   {
+    "name": "rødløk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "vårløk (bunt)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "pak choi",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "ingefær (bit)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "rød chili",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "bønnespirer",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "frisk koriander",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "sesamfrø",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Tofu i terninger stekes gyllen og marineres i soyasaus. Grønnsakene wokes på høy varme, og kokte nudler og tofu vendes inn."
+ },
+ {
+  "name": "Ovnsbakt torsk med hvit saus",
+  "url": "https://meny.no/oppskrifter/fisk/ovnsbakt-torsk-med-hvit-saus",
+  "site": "meny.no",
+  "rating": 4.39,
+  "votes": 23,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "torsk",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "torskefilet u/skinn og bein",
+    "qty": 800,
+    "unit": "g"
+   },
+   {
+    "name": "purre",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "råkostmix",
+    "qty": 250,
+    "unit": "g"
+   },
+   {
+    "name": "cherrytomater",
+    "qty": 175,
+    "unit": "g"
+   },
+   {
+    "name": "urtesaus til fisk (pose)",
+    "qty": 2,
+    "unit": "stk"
+   },
+   {
+    "name": "revet ost",
+    "qty": 100,
+    "unit": "g"
+   },
+   {
+    "name": "timian",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "poteter",
+    "qty": 600,
+    "unit": "g"
+   }
+  ],
+  "method": "Torsk legges i form på purre og råkost, dekkes med urtesaus og ost og bakes i ovnen. Kokte poteter til."
+ },
+ {
+  "name": "Fisketaco med torsk",
+  "url": "https://meny.no/oppskrifter/fisk/fredagstaco-med-torsk",
+  "site": "meny.no",
+  "rating": 5.0,
+  "votes": 4,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 15,
+  "protein": "torsk",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "fullkornstortilla",
+    "qty": 8,
+    "unit": "stk"
+   },
+   {
+    "name": "torskefilet",
+    "qty": 600,
+    "unit": "g"
+   },
+   {
+    "name": "tacokrydder",
+    "qty": 3,
+    "unit": "ts"
+   },
+   {
+    "name": "tomater",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "agurk",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "vårløk",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "mais",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "lettrømme (beger)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "gulost",
+    "qty": 2,
+    "unit": "dl"
+   },
+   {
+    "name": "isbergsalat (hode)",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Torsk i biter krydres med tacokrydder og stekes raskt. Serveres i tortilla med grønnsaker, ost og rømme."
+ },
+ {
+  "name": "Laks i form med grønnsaker og ris",
+  "url": "https://www.coop.no/oppskrifter/fisk/laks/laks-i-form-med-gronnsaker-og-ris",
+  "site": "coop.no",
+  "rating": 5.0,
+  "votes": 1,
+  "weak_rating": true,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "laks",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "laksefilet uten skinn og bein",
+    "qty": 800,
+    "unit": "g"
+   },
+   {
+    "name": "hvitløksfedd",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "sitron",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "soyasaus",
+    "qty": 0.5,
+    "unit": "dl"
+   },
+   {
+    "name": "smør",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "ris",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "wokgrønnsaker (pose)",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Laksefilet legges på wokgrønnsaker i ildfast form med soyasaus og sitron og bakes i ovnen. Ris til."
+ },
+ {
+  "name": "Fisk i form med poteter, grønnsaker og hvit saus",
+  "url": "https://www.coop.no/oppskrifter/fisk/torsk/fisk-i-form-med-poteter-gronnsaker-og-hvit-saus",
+  "site": "coop.no",
+  "rating": null,
+  "votes": 0,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "torsk",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "hvit saus (pose)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "melk",
+    "qty": 7,
+    "unit": "dl"
+   },
+   {
+    "name": "dijonsennep",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "sitron",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "persille (bunt)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "frosne grønnsaker (pakke)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "torskefilet",
+    "qty": 400,
+    "unit": "g"
+   },
+   {
+    "name": "kokte poteter (porsjon)",
+    "qty": 4,
+    "unit": "stk"
+   }
+  ],
+  "method": "Torskebiter og frosne grønnsaker dekkes med hvit saus smaksatt med sennep og sitron og bakes i ovnen."
+ },
+ {
+  "name": "Rask fiskegrateng med makaroni og ostesaus",
+  "url": "https://www.coop.no/oppskrifter/fisk/rask-fiskegrateng-med-makaroni-og-ostesaus",
+  "site": "coop.no",
+  "rating": null,
+  "votes": 0,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 25,
+  "protein": "torsk",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "lettsaltet torsk",
+    "qty": 500,
+    "unit": "g"
+   },
+   {
+    "name": "makaroni",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "hvit saus (pose)",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "melk",
+    "qty": 7,
+    "unit": "dl"
+   },
+   {
+    "name": "revet ost",
+    "qty": 5,
+    "unit": "ss"
+   },
+   {
+    "name": "eggplomme",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "frosne erter (pose)",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "strøkavring",
+    "qty": 4,
+    "unit": "ss"
+   },
+   {
+    "name": "gulrøtter",
+    "qty": 4,
+    "unit": "stk"
+   },
+   {
+    "name": "appelsin",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "smør",
+    "qty": 100,
+    "unit": "g"
+   }
+  ],
+  "method": "Lettsaltet torsk, kokt makaroni og erter blandes med ostesaus, strøs med kavring og gratineres. Revet gulrot til."
+ },
+ {
+  "name": "Laks- og brokkoligrateng",
+  "url": "https://www.tine.no/oppskrifter/middag-og-hovedretter/fisk-og-skalldyr/laks-og-brokkoligrateng",
+  "site": "tine.no",
+  "rating": 3.7,
+  "votes": 132,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 30,
+  "protein": "varmrøkt laks",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "purre",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "liten brokkoli",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "meierismør",
+    "qty": 50,
+    "unit": "g"
+   },
+   {
+    "name": "spinat",
+    "qty": 250,
+    "unit": "g"
+   },
+   {
+    "name": "varmrøkt laks",
+    "qty": 300,
+    "unit": "g"
+   },
+   {
+    "name": "meierismør",
+    "qty": 1.5,
+    "unit": "ss"
+   },
+   {
+    "name": "hvetemel",
+    "qty": 1.5,
+    "unit": "ss"
+   },
+   {
+    "name": "lettmelk",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "matfløte",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "sitron",
+    "qty": 1,
+    "unit": "stk"
+   }
+  ],
+  "method": "Purre, brokkoli og spinat freses og legges i form med varmrøkt laks, dekkes med hvit sitronsaus og gratineres."
+ },
+ {
+  "name": "Laks med epler",
+  "url": "https://www.tine.no/oppskrifter/middag-og-hovedretter/fisk-og-skalldyr/laks-med-epler",
+  "site": "tine.no",
+  "rating": 3.7,
+  "votes": 83,
+  "weak_rating": false,
+  "servings": 4,
+  "time_min": 25,
+  "protein": "laks",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "ris",
+    "qty": 3,
+    "unit": "dl"
+   },
+   {
+    "name": "laksefilet",
+    "qty": 600,
+    "unit": "g"
+   },
+   {
+    "name": "purre",
+    "qty": 1,
+    "unit": "stk"
+   },
+   {
+    "name": "eple",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "meierismør",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "lett crème fraîche",
+    "qty": 6,
+    "unit": "dl"
+   },
+   {
+    "name": "pesto",
+    "qty": 2,
+    "unit": "ss"
+   },
+   {
+    "name": "hakket persille",
+    "qty": 2,
+    "unit": "dl"
+   }
+  ],
+  "method": "Laks i biter, purre og eple blandes i form, dekkes med crème fraîche og pesto og bakes i ovnen. Ris til."
+ },
+ {
+  "name": "Fiskegrateng på 30 minutter",
+  "url": "https://kiwi.no/oppskrifter/torsk/fiskegrateng-pa-30-minutter",
+  "site": "kiwi.no",
+  "rating": null,
+  "votes": null,
+  "weak_rating": false,
+  "servings": 2,
+  "time_min": 30,
+  "protein": "fisk og egg",
+  "is_fish": true,
+  "child_friendly": true,
+  "ingredients": [
+   {
+    "name": "egg",
+    "qty": 3,
+    "unit": "stk"
+   },
+   {
+    "name": "melk",
+    "qty": 1.5,
+    "unit": "dl"
+   },
+   {
+    "name": "brokkoli",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "kokt makaroni",
+    "qty": 150,
+    "unit": "g"
+   },
+   {
+    "name": "spinat (pose)",
+    "qty": 0.5,
+    "unit": "stk"
+   },
+   {
+    "name": "fiskerester",
+    "qty": 200,
+    "unit": "g"
+   },
+   {
+    "name": "meierismør",
+    "qty": 1,
+    "unit": "ss"
+   },
+   {
+    "name": "osterester om du har tilgjengelig",
+    "qty": null,
+    "unit": null
+   },
+   {
+    "name": "strøkavring",
+    "qty": null,
+    "unit": null
+   }
+  ],
+  "method": "Restemat: kokt fisk, makaroni og grønnsaker dekkes med eggestand av egg og melk og gratineres i ovnen."
+ }
+]
