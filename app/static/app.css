@@ -259,3 +259,5 @@ body.modal{overflow:hidden}
 .btabs{margin-bottom:8px}.btabs button{flex:1;justify-content:center}
 .ifl{margin:8px 0 0}.ifl .chip{min-height:40px;font-size:14px;padding:0 12px}
 .isrc{display:flex;flex-wrap:wrap;align-items:center;gap:0 6px}.isrc .lnk{min-height:32px}
+.mixc{margin:-2px 0 8px}.hlbl{margin-top:18px}
+.hrow{display:flex;flex-direction:column;gap:2px;padding:8px 2px;border-bottom:1px solid var(--line)}.hrow .name{font:600 17px/1.2 var(--fh)}

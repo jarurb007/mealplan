@@ -12,6 +12,9 @@ import unicodedata
 import time
 import uuid
 import heapq
+import difflib
+from functools import lru_cache
+from itertools import zip_longest
 from collections import Counter
 from contextlib import asynccontextmanager
 import sqlite3
@@ -499,15 +502,15 @@ def memory_lines(recent: list | None, favs: list | None, fav_rule: str) -> str:
 
 def plan_prompt(n: int, pantry: list, avoid: list, fixed: list, cravings: list,
                 recent: list | None = None, favs: list | None = None, proven: int = 0,
-                cands: list | None = None, k: int = 0) -> str:
+                known_dishes: list | None = None, have_prot: list | None = None) -> str:
     """proven: tyle sprawdzonych dań (książka przepisów i 👍) ma wrócić do planu; reszta to nowe propozycje.
-    cands, k: kandydaci z bazy inspiracji i liczba dań, które model ma z nich wstawić (0 = baza wyłączona)."""
-    base = "" if not (cands and k) else f"""
-Przepisy z bazy inspiracji (nazwa · główne białko · czas · ocena w serwisie):
-{chr(10).join(inspo_line(x) for x in cands)}
-Wstaw dokładnie {k} z nich: te, które najlepiej pasują do reszty tygodnia, lodówki i życzeń. Liczą się do nowych propozycji.
-Użyj dokładnie tej nazwy i niczego w tych daniach nie zmieniaj; ich składniki i ilości są już znane, więc w "ingredients"
-wystarczy pusta lista. Danie z dopiskiem „taco” pasuje tylko na piątek, „ryba” liczy się do limitu ryby."""
+    known_dishes, have_prot (skład tygodnia układa serwer, model wymyśla tylko nowości): nazwy dań, które dom już zna,
+    i źródła białka dań, które serwer już wstawił do tygodnia."""
+    base = "" if not known_dishes else f"""
+Dania, które dom już zna (sprawdzone dania domowników i przepisy z bazy inspiracji): {known_dishes}.
+Nowa propozycja ma być naprawdę innym daniem, a nie wariantem któregoś z nich (inna nazwa tego samego dania, inny dodatek
+albo inna pisownia to wciąż to samo danie). Jeśli chcesz któreś z nich wstawić, bo pasuje do życzenia domowników, użyj
+dokładnie tej nazwy.{f' Główne źródła białka w daniach, które już są w tygodniu: {have_prot}; wybierz inne.' if have_prot else ''}"""
     fav_rule = (f"To sprawdzone dania domowników: wstaw {proven} z nich, jeśli pasują do reszty tygodnia, a pozostałe "
                 f"propozycje mają być nowe; użyj wtedy dokładnie tej nazwy i niczego w tych daniach nie zmieniaj." if proven else
                 "Możesz wstawić najwyżej 1-2 z nich, jeśli pasują do reszty tygodnia; użyj wtedy dokładnie tej nazwy.")
@@ -2270,7 +2273,11 @@ def build_state(week=None, meals=None, shop=None):
             bad.add(x["norm"])
         todo = todo_state(c)
         kid = kid_profile(c)
-        kid_info = {"kid": kid, "kid_dishes": kid_dish_list(c), "kid_extras": kid_extra_hints(c), "inspo": inspo_cfg(c)}
+        kid_info = {"kid": kid, "kid_dishes": kid_dish_list(c), "kid_extras": kid_extra_hints(c)}
+        icfg = inspo_cfg(c)
+        kid_info["inspo"] = {**icfg, "cost": mix_cost(c, icfg)}
+        kid_info["home"] = [{"name": d["name"], "n": d["n"], "last": d["last"], "star": d["star"], "also": d["names"][1:]}
+                            for d in sorted(home_index(c), key=lambda d: (-d["n"], d["name"])) if not d["star"]]
         if not w:
             return {"week": None, "meals": [], "pantry": pantry, "carry": carry, "cravings": cravings, **kid_info,
                     "recipes": recipes, "weeks": [], "current_id": None, "dislikes": dislikes, "todo": todo,
@@ -2328,12 +2335,14 @@ JOBS: dict = {}
 # w którym układa tydzień. Składniki i ilości idą z pliku (bez modelu), model pisze tylko kroki, własnymi słowami,
 # raz na danie: potem przepis zostaje w aplikacji jak każdy inny.
 INSPO_PATH = Path(os.getenv("INSPO_PATH", str(BASE / "inspiracje.json")))
-INSPO_DEFAULT_N = int(os.getenv("INSPO_DEFAULT_N", "1"))  # tyle dań z bazy na tydzień, dopóki nikt nie zmieni; 0 = baza wyłączona
-INSPO_MAX = 5           # górna granica w ustawieniach
-INSPO_CANDS = 12        # tylu kandydatów widzi model w pytaniu o plan
+PLAN_MIX = os.getenv("PLAN_MIX", "1") != "0"  # 0 = tydzień układany jak dawniej (cały plan od modelu, bez bazy): dla starszych testów
+NEW_DEFAULT = 2         # tyle nowych dań od modelu na tydzień, dopóki nikt nie zmieni
 INSPO_SITE_CANDS = 3    # najwyżej tylu kandydatów z jednego serwisu
-INSPO_SITE_MAX = 2      # najwyżej tyle dań z jednego serwisu w tygodniu, gdy dobiera serwer
-INSPO_SKIP_OUT = 2      # danie z bazy zamienione tyle razy przed gotowaniem przestaje być proponowane
+INSPO_SITE_MAX = 2      # najwyżej tyle dań z jednego serwisu w tygodniu
+INSPO_SKIP_OUT = 2      # danie zamienione tyle razy przed gotowaniem przestaje być proponowane
+HOME_GAP = 3            # danie domu wraca najwcześniej po tylu tygodniach
+HOME_GAP_STAR = 2       # danie z książki przepisów (⭐): krótsza przerwa i pierwszeństwo
+MIX_PROT_MAX = 2        # to samo główne źródło białka najwyżej tyle razy wśród dań dobranych przez serwer
 KID_SHARE = 0.5         # porcja dziecka względem porcji dorosłego w daniach z bazy
 TACO_RE = re.compile(r"taco|burrito|nachos|quesadilla")
 
@@ -2352,11 +2361,13 @@ INSPO_BY = {" ".join(x["name"].lower().split()): x for x in INSPO}
 
 
 def inspo_cfg(c) -> dict:
-    rows = {r["key"]: r["value"] for r in c.execute("SELECT key, value FROM settings WHERE key IN ('inspo_on', 'inspo_n')")}
-    n = int(rows["inspo_n"]) if str(rows.get("inspo_n", "")).isdigit() else INSPO_DEFAULT_N
-    on = rows["inspo_on"] == "1" if "inspo_on" in rows else INSPO_DEFAULT_N > 0
-    return {"on": bool(on and INSPO), "n": max(1, min(INSPO_MAX, n)), "max": INSPO_MAX, "have": bool(INSPO),
-            "count": sum(1 for x in INSPO if x["pool"] == "main")}
+    """Skład tygodnia: on = baza inspiracji włączona, new = ile nowych dań od modelu na tydzień (None = tydzień
+    układany jak dawniej, tylko przy PLAN_MIX=0 i bez zapisanego ustawienia)."""
+    rows = {r["key"]: r["value"] for r in c.execute("SELECT key, value FROM settings WHERE key IN ('inspo_on', 'new_n')")}
+    new = int(rows["new_n"]) if str(rows.get("new_n", "")).isdigit() else (NEW_DEFAULT if PLAN_MIX else None)
+    on = rows["inspo_on"] == "1" if "inspo_on" in rows else PLAN_MIX
+    return {"on": bool(on and INSPO and new is not None), "new": None if new is None else max(0, min(7, new)),
+            "have": bool(INSPO), "count": sum(1 for x in INSPO if x["pool"] == "main")}
 
 
 def inspo_src(d: dict):
@@ -2365,64 +2376,283 @@ def inspo_src(d: dict):
     return {"site": x["site"], "rating": x["rating"], "votes": x["votes"], "url": x["url"]} if x else None
 
 
-def inspo_line(x: dict) -> str:
-    return (f'- {x["name"]} · {x["protein"]}' + (f' · {x["time_min"]} min' if x.get("time_min") else "")
-            + (f' · {x["rating"]}' if x.get("rating") else "") + (" · taco" if x["taco"] else "") + (" · ryba" if x["is_fish"] else ""))
-
-
 def inspo_skips(c) -> dict:
+    """{znormalizowana nazwa dania: ile razy zamieniono je przed gotowaniem}."""
     return {r["id"]: r["n"] for r in c.execute("SELECT id, n FROM inspo_skip")}
 
 
-def inspo_cands(c, skip: list, fish_ok: bool = True, k: int = INSPO_CANDS) -> list:
-    """Kandydaci do planu: bez 👎, bez dań z listy skip (jedzone ostatnio, już w tygodniu, sprawdzone dania domu, bo te
-    wracają własną drogą) i bez dwukrotnie zamienionych. Losowanie z wagą: lepiej oceniane dania trafiają częściej,
-    dania bez oceny rzadziej; najwyżej dwa taco (tylko na piątek), dwie ryby i trzy dania z jednego serwisu."""
-    no = {norm_name(x) for x in skip} | disliked_set()
+def inspo_cands(c, skip: list, fish_ok: bool = True) -> list:
+    """Dania z bazy, które serwer może wstawić do planu: bez 👎, bez dań z listy skip i ich wariantów (jedzone ostatnio,
+    już w tygodniu, dania domu, bo te wracają własną drogą) i bez dwukrotnie zamienionych. Kolejność losowa z wagą:
+    lepiej oceniane dania są wyżej, dania bez oceny niżej; najwyżej trzy dania z jednego serwisu."""
+    no = [x for x in skip] + [r["name"] for r in dislike_rows()]
     out_n = inspo_skips(c)
-    pool = [x for x in INSPO if x["pool"] == "main" and norm_name(x["name"]) not in no
-            and out_n.get(x["id"], 0) < INSPO_SKIP_OUT and (fish_ok or not x["is_fish"])]
+    pool = [x for x in INSPO if x["pool"] == "main" and out_n.get(norm_name(x["name"]), 0) < INSPO_SKIP_OUT
+            and (fish_ok or not x["is_fish"]) and not any(same_dish(x["name"], n) for n in no)]
     weight = lambda x: 3 if (x.get("rating") or 0) >= 4.3 else 2 if (x.get("rating") or 0) >= 4 else 1.5 if x.get("rating") else 1
     pool.sort(key=lambda x: -(random.random() ** (1 / weight(x))))  # losowanie ważone bez zwracania
-    out, sites, taco, fish = [], Counter(), 0, 0
+    out, sites = [], Counter()
     for x in pool:
-        if len(out) >= k:
-            break
-        if sites[x["site"]] >= INSPO_SITE_CANDS or (x["taco"] and taco >= 2) or (x["is_fish"] and fish >= 2):
-            continue
-        sites[x["site"]] += 1
-        taco += x["taco"]
-        fish += x["is_fish"]
-        out.append(x)
+        if sites[x["site"]] < INSPO_SITE_CANDS:
+            sites[x["site"]] += 1
+            out.append(x)
     return out
 
 
-def inspo_place(plan: list, spare: list, cands: list, k: int, protected=lambda o: False) -> list:
-    """Pilnuje, żeby w planie było dokładnie k dań z bazy (o ile się da). plan: dania wybrane z odpowiedzi modelu
-    (danie z bazy ma klucz "inspo"), spare: propozycje modelu, które się nie zmieściły. Nadmiarowe dania z bazy
-    ustępują zapasowym propozycjom modelu. Brakujące dobiera serwer z kandydatów: zastępuje ostatnią nową propozycję
-    modelu, ale nie rybę, nie taco, nie sprawdzone danie domu i nie danie, o które ktoś prosił (protected)."""
-    plan, spare = list(plan), [o for o in spare if not o.get("inspo")]
-    for i in [i for i, o in enumerate(plan) if o.get("inspo")][k:]:
-        if spare:
-            plan[i] = spare.pop(0)
-    have = {o["inspo"]["id"] for o in plan if o.get("inspo")}
-    sites = Counter(o["inspo"]["site"] for o in plan if o.get("inspo"))
-    fish = any(o.get("is_fish") for o in plan)
-    for x in cands:
-        if len(have) >= k:
-            break
-        if x["id"] in have or x["taco"] or (x["is_fish"] and fish) or sites[x["site"]] >= INSPO_SITE_MAX:
+def inspo_find(name: str):
+    """Pozycja bazy (dania dla dorosłych) o tej nazwie albo będąca tym samym daniem pod inną nazwą."""
+    x = INSPO_BY.get(norm_name(name))
+    if x:
+        return x if x["pool"] == "main" else None
+    return next((x for x in INSPO if x["pool"] == "main" and same_dish(name, x["name"])), None)
+
+
+# ---------- Tożsamość dania ----------
+# Model co tydzień nazywa to samo danie trochę inaczej („Linsebolognese med spagetti” / „… med spaghetti”,
+# „Ovnsbakt laks med couscous” / „… med couscous og sitronrømme”). Dwie nazwy to to samo danie, gdy po odrzuceniu
+# słów bez znaczenia (med, og, vegetarisk, KIWI…) i wyrównaniu pisowni mają te same słowa albo słowa jednej mieszczą się
+# w drugiej, a główne źródło białka się zgadza. Reguła jest celowo ostrożna: „laks med poteter” i „laks med couscous”
+# to różne dania, „grønnsakscurry med ris” i „søtpotetcurry med spinat” też. Lepiej uznać dwa dania za różne, niż
+# podmienić danie, o które ktoś prosił.
+DISH_STOP = {"med", "og", "i", "pa", "til", "av", "a", "la", "en", "et", "fra", "vegetarisk", "vegetar", "vegansk", "kiwi",
+             "hjemmelaget", "hjemmelagde", "var", "vare", "min", "mine"}
+DISH_SPELL = {"spagetti": "spaghetti", "shakshouka": "shakshuka", "ruccula": "ruccola", "karri": "curry"}
+# pojedyncze ogólne słowo nie wystarcza, żeby uznać „Risotto” za to samo co „Risotto med asparges”
+DISH_GENERIC = {"laks", "torsk", "fisk", "risotto", "taco", "curry", "suppe", "pasta", "salat", "gryte", "omelett", "burger",
+                "wok", "pai", "lasagne", "grateng", "bowl", "wrap", "pizza"}
+PFAM = [(re.compile(p), f) for p, f in [
+    (r"linse", "linser"), (r"kikert|falafel|hummus", "kikerter"), (r"b[øo]nne", "bønner"), (r"tofu", "tofu"),
+    (r"laks|torsk|fisk|\bsei\b|[øo]rret|makrell|reke", "fisk"), (r"halloumi", "halloumi"), (r"feta", "feta"),
+    (r"cottage|kesam|skyr", "cottage"), (r"mozzarella|paneer|parmesan|padano|\bost\b|cheddar", "ost"),
+    (r"\begg|omelett|frittata", "egg"), (r"\berter\b|edamame", "erter")]]
+
+
+@lru_cache(maxsize=4096)
+def dish_tokens(name: str) -> tuple:
+    out = []
+    for w in fold(name).split():
+        w = DISH_SPELL.get(w, w)
+        if w not in DISH_STOP and w not in out:
+            out.append(w)
+    return tuple(out)
+
+
+@lru_cache(maxsize=65536)
+def _tok_eq(a: str, b: str) -> bool:
+    if a == b:
+        return True
+    if min(len(a), len(b)) >= 4 and (a.startswith(b) or b.startswith(a)) and abs(len(a) - len(b)) <= 2:
+        return True  # liczba mnoga i rodzajnik: potet / poteter, linse / linser
+    return min(len(a), len(b)) >= 5 and difflib.SequenceMatcher(None, a, b).ratio() >= 0.88
+
+
+def pfam(text) -> str:
+    """Rodzina głównego źródła białka z nazwy składnika albo dania ('' = nie wiadomo)."""
+    t = str(text or "").lower()
+    hits = [(m.start(), f) for rx, f in PFAM for m in [rx.search(t)] if m]
+    return min(hits)[1] if hits else ""
+
+
+def meal_pfam(m: dict) -> str:
+    """Rodzina głównego źródła białka dania: ze składnika, który daje najwięcej białka, a bez przepisu z pola protein i nazwy."""
+    best = (0, "")
+    for i in m.get("ingredients") or []:
+        hit = _protein_of(i.get("name"))
+        if hit and hit[1] in PROTEIN_MAIN:
+            best = max(best, (_ing_grams(i, hit[2]) * hit[0], pfam(i.get("name")) or hit[1]))
+    return best[1] or pfam(m.get("protein")) or pfam(" ".join(m.get("ingredient_names") or [])) or pfam(m.get("name"))
+
+
+def same_dish(a: str, b: str, fam_a: str = "", fam_b: str = "") -> bool:
+    A, B = dish_tokens(str(a or "")), dish_tokens(str(b or ""))
+    if not A or not B:
+        return False
+    if fam_a and fam_b and fam_a != fam_b:
+        return False
+    small, large = (A, B) if len(A) <= len(B) else (B, A)
+    left = list(large)
+    for w in small:
+        j = next((k for k, x in enumerate(left) if _tok_eq(w, x)), None)
+        if j is None:
+            return False
+        left.pop(j)
+    return not left or not (len(small) == 1 and small[0] in DISH_GENERIC)
+
+
+# ---------- Dania domu ----------
+# Jedna pozycja na danie, nie na każde ugotowanie: dania z książki przepisów (⭐), z 👍 i ugotowane (status done),
+# zebrane z zapisanych tygodni. Warianty nazwy tego samego dania trafiają do jednej pozycji; zapisanych tygodni nic
+# nie zmienia (lista jest liczona z nich na bieżąco). Przepis dania to przepis z książki, a bez niej ostatnia
+# ugotowana wersja, więc świadoma zmiana przepisu („Popraw danie”) zastępuje poprzednią, a nie tworzy drugiego dania.
+_HOME_CACHE: dict = {}
+
+
+def home_index(c) -> list:
+    key = tuple(c.execute("""SELECT (SELECT COUNT(*) || '-' || COALESCE(MAX(id), 0) || '-' || COALESCE(SUM(liked), 0) || '-' ||
+                                            COALESCE(SUM(LENGTH(data)), 0) || '-' || COALESCE(SUM(status = 'done'), 0) FROM meals),
+                                    (SELECT COUNT(*) || '-' || COALESCE(MAX(id), 0) || '-' || COALESCE(SUM(LENGTH(data)), 0) FROM recipes),
+                                    (SELECT COUNT(*) || '-' || COALESCE(MAX(id), 0) FROM dislikes),
+                                    (SELECT COALESCE(SUM(n), 0) FROM inspo_skip)""").fetchone())
+    if _HOME_CACHE.get("key") == key:
+        return _HOME_CACHE["dishes"]
+    dishes = []
+
+    def put(name, m, tr, wstart, done, liked, star):
+        nn, fam = norm_name(name), meal_pfam(m)
+        d = next((d for d in dishes if nn in d["norms"]), None) or next(
+            (d for d in dishes if same_dish(name, d["name"], fam, d["pfam"])), None)
+        if not d:
+            d = {"name": name, "norms": set(), "names": [], "n": 0, "last": None, "star": False, "liked": False,
+                 "m": None, "tr": None, "pfam": fam}
+            dishes.append(d)
+        if nn not in d["norms"]:
+            d["norms"].add(nn)
+            d["names"].append(name)
+        d["n"] += done
+        d["liked"] = d["liked"] or liked
+        if wstart and (not d["last"] or wstart > d["last"]):
+            d["last"] = wstart
+        full = bool(m.get("ingredients") and m.get("steps"))
+        if star and full:
+            d.update(star=True, m=m, tr=tr, name=name, pfam=fam)
+        elif full and not d["star"] and (done or liked) and (liked or balance(m)["level"] != "none"):
+            d.update(m=m, tr=tr)  # ostatnia ugotowana wersja: tygodnie idą od najstarszego
+
+    for r in c.execute("SELECT name, data, tr FROM recipes ORDER BY id"):
+        put(r["name"], json.loads(r["data"]), r["tr"], None, 0, False, True)
+    for r in c.execute("""SELECT m.data, m.tr, m.status, m.liked, w.start FROM meals m JOIN weeks w ON w.id = m.week_id
+                          WHERE COALESCE(m.status, '') != 'removed' ORDER BY w.start, m.day"""):
+        m = json.loads(r["data"])
+        if m.get("name") and not m.get("draft"):
+            put(str(m["name"]).strip(), m, r["tr"], r["start"], int(r["status"] == "done"), bool(r["liked"]), False)
+    bad, skips = disliked_set(), inspo_skips(c)
+    out = []
+    for d in dishes:
+        if not d["m"] or not (d["n"] or d["liked"] or d["star"]):
             continue
-        free = [i for i, o in enumerate(plan) if not o.get("inspo") and not o.get("is_fish")
-                and not TACO_RE.search(o["name"].lower()) and not protected(o)]
-        if not free:
+        if d["norms"] & bad or max((skips.get(n, 0) for n in d["norms"]), default=0) >= INSPO_SKIP_OUT:
+            continue
+        x = d["m"]
+        d.update(is_fish=bool(x.get("is_fish")), taco=bool(TACO_RE.search(d["name"].lower())),
+                 ings=[canon(i.get("name", "")) for i in x.get("ingredients") or []])
+        out.append(d)
+    _HOME_CACHE.update(key=key, dishes=out)
+    return out
+
+
+def home_find(dishes: list, name: str, fam: str = ""):
+    nn = norm_name(name)
+    return next((d for d in dishes if nn in d["norms"]), None) or next(
+        (d for d in dishes if same_dish(name, d["name"], fam, d["pfam"])), None)
+
+
+def home_row(d: dict, stock: list):
+    """Danie domu jako gotowy wiersz planu (pełny przepis, bez modelu)."""
+    x = d["m"]
+    m = {k: v for k, v in x.items() if k not in ("draft", "draft_error", "ingredient_names", "uses_pantry", "asked")}
+    m.update({"name": d["name"], "owned": False, "servings_base": x.get("servings_base") or 3,
+              "ingredients": [{**i, "from_pantry": any(_same_item(s, canon(i.get("name", ""))) for s in stock)}
+                              for i in x["ingredients"]]})
+    return m, d["tr"]
+
+
+def weeks_since(last, start) -> int:
+    return 99 if not last else (date.fromisoformat(str(start)) - date.fromisoformat(str(last))).days // 7
+
+
+def mix_pick(c, start, rest: int, known: list, fish_used: bool, pantry: list, base_on: bool, taco_slot: bool) -> list:
+    """Dania, którymi serwer wypełnia tydzień poza nowościami: najpierw dania domu (⭐ mają pierwszeństwo, potem te
+    najdawniej jedzone), a brakujące miejsca dopełnia baza inspiracji; gdy baza jest włączona, jedno miejsce jest zawsze
+    dla niej. Reguły tygodnia: najwyżej jedna ryba, piątkowe taco na zmianę własne i z bazy, to samo główne źródło
+    białka najwyżej dwa razy, najwyżej dwa dania z jednego serwisu. Danie, które zużywa coś z lodówki, idzie pierwsze."""
+    if rest <= 0:
+        return []
+    stock = [canon(parse_pantry(p)[2]) for p in pantry]
+    uses = lambda names: any(_same_item(s, n) for s in stock for n in names)
+    recent = recent_meals(c, start, HOME_GAP)
+    last_week = recent_meals(c, start, 1)
+    taken = lambda name: any(same_dish(name, k) for k in known)
+    home_all = home_index(c)
+    home = [d for d in home_all if not taken(d["name"])]
+    home.sort(key=lambda d: (not uses(d["ings"]), not d["star"], d["last"] or ""))
+    ok_gap = lambda d: weeks_since(d["last"], start) >= (HOME_GAP_STAR if d["star"] else HOME_GAP)
+    base = inspo_cands(c, known + recent + [n for d in home_all for n in d["names"]]) if base_on else []
+    base.sort(key=lambda x: not uses([canon(i["name"]) for i in x["ingredients"]]))
+    out, fams, sites, fish = [], Counter(), Counter(), fish_used
+
+    def add_home(d):
+        out.append({"kind": "home", "name": d["name"], "taco": d["taco"], "is_fish": d["is_fish"], "pfam": d["pfam"],
+                    "row": home_row(d, stock)})
+
+    def add_base(x):
+        out.append({"kind": "base", "name": x["name"], "taco": x["taco"], "is_fish": x["is_fish"], "pfam": pfam(x["protein"]),
+                    "row": (inspo_draft(x), None), "site": x["site"]})
+
+    if taco_slot:  # piątek: własne taco, ale nie to samo co tydzień temu, o ile jest inne (z bazy)
+        own = [d for d in home if d["taco"]]
+        fresh = [d for d in own if not any(same_dish(d["name"], n) for n in last_week)]
+        tb = [x for x in base if x["taco"] and not x["is_fish"]]
+        if fresh:
+            add_home(fresh[0])
+        elif tb:
+            add_base(tb[0])
+            sites[tb[0]["site"]] += 1
+        elif own:
+            add_home(own[0])
+    fits = lambda p: not (p["is_fish"] and fish) and not (p["pfam"] and fams[p["pfam"]] >= MIX_PROT_MAX)
+    for p in out:
+        fams[p["pfam"]] += 1
+    home_ok = [d for d in home if not d["taco"] and ok_gap(d)]
+    base_ok = [x for x in base if not x["taco"]]
+    keep_base = 1 if base_ok and rest - len(out) > 0 else 0
+    for d in home_ok:
+        if len(out) >= rest - keep_base:
             break
-        plan[free[-1]] = {"name": x["name"], "is_fish": x["is_fish"], "inspo": x}
-        have.add(x["id"])
-        sites[x["site"]] += 1
-        fish = fish or x["is_fish"]
-    return plan
+        if fits(d):
+            add_home(d)
+            fams[d["pfam"]] += 1
+            fish = fish or d["is_fish"]
+    for x in base_ok:
+        if len(out) >= rest:
+            break
+        p = {"is_fish": x["is_fish"], "pfam": pfam(x["protein"])}
+        if fits(p) and sites[x["site"]] < INSPO_SITE_MAX:
+            add_base(x)
+            fams[p["pfam"]] += 1
+            sites[x["site"]] += 1
+            fish = fish or x["is_fish"]
+    return out[:rest]
+
+
+def mix_order(items: list) -> list:
+    """Kolejność dni: taco na koniec (piątek), poza tym dwa dania z tym samym głównym białkiem nie stoją obok siebie."""
+    tacos = [i for i in items if i["taco"]]
+    rest, out = [i for i in items if not i["taco"]], []
+    while rest:
+        prev = out[-1]["pfam"] if out else None
+        left = Counter(i["pfam"] for i in rest)
+        ok = [k for k, i in enumerate(rest) if not i["pfam"] or i["pfam"] != prev]
+        # najpierw białko, którego zostało najwięcej: inaczej dwa takie same dania zostałyby na koniec obok siebie
+        j = max(ok, key=lambda k: (left[rest[k]["pfam"]] if rest[k]["pfam"] else 0, -k)) if ok else 0
+        out.append(rest.pop(j))
+    return out + tacos
+
+
+def next_start(c) -> date:
+    w = latest_week(c)
+    return date.fromisoformat(w["start"]) + timedelta(days=7) if w else saturday_on_or_before(date.today())
+
+
+def mix_cost(c, cfg: dict) -> dict:
+    """Ile pytań do modelu kosztuje następny tydzień przy obecnym ustawieniu: plan, pełne przepisy nowych dań i same
+    kroki dań z bazy, których dom jeszcze nie gotował. Szacunek dla pełnych siedmiu dni, bez planu dziecka."""
+    if cfg["new"] is None:
+        return {"calls": 8, "new": 7, "home": 0, "base": 0}
+    new = cfg["new"]
+    picks = mix_pick(c, next_start(c), 7 - new, [], False, [], cfg["on"], "taco" in prefs().lower())
+    new = 7 - len(picks)
+    base = sum(1 for p in picks if p["kind"] == "base")
+    return {"calls": (1 if new else 0) + new + base, "new": new, "base": base, "home": len(picks) - base}
 
 
 def inspo_draft(x: dict) -> dict:
@@ -2493,19 +2723,21 @@ def inspo_kid_dish(x: dict, o: dict) -> dict:
 
 class InspoReq(BaseModel):
     on: bool | None = None
-    n: int | None = None
+    new: int | None = None
     week: int | None = None
 
 
 @app.post("/api/inspo/settings")
 def inspo_settings(req: InspoReq):
     with db() as c:
+        if req.new is not None:
+            if not 0 <= req.new <= 7:
+                raise HTTPException(400, "nowych dań w tygodniu: 0-7")
+            c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('new_n', ?)", (str(req.new),))
         if req.on is not None:
             c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('inspo_on', ?)", ("1" if req.on else "0",))
-        if req.n is not None:
-            if not 1 <= req.n <= INSPO_MAX:
-                raise HTTPException(400, f"dań z bazy: 1-{INSPO_MAX}")
-            c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('inspo_n', ?)", (str(req.n),))
+            if req.on and inspo_cfg(c)["new"] is None:
+                c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('new_n', ?)", (str(NEW_DEFAULT),))
     return state(req.week)
 
 
@@ -2604,6 +2836,38 @@ def gen_recipe(name, description, pantry):
     raise RuntimeError(f"przepis '{name}' nie powstał: {last}")
 
 
+def mix_new(plan: list, names: list, recent: list, home: list, cravings: list, base_on: bool):
+    """Z propozycji modelu zostają naprawdę nowe dania. Wariant dania, które już jest w tygodniu albo było jedzone
+    ostatnio, odpada. Wariant dania domu albo pozycji z bazy też odpada, ale czeka w zapasie pod właściwą nazwą
+    (z istniejącym przepisem), na wypadek gdyby nowości zabrakło. Danie, o które ktoś prosił, zostaje takie, jak jest;
+    gdy model użył dokładnej nazwy dania domu albo bazy, danie dostaje istniejący przepis. Zwraca (nowe, zapas)."""
+    wishes = [w for w in (norm_name(x) for x in cravings) if len(w) >= 3]
+    out, spare = [], []
+    for o in plan:
+        nn = norm_name(o["name"])
+        asked = any(w in nn or nn in w for w in wishes)
+        fam = meal_pfam({"name": o["name"], "protein": o.get("protein"), "ingredient_names": _names(o.get("ingredients"))})
+        d = home_find(home, o["name"], fam)
+        x = inspo_find(o["name"]) if base_on else None
+        exact = (d and nn in d["norms"]) or (x and norm_name(x["name"]) == nn)
+        if asked or exact:
+            if d and nn in d["norms"]:
+                o = {**o, "name": d["name"], "is_fish": d["is_fish"], "row": home_row(d, [])}
+            elif x and norm_name(x["name"]) == nn:
+                o = {**o, "is_fish": bool(x["is_fish"]), "inspo": x}
+            out.append({**o, "asked": asked})
+        elif any(same_dish(o["name"], k) for k in list(names) + list(recent)):
+            continue
+        elif d:
+            if not any(same_dish(d["name"], k) for k in list(names) + list(recent)):
+                spare.append({**o, "name": d["name"], "is_fish": d["is_fish"], "row": home_row(d, [])})
+        elif x:
+            spare.append({**o, "name": x["name"], "is_fish": bool(x["is_fish"]), "inspo": x})
+        elif not any(same_dish(o["name"], q["name"]) for q in out):
+            out.append(o)
+    return out, spare
+
+
 def pub_job(j):
     return {k: j.get(k) for k in ("id", "status", "stage", "done", "total", "ready", "plan", "error", "week_id", "kind")}
 
@@ -2618,7 +2882,7 @@ def _names(x):
 def draft_meal(o):
     if o.get("inspo"):
         return inspo_draft(o["inspo"])
-    return {"name": o["name"], "description": o.get("description", ""), "is_fish": bool(o.get("is_fish")),
+    return {**({"asked": True} if o.get("asked") else {}), "name": o["name"], "description": o.get("description", ""), "is_fish": bool(o.get("is_fish")),
             "time_min": None, "ingredients": [], "steps": [], "owned": False, "draft": True,
             "ingredient_names": _names(o.get("ingredients")), "uses_pantry": _names(o.get("uses_pantry")),
             "protein": str(o.get("protein") or "").strip()[:40], "servings_base": default_servings()}
@@ -2633,18 +2897,24 @@ def pantry_for(d, names):
 
 
 def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoid, known, recent=(), favs=(), hard=(),
-                 forced=(), inspo=None):
-    """forced: dania z bazy wybrane ręcznie w zakładce przepisów [(id życzenia, pozycja bazy)]; inspo: (kandydaci, k)
-    albo None, gdy baza jest wyłączona."""
+                 forced=(), picks=None, base_on=False):
+    """forced: dania z bazy wybrane ręcznie w zakładce przepisów [(id życzenia, pozycja bazy)]. picks: dania, którymi
+    serwer wypełnił tydzień (dania domu i baza inspiracji); wtedy n to liczba nowości od modelu. picks=None: tydzień
+    układany jak dawniej, cały plan od modelu."""
     try:
-        plan = []
+        plan, mixed = [], picks is not None
+        picks = list(picks or [])
         if n:
             job["stage"] = "plan"
-            proven = min(len(favs), round(n * PROVEN_SHARE))
-            cands, k = inspo or ([], 0)
-            res = llm.ask_json(plan_prompt(n + 2, pantry, avoid, known, cravings, list(recent), list(favs), proven,
-                                           cands, k), big=True)
-            bad, seen, plan = disliked_set() | {norm_name(k) for k in known}, set(), []
+            proven = 0 if mixed else min(len(favs), round(n * PROVEN_SHARE))
+            names = known + [p["name"] for p in picks]
+            with db() as c:
+                home = home_index(c) if mixed else []
+            known_dishes = ([d["name"] for d in home][:40] + [x["name"] for x in INSPO if x["pool"] == "main"]) if mixed else None
+            res = llm.ask_json(plan_prompt(n + 2, pantry, avoid + ["ryba" for p in picks if p["is_fish"]], names, cravings,
+                                           list(recent), list(favs), proven, known_dishes,
+                                           sorted({p["pfam"] for p in picks if p["pfam"]})), big=True)
+            bad, seen, plan = disliked_set() | {norm_name(k) for k in names}, set(), []
             for o in res.get("meals", []):
                 nm = str(o.get("name", "")).strip()
                 if not nm or norm_name(nm) in bad or norm_name(nm) in seen:
@@ -2653,29 +2923,39 @@ def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoi
                 plan.append({"name": nm, "description": o.get("description", ""),
                              "is_fish": bool(o.get("is_fish")), "ingredients": o.get("ingredients"),
                              "uses_pantry": o.get("uses_pantry"), "protein": o.get("protein")})
-            if inspo:  # danie o nazwie z bazy bierze składniki z bazy, także gdy model sam na nie wpadł
-                for o in plan:
-                    x = INSPO_BY.get(norm_name(o["name"]))
-                    if x and x["pool"] == "main":
-                        o.update(inspo=x, is_fish=bool(x["is_fish"]))
-            picked = pick_fresh(plan, set(hard), n, cravings)  # bez powtórek z ostatnich tygodni, ale zawsze n dań
-            if len(picked) < n:
-                raise RuntimeError(f"model zwrócił {len(picked)} dań zamiast {n}")
-            if inspo:
-                keep = {norm_name(x) for x in favs}
-                wishes = [w for w in (norm_name(x) for x in cravings) if len(w) >= 3]
-                asked = lambda o: norm_name(o["name"]) in keep or any(w in norm_name(o["name"]) or norm_name(o["name"]) in w for w in wishes)
-                picked = inspo_place(picked, [o for o in plan if not any(o is q for q in picked)], cands, k, asked)
+            if mixed:
+                plan, variants = mix_new(plan, names, list(recent), home, cravings, base_on)
+                picked = pick_fresh(plan, set(hard), n, cravings)
+                if len(picked) < n:  # model podał za mało naprawdę nowych dań: resztę dobiera serwer, na końcu warianty
+                    with db() as c:
+                        more = mix_pick(c, start, n - len(picked), names + [o["name"] for o in picked],
+                                        bool(avoid) or any(p["is_fish"] for p in picks) or any(o.get("is_fish") for o in picked),
+                                        pantry, base_on, False)
+                    picks += more
+                    picked += variants[:max(0, n - len(picked) - len(more))]
+                    if len(picked) + len(more) < n:
+                        raise RuntimeError(f"model zwrócił {len(picked)} nowych dań zamiast {n}")
+            else:
+                picked = pick_fresh(plan, set(hard), n, cravings)  # bez powtórek z ostatnich tygodni, ale zawsze n dań
+                if len(picked) < n:
+                    raise RuntimeError(f"model zwrócił {len(picked)} dań zamiast {n}")
             plan = picked
+        if mixed:  # dania serwera i nowości modelu na przemian, taco na piątek, to samo białko nie dzień po dniu
+            new = [{"kind": "new", "name": o["name"], "taco": bool(TACO_RE.search(o["name"].lower())), "pfam": meal_pfam(
+                    {"name": o["name"], "protein": o.get("protein"), "ingredient_names": _names(o.get("ingredients"))}),
+                    "row": o.get("row") or (draft_meal(o), None)} for o in plan]
+            mixed_rows = [i["row"] for i in mix_order([x for pair in zip_longest(picks, new) for x in pair if x])]
+        else:
+            mixed_rows = [(draft_meal(o), None) for o in plan]
         rows = ([(clean_meal({**m, "owned": True}), None) for _, m in carried]
                 + [(clean_meal({**m, "owned": False}), tr) for _, m, tr in fixed]
                 + [(inspo_draft(x), None) for _, x in forced]
-                + [(draft_meal(o), None) for o in plan])
+                + mixed_rows)
         with db() as c:
             c.execute("INSERT OR IGNORE INTO weeks(start, confirmed) VALUES(?, 0)", (str(start),))
             wid = c.execute("SELECT id FROM weeks WHERE start=?", (str(start),)).fetchone()["id"]
-            c.execute("UPDATE weeks SET confirmed=? WHERE id=?", (0 if plan or forced else 1, wid))
-            if not (plan or forced):
+            c.execute("UPDATE weeks SET confirmed=? WHERE id=?", (0 if plan or forced or picks else 1, wid))
+            if not (plan or forced or picks):
                 attach_used(c, wid)
             c.execute("DELETE FROM meals WHERE week_id=?", (wid,))
             for d, (m, tr) in enumerate(rows):
@@ -2979,8 +3259,9 @@ def generate(req: GenReq):
             crav = [(r["id"], r["text"]) for r in c.execute(
                 "SELECT id, text FROM cravings WHERE used=0 AND recipe_id IS NULL")]
             icfg = inspo_cfg(c)
+            mixed = icfg["new"] is not None
             forced = []  # „Do planu” w zakładce Inspiracje: życzenie o nazwie dania z bazy wchodzi do planu bez modelu
-            if icfg["have"]:
+            if mixed and icfg["have"]:
                 for cid, text in crav:
                     x = INSPO_BY.get(norm_name(text))
                     if x and len(forced) < n and x["id"] not in {f["id"] for _, f in forced}:
@@ -2990,20 +3271,24 @@ def generate(req: GenReq):
             known = [m["name"] for _, m in carried] + [m["name"] for _, m, _ in fixed] + [x["name"] for _, x in forced]
             recent = recent_meals(c, start, RECENT_WEEKS)
             hard = {norm_name(x) for x in recent_meals(c, start, RECENT_HARD)}
-            favs = fav_names(c, recent + known)
+            favs = [] if mixed else fav_names(c, recent + known)
             avoid = (["ryba" for _, m in carried if m.get("is_fish")] + ["ryba" for _, m, _ in fixed if m.get("is_fish")]
                      + ["ryba" for _, x in forced if x["is_fish"]])
-            inspo = None
-            if icfg["on"] and n:
-                # zawsze zostaje miejsce na przynajmniej jedną nową propozycję modelu
-                k = max(0, min(icfg["n"] - len(forced), n - min(len(favs), round(n * PROVEN_SHARE)) - 1))
-                inspo = (inspo_cands(c, recent + known + favs, fish_ok=not avoid) if k else [], k)
+            picks = None
+            if mixed:
+                # nowości: tyle, ile w ustawieniu; życzenie albo coś do zużycia z lodówki zawsze dostaje jedno miejsce od modelu
+                new = min(icfg["new"], n)
+                if n and (crav or pantry):
+                    new = max(new, 1)
+                picks = mix_pick(c, start, n - new, known, bool(avoid), pantry, icfg["on"],
+                                 n > 0 and "taco" in prefs().lower() and not any(TACO_RE.search(k.lower()) for k in known))
+                n -= len(picks)
         job = {"id": uuid.uuid4().hex[:8], "status": "running", "stage": "plan" if n else "recipes",
                "done": 0, "total": 7, "ready": [], "plan": [], "error": None, "week_id": None, "kind": "plan"}
         add_job(job)
         threading.Thread(target=run_generate, daemon=True,
                          args=(job, start, carried, fixed, [i for i, _ in crav], n, pantry,
-                               [t for _, t in crav], avoid, known, recent, favs, hard, forced, inspo)).start()
+                               [t for _, t in crav], avoid, known, recent, favs, hard, forced, picks, icfg["on"])).start()
     return {"job": job["id"]}
 
 
@@ -3110,6 +3395,9 @@ def balance_meal(mid: int):
         if cur["data"] != r["data"]:
             raise HTTPException(409, "danie zmieniło się w międzyczasie – odśwież i spróbuj jeszcze raz")
         put_recipe(c, mid, m, None)  # tłumaczenie opisywało stary przepis
+        # świadomie poprawiona wersja zastępuje przepis tego dania w książce, zamiast żyć obok niego
+        c.execute("UPDATE recipes SET data=?, tr=NULL WHERE lower(name)=?",
+                  (json.dumps({**m, "owned": False}, ensure_ascii=False), str(m.get("name", "")).lower()))
         attach_used(c, r["week_id"])
     return state(r["week_id"])
 
@@ -3206,11 +3494,11 @@ def choose(mid: int, req: ChooseReq):
             raise HTTPException(409, "propozycje się zmieniły – odśwież i wybierz jeszcze raz")
         confirmed = week_confirmed(c, r["week_id"])
         old = json.loads(r["data"])
-        if old.get("inspo") and r["status"] != "done":  # danie z bazy zamienione przed gotowaniem: po dwóch razach przestaje wracać
-            c.execute("INSERT INTO inspo_skip(id, n) VALUES(?, 1) ON CONFLICT(id) DO UPDATE SET n=n+1", (old["inspo"],))
+        if r["status"] != "done" and norm_name(old.get("name")):  # zamienione przed gotowaniem: po dwóch razach przestaje wracać samo
+            c.execute("INSERT INTO inspo_skip(id, n) VALUES(?, 1) ON CONFLICT(id) DO UPDATE SET n=n+1", (norm_name(old["name"]),))
         # pre=NULL: przepis napisany na zapas dotyczył starego dania
         c.execute("""UPDATE meals SET data=?, alts=NULL, tr=NULL, pre=NULL, status='planned', liked=0, servings=NULL
-                     WHERE id=?""", (json.dumps(draft_meal(alts[req.index]), ensure_ascii=False), mid))
+                     WHERE id=?""", (json.dumps(draft_meal({**alts[req.index], "asked": True}), ensure_ascii=False), mid))
     if confirmed:
         start_fill(mid)
     elif PREFETCH:
@@ -4056,8 +4344,7 @@ def add_craving(req: CravReq):
             text = rc["name"]
         if not text:
             raise HTTPException(400, "pusty tekst")
-        if norm_name(text) in INSPO_BY:  # ktoś sam wybrał danie z bazy: znów może być proponowane
-            c.execute("DELETE FROM inspo_skip WHERE id=?", (INSPO_BY[norm_name(text)]["id"],))
+        c.execute("DELETE FROM inspo_skip WHERE id=?", (norm_name(text),))  # ktoś sam wybrał to danie: znów może wracać
         c.execute("INSERT INTO cravings(text, recipe_id) VALUES(?,?)", (text, req.recipe_id))
     return state()
 
@@ -4115,6 +4402,12 @@ def favorite_meal(mid: int):
         if ex:
             c.execute("DELETE FROM recipes WHERE id=?", (ex["id"],))
         else:
+            # wariant dania, które już jest w książce, zastępuje tamten przepis (jedna pozycja na danie)
+            fam = meal_pfam(d)
+            for o in c.execute("SELECT id, name, data FROM recipes").fetchall():
+                if same_dish(d["name"], o["name"], fam, meal_pfam(json.loads(o["data"]))):
+                    c.execute("DELETE FROM recipes WHERE id=?", (o["id"],))
+            c.execute("DELETE FROM inspo_skip WHERE id=?", (norm_name(d["name"]),))
             c.execute("DELETE FROM dislikes WHERE norm=?", (norm_name(d["name"]),))  # ⭐ zdejmuje 👎
             d["owned"] = False
             c.execute("INSERT INTO recipes(name, data, tr) VALUES(?,?,?)",
