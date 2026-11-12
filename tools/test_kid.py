@@ -58,6 +58,9 @@ def start(**env):
     e = {k: v for k, v in os.environ.items() if k not in ("PREFETCH", "LLM_PARALLEL", "PREFS_PATH")}
     e.update({"PATH": f"{ROOT / 'tools' / 'fakebin'}:{os.environ['PATH']}", "DB_PATH": str(DB), "BACKUP_DIR": str(TMP / "bk"),
               "FAKE_LOG": str(LOG), "FAKE_TIMES": str(TIMES), "FAKE_PLAN_FILE": str(PLAN), "FAKE_TR": "1", "FAKE_FAIL_FILE": str(FAIL)})
+    # część przez API sprawdza plan dziecka na tygodniu ułożonym w całości przez model (PLAN_MIX=0); tryb „ui” włącza
+    # skład tygodnia (PLAN_MIX=1), czyli ustawienie produkcyjne: dania z bazy inspiracji obok dań od modelu
+    e["PLAN_MIX"] = "0"
     e.update(env)
     srv = subprocess.Popen([PY, "-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", PORT],
                            cwd=ROOT / "app", env=e, stdout=open(SRV_LOG, "a"), stderr=subprocess.STDOUT)
@@ -321,7 +324,7 @@ async def ui():
     import asyncio, base64
     import test_two_users as T
     shutil.copy(EMPTY_DB, DB)
-    start(FAKE_DELAY="0.2", LLM_PARALLEL="2")
+    start(FAKE_DELAY="0.2", LLM_PARALLEL="2", PLAN_MIX="1")
     api("/api/kid/profile", body={"on": True, "name": "Luna", "likes": ["kikerter", "feta"], "dislikes": ["gryteretter"]})
     wid = gen(["Laks med poteter", "Soppstroganoff med ris", "Pastasalat", "Ny 1", "Ny 2", "Ny 3", "Ny 4"])
     kid_ready(wid)
@@ -386,7 +389,10 @@ async def ui():
         await until("!S.pending", 40)
         ok(await n("#main .kr") == 7 and await n("#main .kr.own") >= 2 and await n("#main .kstrip") == 0,
            "tydzień: wiersz dziecka pod każdym daniem, własne danie wcięte, bez paska przypomnienia")
-        ok("Barn: fiskekaker i makaron" in await txt("#main") and "+ tomat" in await txt("#main"), "tydzień pokazuje jej danie i dodatek")
+        seen = await txt("#main")
+        # dodatek bywa pokazany po polsku: gdy inne danie tygodnia ma „tomat” w przetłumaczonych składnikach (np. danie z bazy
+        # inspiracji przy włączonym składzie tygodnia), atrapa tłumaczenia daje „PL tomat”
+        ok("Barn: fiskekaker i makaron" in seen and ("+ tomat" in seen or "+ PL tomat" in seen), "tydzień pokazuje jej danie i dodatek")
         await shot("4_tydzien")
         await A.ev(f"openSheet({{kind:'rec',id:{laks}}})")
         ok(await until("document.querySelectorAll('#panel .kbox').length===1") and "tomat" in await txt("#panel .kbox"),
