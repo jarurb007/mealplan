@@ -36,6 +36,13 @@ DB_PATH=/tmp/moja-kopia.db BACKUP_DIR=/tmp/moje-kopie \
 - Plan dziecka (`tools/test_kid.py`, sam uruchamia serwer; tryb `ui` steruje Chromium) działa tylko z włączonym profilem
   dziecka (ustawienia → „Plan dziecka”, klucz `kid` w tabeli `settings`). Bez profilu aplikacja nie pyta modelu o dania
   dziecka i wygląda jak dawniej, więc pozostałe testy go nie widzą. Profil to dane prywatne: nie wpisuj go do repo.
+- Baza inspiracji (`app/inspiracje.json`, sprawdzone przepisy z norweskich serwisów jako fakty: składniki, ilości, ocena,
+  link) jest wczytywana przy starcie; aplikacja niczego z tych serwisów nie pobiera. Plik buduje
+  `tools/inspiracje/normalizuj.py` z `tools/inspiracje/przepisy*.json` (nie edytuj go ręcznie).
+- Skład tygodnia układa serwer: ustawiona liczba nowości od modelu (domyślnie 2), reszta to dania domu (ugotowane, 👍, ⭐;
+  jedna pozycja na danie, warianty nazwy rozpoznaje `same_dish()`) i baza inspiracji. **Starsze testy uruchamiaj
+  z `PLAN_MIX=0`**: wtedy cały plan pisze model jak dawniej, bez bazy. `tools/test_inspo.py` sam uruchamia serwer
+  (tryb `ui` steruje Chromium) i liczy wywołania modelu przed i po przez sześć tygodni.
 - Port 8099 jest zarezerwowany dla wersji podglądowej. Nie zajmuj go w testach.
 - Gazetki (promocje na liście zakupów) w testach nie sięgają do sieci: `OFFERS_SRC_DIR=<repo>/tools/testdata/offers`
   każe czytać zapisane próbki zamiast `coop.no` i `kiwi.no`, a `OFFER_MATCH_WAIT=0` wyłącza zwłokę przed pytaniem modelu.
