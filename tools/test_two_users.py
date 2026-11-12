@@ -51,6 +51,10 @@ class Tab:
         await self.cmd("Emulation.setDeviceMetricsOverride", width=390, height=844, deviceScaleFactor=2, mobile=True)
         await self.cmd("Page.navigate", url=API + "/")
         await asyncio.sleep(3)
+        # Na dwa dni przed końcem tygodnia (czwartek, piątek) aplikacja otwiera się na zakładce planowania
+        # (shouldOpenWizard). Testy zakładają widok tygodnia, więc zaczynają od niego niezależnie od dnia.
+        await self.ev("typeof goTab==='function'&&goTab('plan')")
+        await asyncio.sleep(0.3)
 
     async def cmd(self, method, **params):
         self.i += 1
