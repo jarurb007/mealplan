@@ -12,11 +12,13 @@ z "Linsegryte" jest w porządku; prompt poprawki ("nie spełnia bilansu talerza"
 Prompt dopasowania gazetek ("offer_match") dostaje pary wyliczone prostą regułą wspólnych słów,
 prompt odczytu gazetki KIWI ("leaflet_offers") kilka stałych ofert.
 Plan dziecka: prompt z "kid_options" dostaje trzy dania "Barn <danie dorosłych> N" (numeracja idzie dalej za daniami z listy
-„nie powtarzaj”), pierwsze z rybą (z jajkiem, gdy prompt zakazuje ryby), ostatnie jako nowość, gdy prompt o nią prosi;
-"same_ok" jest prawdą dla dania dorosłych z "1" lub "Laks" w nazwie. "kid_dish" (wpisane danie) i "kid_steps" (przepis)
+„nie powtarzaj”), każde z innym głównym białkiem (fiskekaker, kikerter, egg, potem linser, cottage, ost; bez rodzin,
+których prompt dziś zakazuje, i bez ryby, gdy jej zakazuje), ostatnie jako nowość, gdy prompt o nią prosi;
+"same_ok" jest prawdą dla dania dorosłych z "1" lub "Laks" w nazwie. FAKE_KID_STUFF i FAKE_KID_BAD robią z atrapy
+naiwny model, który robi z ulubionego składnika białko każdej propozycji albo wkłada zakazany (serwer ma to wyłapać). "kid_dish" (wpisane danie) i "kid_steps" (przepis)
 dostają stałe odpowiedzi. Danie dorosłych z "Barnfeil" w nazwie kończy się błędem modelu.
 Baza inspiracji: prompt z "inspo_steps" (same kroki dania z bazy) dostaje trzy stałe kroki. FAKE_KID_BASE=nazwa ->
-pierwsza propozycja planu dziecka nosi tę nazwę (model „wybrał” danie z bazy)."""
+pierwsza propozycja planu dziecka nosi tę nazwę (model „wybrał” danie z bazy), o ile tego dnia jest nią ryba."""
 import json, os, re, sys, time
 t0 = time.time()
 p = sys.stdin.read()
@@ -72,14 +74,25 @@ elif '"kid_options"' in p:
         sys.exit("atrapa: zamówiony błąd planu dziecka")
     k0 = len(re.findall(r"'Barn ", re.search(r"Nie powtarzaj tych dań: (.*)", p).group(1)))
     I = lambda n, q, u, a, sh=False: {"name": n, "qty": q, "unit": u, "aisle": a, "shared": sh}
-    prot = I("egg", 1, "stk", "Meieri og kjøl") if "Nie proponuj ryby" in p else I("fiskekaker", 150, "g", "Kjøtt og fisk")
+    # posłuszny model: trzy propozycje z różnym głównym białkiem, z pominięciem rodzin, których prompt dziś zakazuje
+    ban = re.search(r"Głównym źródłem białka nie może być dziś: (.*?) \(", p)
+    ban = ban.group(1).split(", ") if ban else []
+    PROT = [("fisk", I("fiskekaker", 150, "g", "Kjøtt og fisk")), ("kikerter", I("kikerter", 100, "g", "Tørrvarer og hermetikk")),
+            ("egg", I("egg", 2, "stk", "Meieri og kjøl")), ("linser", I("røde linser", 60, "g", "Tørrvarer og hermetikk")),
+            ("cottage", I("cottage cheese", 100, "g", "Meieri og kjøl")), ("ost", I("revet ost", 50, "g", "Meieri og kjøl"))]
+    prots = [x for f, x in PROT if f not in ban and not (f == "fisk" and "Nie proponuj ryby" in p)][:3]
+    # naiwny model do testów zasad: FAKE_KID_STUFF=składnik jest głównym białkiem każdej propozycji (chyba że prompt go dziś
+    # zakazuje), FAKE_KID_BAD=składnik trafia zawsze do drugiej propozycji, choćby był na liście „nie lubi”
+    stuff, badw = os.environ.get("FAKE_KID_STUFF"), os.environ.get("FAKE_KID_BAD")
+    if stuff and stuff not in ban:
+        prots = [I(stuff, 100, "g", "Meieri og kjøl")] * 3
     out = {"same_ok": "1" in adult or "Laks" in adult,
-           "kid_options": [{"name": f"Barn {adult} {k0 + i + 1}", "is_new": i == 2 and "nowością" in p,
-                            "is_fish": i == 0 and prot["name"] == "fiskekaker", "shares": "ris", "extra_min": 5 + i,
-                            "ingredients": [prot if i == 0 else I("kikerter", 100, "g", "Tørrvarer og hermetikk"),
-                                            I("ris", None, "", "Tørrvarer og hermetikk", True), I("agurk", 0.25, "stk", "Frukt og grønt")]}
-                           for i in range(3)]}
-    if os.environ.get("FAKE_KID_BASE"):
+           "kid_options": [{"name": f"Barn {adult} {k0 + i + 1}", "protein": x["name"], "is_new": i == 2 and "nowością" in p,
+                            "is_fish": x["name"] == "fiskekaker", "shares": "ris", "extra_min": 5 + i,
+                            "ingredients": [x, I("ris", None, "", "Tørrvarer og hermetikk", True), I("agurk", 0.25, "stk", "Frukt og grønt")]
+                            + ([I(badw, 10, "g", "Tørrvarer og hermetikk")] if badw and i == 1 else [])}
+                           for i, x in enumerate(prots)]}
+    if os.environ.get("FAKE_KID_BASE") and out["kid_options"] and out["kid_options"][0]["is_fish"]:  # danie rybne z bazy tylko w dzień, gdy ryba jest dozwolona
         out["kid_options"][0]["name"] = os.environ["FAKE_KID_BASE"]
 elif '"kid_dish"' in p:
     kind = "kiddish"
