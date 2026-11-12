@@ -1,11 +1,13 @@
 """Test bazy inspiracji przez API, z atrapą modelu (tools/fakebin/claude): plik danych, kandydaci w pytaniu o plan,
 dobieranie przez serwer, składniki i ilości z bazy, same kroki od modelu, danie wracające bez pytania modelu,
-„Do planu” z zakładki przepisów, ustawienia, 👎 i dwukrotna zamiana, plan dziecka. Liczy wywołania modelu przed i po.
+„Do planu” z zakładki przepisów, ustawienia, 👎 i dwukrotna zamiana, plan dziecka. Skład tygodnia: limit nowości,
+dania domu wracające same, warianty nazwy jako jedno danie. Liczy wywołania modelu przed i po przez sześć tygodni.
 
 Test SAM uruchamia serwer na kopii pustej bazy w katalogu tymczasowym, więc port musi być wolny:
     UKES_PORT=8117 python3 tools/test_inspo.py
     UKES_PORT=8117 python3 tools/test_inspo.py ui     interfejs w Chromium (CDP), zrzuty ekranu do UKES_SHOTS"""
 import json, os, re, shutil, sqlite3, subprocess, sys, tempfile, time, urllib.error, urllib.request
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -63,7 +65,7 @@ def start(fresh=True, **env):
     for f in (PLAN, FAIL):
         f.unlink(missing_ok=True)
     clear_logs()
-    e = {k: v for k, v in os.environ.items() if k not in ("PREFETCH", "LLM_PARALLEL", "PREFS_PATH", "INSPO_DEFAULT_N", "INSPO_PATH")}
+    e = {k: v for k, v in os.environ.items() if k not in ("PREFETCH", "LLM_PARALLEL", "PREFS_PATH", "PLAN_MIX", "INSPO_PATH")}
     e.update({"PATH": f"{ROOT / 'tools' / 'fakebin'}:{os.environ['PATH']}", "DB_PATH": str(DB), "BACKUP_DIR": str(TMP / "bk"),
               "FAKE_LOG": str(LOG), "FAKE_TIMES": str(TIMES), "FAKE_PLAN_FILE": str(PLAN), "FAKE_FAIL_FILE": str(FAIL),
               "FAKE_DELAY": "0.1", "OFFER_DEFAULT_CHAINS": "", "LLM_PARALLEL": "3"})
@@ -122,15 +124,7 @@ def from_base(st):
 
 
 PLANP, STEPS, KID = "Jesteś planerem obiadów", '"inspo_steps"', '"kid_options"'
-BLOCK = "Przepisy z bazy inspiracji"
-
-
-def cand_names(p):
-    """Nazwy kandydatów z bazy w pytaniu o plan."""
-    if BLOCK not in p:
-        return []
-    part = p[p.index(BLOCK):p.index("Wstaw dokładnie")]
-    return [ln[2:].split(" · ")[0] for ln in part.split("\n") if ln.startswith("- ")]
+BLOCK = "Dania, które dom już zna"
 
 
 def data_file():
@@ -153,163 +147,246 @@ def data_file():
        "bez pizzy i gotowych zamienników mięsa")
 
 
+VEG = ["Aubergine", "Brokkoli", "Blomkål", "Gresskar", "Squash", "Spinat", "Purre", "Selleri", "Fennikel", "Rødbete", "Pastinakk",
+       "Gulrot", "Paprika", "Tomat", "Mais", "Grønnkål", "Kålrot", "Asparges", "Sjampinjong", "Avokado", "Agurk", "Reddik",
+       "Rosenkål", "Hodekål", "Søtpotet", "Potet", "Løk", "Hvitløk", "Vårløk", "Ingefær", "Sitron", "Eple", "Pære", "Plomme",
+       "Mango", "Ananas", "Melon", "Drue", "Fiken", "Daddel", "Mandel", "Valnøtt", "Hasselnøtt", "Kastanje", "Oliven", "Kapers",
+       "Dill", "Persille", "Basilikum", "Timian", "Mynte", "Salvie", "Rosmarin", "Karse", "Ruccola", "Sikori", "Artisjokk",
+       "Okra", "Bambus", "Lotus", "Tang", "Nesle", "Syre", "Løpstikke"]
+_fresh = (v + x for x in ("form", "panne", "terte", "bolle", "stuing") for v in VEG)
+NEW = set()
+
+
+def fresh(n=9):
+    """Nazwy dań, których jeszcze nie było: atrapa zwraca je jako plan (model wymyśla naprawdę nowe dania)."""
+    out = [next(_fresh) for _ in range(n)]
+    NEW.update(out)
+    return out
+
+
+def done_all(wid):
+    for m in state(wid)["meals"]:
+        api(f"/api/meal/{m['id']}/status", body={"status": "done"})
+
+
+def sql(q, *a):
+    c = sqlite3.connect(DB, timeout=10)
+    try:
+        r = c.execute(q, a).fetchall()
+        c.commit()
+        return r
+    finally:
+        c.close()
+
+
+def seed_week(start, names):
+    """Dawny, ugotowany tydzień wpisany wprost do bazy (pełne przepisy), jak tygodnie sprzed tej zmiany."""
+    sql("INSERT INTO weeks(start, confirmed) VALUES(?, 1)", start)
+    wid = sql("SELECT id FROM weeks WHERE start=?", start)[0][0]
+    I = lambda n, q, u, a: {"name": n, "qty": q, "unit": u, "aisle": a, "from_pantry": False}
+    for d, (nm, prot) in enumerate(names):
+        m = {"name": nm, "time_min": 30, "description": "d", "is_fish": prot == "laksefilet", "owned": False, "servings_base": 3,
+             "ingredients": [I(prot, 300, "g", "Tørrvarer og hermetikk"), I("løk", 1, "stk", "Frukt og grønt"),
+                             I("gulrot", 2, "stk", "Frukt og grønt"), I("ris", 225, "g", "Tørrvarer og hermetikk")],
+             "steps": [f"steg {nm}", "steg 2"]}
+        sql("INSERT INTO meals(week_id, day, data, status) VALUES(?,?,?,'done')", wid, d, json.dumps(m, ensure_ascii=False))
+    return wid
+
+
+def week_calls():
+    return calls("plan"), calls("meal"), calls("inspo")
+
+
 def main():
     data_file()
 
-    # --- przed: baza wyłączona (INSPO_DEFAULT_N=0), aplikacja jak dotąd
-    start(INSPO_DEFAULT_N="0")
+    # --- przed: tydzień układany jak dawniej (PLAN_MIX=0), sześć kolejnych planów
+    start(PLAN_MIX="0")
     st = state()
-    ok(st["inspo"]["on"] is False and st["inspo"]["have"], "INSPO_DEFAULT_N=0: baza jest, ale wyłączona")
-    w = gen()
-    st = confirm(w)
-    ok([m["name"] for m in st["meals"]] == [f"Szkic {i}" for i in range(1, 8)] and not from_base(st), "bez bazy plan to 7 propozycji modelu")
-    ok(BLOCK not in prompts(PLANP)[0], "bez bazy pytanie o plan nie wspomina o bazie")
-    before = (calls(), calls("plan"), calls("meal"), calls("inspo"))
-    ok(before == (8, 1, 7, 0), f"przed: 8 wywołań modelu na tydzień (plan + 7 przepisów): {before}")
+    ok(st["inspo"]["new"] is None and st["inspo"]["on"] is False and st["inspo"]["have"], "PLAN_MIX=0: tydzień jak dawniej, baza wyłączona")
+    old = []
+    for k in range(6):
+        clear_logs()
+        w = gen(fresh())
+        st = confirm(w)
+        done_all(w)
+        old.append(week_calls())
+    ok(len(st["meals"]) == 7 and not from_base(st) and BLOCK not in prompts(PLANP)[0], "jak dawniej: 7 propozycji modelu, pytanie nie wspomina o bazie")
+    ok(all(c == (1, 7, 0) for c in old), f"przed: co tydzień plan + 7 pełnych przepisów: {old}")
     full_len = len(prompts("Napisz pełny przepis na danie: ")[0])
+    old_dishes = len({r[0] for r in sql("SELECT json_extract(data,'$.name') FROM meals")})
 
-    # --- po: jedno danie z bazy (ustawienie domyślne); atrapa nie wybiera z listy, więc dobiera serwer
+    # --- po: 2 nowości na tydzień, reszta z dań domu i z bazy; sześć kolejnych planów
     start()
     st = state()
-    ok(st["inspo"] == {"on": True, "n": 1, "max": 5, "have": True, "count": sum(x["pool"] == "main" for x in BASE)},
-       f"domyślnie baza włączona, 1 danie na tydzień: {st['inspo']}")
-    w = gen()
-    p = prompts(PLANP)[0]
-    cands = cand_names(p)
-    ok(len(cands) == 12 and all(c in BY and BY[c]["pool"] == "main" for c in cands), f"pytanie o plan ma 12 kandydatów z bazy ({len(cands)})")
-    ok("Wstaw dokładnie 1 z nich" in p, "model ma wstawić dokładnie 1 danie z bazy")
-    ok(sum(BY[c]["taco"] for c in cands) <= 2 and sum(BY[c]["is_fish"] for c in cands) <= 2
-       and max(sum(BY[c]["site"] == s for c in cands) for s in {BY[c]["site"] for c in cands}) <= 3,
-       "kandydaci: najwyżej 2 taco, 2 ryby i 3 dania z jednego serwisu")
-    st = state(w)
-    b = from_base(st)
-    ok(len(b) == 1 and b[0]["name"] in cands and not BY[b[0]["name"]]["taco"], f"serwer dobrał 1 danie z kandydatów ({[m['name'] for m in b]})")
+    ok({k: st["inspo"][k] for k in ("on", "new", "have")} == {"on": True, "new": 2, "have": True}, f"domyślnie 2 nowe dania na tydzień, baza włączona: {st['inspo']}")
+    ok(st["inspo"]["cost"] == {"calls": 8, "new": 2, "base": 5, "home": 0}, f"koszt na pustej bazie: plan + 2 przepisy + 5 dań z bazy pierwszy raz: {st['inspo']['cost']}")
+    new, homes, first = [], [], None
+    for k in range(6):
+        clear_logs()
+        w = gen(fresh())
+        st0 = state(w)
+        st = confirm(w)
+        if k == 0:
+            first, first0, p0 = st, st0, prompts(PLANP)[0]
+            sp = prompts(STEPS)[0]
+        if k == 3:
+            fourth = st
+        done_all(w)
+        new.append(week_calls())
+        homes.append(len(state(w)["home"]))
+    b = from_base(first)
+    ok(len(b) == 5 and len(first["meals"]) == 7, f"pierwszy tydzień: 2 nowości od modelu i 5 dań z bazy ({[m['name'] for m in b]})")
+    ok(BLOCK in p0 and "Ułóż 4 różnych obiadów" in p0 and "Dal med röda linser" in p0 and "użyj\ndokładnie tej nazwy" in p0,
+       "model układa tylko nowości (prosi o 2 + 2 zapasowe) i dostaje dokładne nazwy znanych dań")
+    ok(all(repr(m["name"]) in p0.split("Te dania już są w tym tygodniu")[1].split("\n")[0] for m in b), "model wie, które dania serwer już wstawił")
+    ok(max(Counter(m["src"]["site"] for m in b).values()) <= 2 and sum(m["is_fish"] for m in first["meals"]) <= 1,
+       "reguły tygodnia: najwyżej 2 dania z jednego serwisu i najwyżej 1 ryba")
+    ok(BY[first["meals"][6]["name"]]["taco"] and sum(BY[m["name"]]["taco"] for m in b) == 1, f"piątek to taco ({first['meals'][6]['name']})")
+    fam = [m["bal"]["kinds"][:1] for m in first["meals"]]
     x = BY[b[0]["name"]]
-    ok(b[0]["draft"] and b[0]["ingredient_names"] == [i["name"] for i in x["ingredients"]],
-       "szkic dania z bazy ma od razu nazwy wszystkich składników")
-    ok(b[0]["src"] == {"site": x["site"], "rating": x["rating"], "votes": x["votes"], "url": x["url"]}, "przy daniu jest serwis, ocena i adres źródła")
-    st = confirm(w)
-    m = from_base(st)[0]
+    d0 = next(m for m in first0["meals"] if m["name"] == x["name"])
+    ok(d0["draft"] and d0["ingredient_names"] == [i["name"] for i in x["ingredients"]], "szkic dania z bazy ma od razu nazwy wszystkich składników")
+    m = b[0]
+    ok(m["src"] == {"site": x["site"], "rating": x["rating"], "votes": x["votes"], "url": x["url"]}, "przy daniu jest serwis, ocena i adres źródła")
     ok(not m["draft"] and m["steps"] == ["steg 1", "steg 2", "steg 3"], "po zatwierdzeniu danie z bazy ma kroki od modelu")
-    ok([i["qty"] for i in m["ingredients"]] == [i["qty"] for i in x["ingredients"]]
-       and {i["name"] for i in m["ingredients"]} >= {i["name"] for i in x["ingredients"] if i["name"] not in ("koriander", "karri", "spaghetti")}
-       and m["servings_base"] == x["servings"], "składniki i ilości są dokładnie z bazy, na tyle porcji, ile podaje źródło")
+    ok([i["qty"] for i in m["ingredients"]] == [i["qty"] for i in x["ingredients"]] and m["servings_base"] == x["servings"],
+       "składniki i ilości są dokładnie z bazy, na tyle porcji, ile podaje źródło")
     ok(m["source"] == x["url"] and m["inspo"] == x["id"] and m["description"] == x["method"], "danie pamięta źródło")
-    big = next(i for i in x["ingredients"] if isinstance(i["qty"], (int, float)) and i["unit"] == "g")
-    k = [i["name"] for i in m["ingredients"]].index(big["name"])
-    ok(float(m["qv"][k]) == max(5, round(big["qty"] * 3 / x["servings"] / 5) * 5), f"ilości przeliczone na 3 porcje domu ({big['name']}: {m['qv'][k]} g)")
-    ok(any(big["name"] in (i["name"], i.get("label")) or big["name"] in json.dumps(i, ensure_ascii=False) for g in st["shopping"].values() for i in g),
-       "składnik dania z bazy jest na liście zakupów")
-    after = (calls(), calls("plan"), calls("meal"), calls("inspo"))
-    ok(after == (8, 1, 6, 1), f"po: plan + 6 pełnych przepisów + 1 pytanie o same kroki: {after}")
-    sp = prompts(STEPS)[0]
-    ok("Zasady użytkownika" not in sp and x["method"] in sp and all(i["name"] in sp for i in x["ingredients"]),
-       "pytanie o kroki ma składniki i technikę, bez preferencji domu")
+    xs = next(BY[q["name"]] for q in b if any(isinstance(i["qty"], (int, float)) and i["unit"] == "g" for i in BY[q["name"]]["ingredients"]))
+    ms = next(q for q in b if q["name"] == xs["name"])
+    big = next(i for i in xs["ingredients"] if isinstance(i["qty"], (int, float)) and i["unit"] == "g")
+    k = [i["qty"] for i in ms["ingredients"]].index(big["qty"])
+    ok(float(ms["qv"][k]) == max(5, round(big["qty"] * 3 / xs["servings"] / 5) * 5), f"ilości przeliczone na 3 porcje domu ({big['name']}: {ms['qv'][k]} g)")
+    ok("Zasady użytkownika" not in sp and "bez ilości" in sp, "pytanie o kroki: składniki i technika, bez preferencji domu, kroki bez ilości")
     print(f"INFO pytanie o pełny przepis: {full_len} znaków, o same kroki: {len(sp)} znaków")
-    w1, first = w, m
+    ok(new[0] == (1, 2, 5) and all(c[:2] == (1, 2) and c[2] in (4, 5) for c in new[:3]),
+       f"tygodnie 1-3 (dania domu jeszcze w przerwie; taco wraca wcześniej): plan + 2 przepisy + 4-5 razy same kroki: {new[:3]}")
+    ok(all(c[0] == 1 and c[1] == 2 and c[2] <= 1 for c in new[3:]), f"od 4. tygodnia dania wracają: plan + 2 przepisy + najwyżej 1 danie z bazy: {new[3:]}")
+    h4 = [m for m in fourth["meals"] if not m["draft"] and m["name"] in {q["name"] for q in first["meals"]}]
+    ok(len(h4) >= 3 and all(len(m["steps"]) >= 2 for m in h4), f"w 4. tygodniu wracają dania z 1. tygodnia, z zapisanym przepisem ({[m['name'] for m in h4]})")
+    seen3 = {r[0] for r in sql("SELECT json_extract(m.data,'$.name') FROM meals m JOIN weeks w ON w.id=m.week_id WHERE w.start < ?", fourth["week"]["start"])}
+    ok(sum(1 for m in fourth["meals"] if m["name"] not in seen3 and not m.get("src")) == 2 and sum(1 for m in fourth["meals"] if m["name"] not in seen3) <= 3,
+       "w 4. tygodniu dokładnie 2 nowości od modelu i najwyżej 1 nowe danie z bazy")
+    n_dishes = len({r[0] for r in sql("SELECT json_extract(data,'$.name') FROM meals")})
+    ok(sum(sum(c) for c in new) < sum(sum(c) for c in old) and sum(c[1] for c in new) == 12,
+       f"sześć tygodni: {sum(sum(c) for c in new)} pytań do modelu zamiast {sum(sum(c) for c in old)}, pełnych przepisów 12 zamiast 42")
+    ok(homes[5] - homes[2] <= 9 and n_dishes < old_dishes, f"dań domu po kolejnych tygodniach: {homes} (dawniej {old_dishes} różnych dań po 6 tygodniach, teraz {n_dishes})")
+    ok(state()["inspo"]["cost"]["calls"] <= 4, f"koszt w ustawieniach po 6 tygodniach: {state()['inspo']['cost']}")
 
-    # --- model sam wybiera z bazy; dwa dania z bazy przy limicie 1: drugie ustępuje zapasowej propozycji
-    # (dwa dania, których nie było w pierwszym tygodniu: tamto wybrał los)
-    DAL, HEIT = [n for n in ("Dal med röda linser", "Baked feta pasta", "Chili sin carne") if n != first["name"]][:2]
-    w = gen([DAL, HEIT] + [f"Ny {i}" for i in range(1, 8)])
-    st = state(w)
-    names = [m["name"] for m in st["meals"]]
-    ok([m["name"] for m in from_base(st)] == [DAL] and HEIT not in names and len(names) == 7,
-       f"model wybrał dwa dania z bazy, w planie zostaje jedno: {names}")
-    n_steps = calls("inspo")
+    # --- tożsamość dania: warianty nazwy tego samego dania
+    start()
+    api("/api/inspo/settings", body={"on": False})
+    seed_week("2026-08-01", [("Linsebolognese med spagetti", "røde linser"), ("Ovnsbakt laks med couscous", "laksefilet"),
+                             ("KIWI-risotto med bakte rotgrønnsaker", "hvite bønner"), ("Vegetarisk fredagstaco", "kidneybønner")])
+    seed_week("2026-08-08", [("Linsebolognese med spaghetti", "røde linser"), ("Ovnsbakt laks med couscous og sitronrømme", "laksefilet"),
+                             ("Ovnsbakt laks med sitron og stekte poteter", "laksefilet"), ("Risotto med bakte rotgrønnsaker", "hvite bønner"),
+                             ("Fredagstaco med svarte bønner", "kidneybønner")])
+    sql("INSERT INTO weeks(start, confirmed) VALUES('2026-09-05', 1)")  # pusty tydzień: następny plan jest 5 tygodni po tych daniach
+    rows_before = sql("SELECT id, week_id, day, data, status FROM meals ORDER BY id")
+    st = state()
+    home = {h["name"]: h for h in st["home"]}
+    ok(len(home) == 5, f"9 ugotowań to 5 dań domu, jedna pozycja na danie: {sorted(home)}")
+    lb = home.get("Linsebolognese med spagetti")
+    ok(lb and lb["n"] == 2 and lb["last"] == "2026-08-08" and lb["also"] == ["Linsebolognese med spaghetti"], f"dwie pisownie to jedno danie z licznikiem i datą: {lb}")
+    ok(home.get("Ovnsbakt laks med couscous", {}).get("n") == 2 and home.get("Ovnsbakt laks med sitron og stekte poteter", {}).get("n") == 1,
+       "łosoś z kuskusem (dwie nazwy) to jedno danie, łosoś z ziemniakami to inne")
+    ok(home.get("KIWI-risotto med bakte rotgrønnsaker", {}).get("n") == 2 and home.get("Vegetarisk fredagstaco", {}).get("n") == 2,
+       "risotto z marką w nazwie i piątkowe taco z dopiskiem też są jedną pozycją")
+    ok(sql("SELECT id, week_id, day, data, status FROM meals ORDER BY id") == rows_before, "zapisane tygodnie zostają nietknięte")
+    clear_logs()
+    api("/api/inspo/settings", body={"new": 3})
+    w = gen(["Linsebolognese med spaghetti og parmesan", "Ovnsbakt laks med couscous og grønnsaker", "Risotto med asparges"] + fresh(2))
     st = confirm(w)
-    dal = from_base(st)[0]
-    ok(calls("inspo") == n_steps + 1 and not dal["draft"], "danie wybrane przez model też bierze składniki z bazy i dostaje same kroki")
-    ok(dal["bal"]["level"] == "ok", "danie z bazy przechodzi regułę talerza")
-    ok(first["name"] not in cand_names(prompts(PLANP)[-1]), "danie z bazy z poprzedniego tygodnia nie wraca jako kandydat")
+    names = [m["name"] for m in st["meals"]]
+    ok("Linsebolognese med spaghetti og parmesan" not in names and "Ovnsbakt laks med couscous og grønnsaker" not in names,
+       "„nowość”, która jest wariantem dania domu, nie wchodzi do planu jako nowe danie")
+    ok("Risotto med asparges" in names and sum(n in NEW for n in names) == 2, f"naprawdę inne danie zostaje nowością: {names}")
+    lbm = next((m for m in st["meals"] if m["name"] == "Linsebolognese med spagetti"), None)
+    ok(lbm and lbm["steps"][0] == "steg Linsebolognese med spaghetti", "danie domu wraca pod jedną nazwą, z przepisem z ostatniego gotowania")
+    ok(names[6] == "Vegetarisk fredagstaco" and sum(m["is_fish"] for m in st["meals"]) == 1, f"reguły tygodnia w daniach domu: taco w piątek, jedna ryba ({names})")
+    ok(week_calls() == (1, 3, 0), f"tydzień z 4 daniami domu: plan + 3 pełne przepisy ({week_calls()})")
+    p = prompts(PLANP)[0]
+    ok("Linsebolognese med spagetti" in p and "Główne źródła białka w daniach, które już są w tygodniu" in p, "model dostaje nazwy dań domu i zajęte źródła białka")
+    # danie, o które ktoś prosił, zostaje takie, jak jest, nawet gdy przypomina znane
+    done_all(w)
+    api("/api/cravings", body={"text": "laks med couscous og grønnsaker"})
+    clear_logs()
+    w = gen(["Ovnsbakt laks med couscous og grønnsaker"] + fresh(4))
+    st = state(w)
+    ok(any(m["name"] == "Ovnsbakt laks med couscous og grønnsaker" and m["draft"] for m in st["meals"]), "danie, o które ktoś prosił, nie jest podmieniane na znane")
+    # ⭐ wariantu zastępuje przepis w książce
+    a, b2 = (sql("SELECT id FROM meals WHERE json_extract(data,'$.name')=?", n)[0][0] for n in ("Linsebolognese med spagetti", "Linsebolognese med spaghetti"))
+    api(f"/api/meal/{a}/favorite")
+    st = api(f"/api/meal/{b2}/favorite")
+    ok([r["name"] for r in st["recipes"]] == ["Linsebolognese med spaghetti"], f"⭐ wariantu zastępuje przepis w książce, nie tworzy drugiego ({[r['name'] for r in st['recipes']]})")
 
-    # --- „Do planu” w zakładce przepisów: danie z bazy wchodzi do planu bez wyboru modelu; danie znane wraca bez pytania
+    # --- „Do planu” z zakładki przepisów, nieudane kroki, danie z mniejszą ilością białka
+    start()
     lst = api("/api/inspo", "GET")["recipes"]
     ok(len(lst) == len(BASE) and all(r["servings"] == 3 for r in lst), "lista bazy do przeglądania: wszystkie dania, ilości na 3 porcje")
     it = next(r for r in lst if r["name"] == "Dal med röda linser")
-    SH = "Shakshouka - Bakte egg i spicy tomatsaus"
     ok(it["bal"] == "ok" and it["kind"] == "legume" and it["url"].startswith("https://") and "steps" not in it, "pozycja listy: białko, ocena talerza, adres")
-    st = api("/api/cravings", body={"text": DAL})
-    st = api("/api/cravings", body={"text": SH})
-    clear_logs()
+    DAL, SH = "Dal med röda linser", "Shakshouka - Bakte egg i spicy tomatsaus"
+    api("/api/cravings", body={"text": DAL})
+    api("/api/cravings", body={"text": SH})
     FAIL.write_text("sposób przygotowania dania: Shakshouka")
-    w = gen([f"Uke3 {i}" for i in range(1, 10)])
+    w = gen(fresh())
     st = state(w)
-    ok([m["name"] for m in st["meals"]][:2] == [DAL, SH] and len(from_base(st)) == 2,
-       "dwa dania wybrane ręcznie z bazy otwierają plan, serwer nie dokłada trzeciego")
-    p = prompts(PLANP)[0]
-    ok(BLOCK not in p and "Ułóż 7 różnych obiadów" in p and DAL in p,
-       "model układa tylko pozostałe 5 dni (prosi o 7) i wie, które dania już są")
-    ok(all(c["used"] for c in st["cravings"]), "życzenia z bazy są zużyte")
+    ok([m["name"] for m in st["meals"]][:2] == [DAL, SH] and all(c["used"] for c in st["cravings"]), "dania wybrane ręcznie z bazy otwierają plan, życzenia są zużyte")
+    ok(len(from_base(st)) == 5 and sum(m["name"] in NEW for m in st["meals"]) == 2, "reszta tygodnia: 2 nowości i 3 dania dobrane przez serwer")
     st = confirm(w)
-    dal2, sh = st["meals"][0], st["meals"][1]
-    ok(not dal2["draft"] and dal2["steps"] == dal["steps"] and dal2["src"] and calls("inspo") == 0,
-       "danie z bazy gotowane wcześniej wraca z zapisanym przepisem, bez pytania modelu")
+    sh = st["meals"][1]
     ok(sh["draft"] and sh.get("draft_error"), "gdy model nie napisze kroków, danie czeka z przyciskiem „Napisz przepis”")
     FAIL.unlink()
     api(f"/api/meal/{sh['id']}/recipe")
     st = {}
     wait(lambda: st.update(state(w)) or not st["meals"][1]["draft"], 20)
     sh = st["meals"][1]
-    ok(not sh["draft"] and len(sh["steps"]) == 3 and sh["bal"]["level"] == "low",
-       f"ponowna próba pisze kroki; danie z mniejszą ilością białka zostaje z uwagą ({sh['bal']})")
-    ok((calls("plan"), calls("meal")) == (1, 5), f"tydzień z dwoma daniami z bazy: plan + 5 pełnych przepisów ({calls('plan')}, {calls('meal')})")
+    ok(not sh["draft"] and len(sh["steps"]) == 3 and sh["bal"]["level"] == "low", f"ponowna próba pisze kroki; danie z mniejszą ilością białka zostaje z uwagą ({sh['bal']})")
 
     # --- ustawienia
-    r = api("/api/inspo/settings", body={"n": 9})
-    ok(r.get("HTTP") == 400, "liczba dań z bazy poza zakresem 1-5 jest odrzucana")
-    st = api("/api/inspo/settings", body={"n": 3})
-    ok(st["inspo"]["n"] == 3, "ustawienie: 3 dania z bazy na tydzień")
+    ok(api("/api/inspo/settings", body={"new": 8}).get("HTTP") == 400, "liczba nowych dań poza zakresem 0-7 jest odrzucana")
+    st = api("/api/inspo/settings", body={"new": 0})
+    ok(st["inspo"]["new"] == 0 and st["inspo"]["cost"]["new"] == 0, f"ustawienie: 0 nowości ({st['inspo']['cost']})")
     clear_logs()
     w = gen()
     st = state(w)
-    b = from_base(st)
-    ok(len(b) == 3 and "Wstaw dokładnie 3 z nich" in prompts(PLANP)[0], f"przy ustawieniu 3 w planie są 3 dania z bazy ({[m['name'] for m in b]})")
-    ok(max(sum(m["src"]["site"] == s for m in b) for s in {m["src"]["site"] for m in b}) <= 2 and sum(m["is_fish"] for m in b) <= 1,
-       "dobierane przez serwer: najwyżej 2 z jednego serwisu i najwyżej 1 ryba")
-    ok(len([m for m in st["meals"] if not m.get("src")]) == 4, "reszta tygodnia to nowe propozycje modelu")
-    st = api("/api/inspo/settings", body={"on": False})
+    ok(calls("plan") == 0 and len(st["meals"]) == 7 and len(from_base(st)) == 7, "0 nowości: tydzień bez pytania modelu o plan, same dania z bazy")
+    st = api("/api/inspo/settings", body={"on": False, "new": 2})
     clear_logs()
-    w = gen()
-    ok(st["inspo"]["on"] is False and not from_base(state(w)) and BLOCK not in prompts(PLANP)[0], "po wyłączeniu plan powstaje jak dawniej")
+    w = gen(fresh())
+    ok(st["inspo"]["on"] is False and not from_base(state(w)) and "Ułóż 9 różnych obiadów" in prompts(PLANP)[0],
+       "baza wyłączona i brak dań domu: brakujące miejsca dostaje model")
 
-    # --- uczenie się, na małej bazie (wszystkie jej dania są kandydatami, więc wynik jest pewny)
+    # --- uczenie się, na małej bazie (serwer bierze z niej wszystko, co wolno, więc wynik jest pewny)
     pick = ["Dal med röda linser", "Baked feta pasta", "Chili sin carne", "Hjemmelagde fiskepinner"]
     SMALL.write_text(json.dumps({"recipes": [BY[n] for n in pick]}, ensure_ascii=False))
     start(INSPO_PATH=str(SMALL))
-    w = gen()
+    wipe = lambda: (sql("DELETE FROM meals"), sql("DELETE FROM weeks"))
+    w = gen(fresh())
     st = state(w)
-    ok(sorted(cand_names(prompts(PLANP)[0])) == sorted(pick[:3]), "mała baza: kandydatami są wszystkie dania dla dorosłych")
+    ok(sorted(m["name"] for m in from_base(st)) == sorted(pick[:3]), "mała baza: serwer bierze wszystkie trzy dania dla dorosłych")
     m = from_base(st)[0]
     api(f"/api/meal/{m['id']}/dislike", body={"reason": "za ostre"})
     ok(next(r for r in api("/api/inspo", "GET")["recipes"] if r["name"] == m["name"])["disliked"], "👎 widać w bazie do przeglądania")
     left = [n for n in pick[:3] if n != m["name"]]
     for round_ in (1, 2):  # drugie danie zamienione dwa razy przed gotowaniem
-        clear_logs()
-        w = gen([left[0]] + [f"R{round_} {i}" for i in range(1, 9)])
+        wipe()
+        w = gen(fresh())
+        st = state(w)
         if round_ == 1:
-            ok(sorted(cand_names(prompts(PLANP)[0])) == sorted(left), "danie z 👎 nie jest już kandydatem")
-        mid = next(x["id"] for x in state(w)["meals"] if x["name"] == left[0])
+            ok(sorted(x["name"] for x in from_base(st)) == sorted(left), "danie z 👎 nie wraca do planu")
+        mid = next(x["id"] for x in st["meals"] if x["name"] == left[0])
         api(f"/api/meal/{mid}/alternatives", body={"hint": "", "count": 3})
-        opts = state(w)
-        alt = next(x for x in opts["meals"] if x["id"] == mid)["alts"]
+        alt = next(x for x in state(w)["meals"] if x["id"] == mid)["alts"]
         api(f"/api/meal/{mid}/choose", body={"index": 0, "name": alt[0]["name"]})
-    clear_logs()
-    c = sqlite3.connect(DB, timeout=10)
-    c.execute("DELETE FROM meals")  # czysta historia: liczy się tylko licznik zamian
-    c.execute("DELETE FROM weeks")
-    c.commit()
-    c.close()
-    w = gen()
-    ok(cand_names(prompts(PLANP)[0]) == [left[1]], f"danie zamienione dwa razy przestaje być proponowane ({cand_names(prompts(PLANP)[0])})")
+    wipe()
+    w = gen(fresh())
+    ok([x["name"] for x in from_base(state(w))] == [left[1]], "danie zamienione dwa razy przed gotowaniem przestaje wracać")
     api("/api/cravings", body={"text": left[0]})
-    clear_logs()
-    c = sqlite3.connect(DB, timeout=10)
-    c.execute("DELETE FROM meals")
-    c.execute("DELETE FROM weeks")
-    c.commit()
-    c.close()
-    w = gen()
+    wipe()
+    w = gen(fresh())
     ok(state(w)["meals"][0]["name"] == left[0], "wybrane ręcznie wraca do planu mimo wcześniejszych zamian")
 
     # --- plan dziecka
@@ -318,11 +395,11 @@ def main():
     KOK = "Linsegryte med kokosmelk, chili og ingefær"
     api("/api/cravings", body={"text": KOK})                            # dobre dla dziecka
     api("/api/cravings", body={"text": "Linse-curry med sopp"})         # ma coś z listy „nie lubi”
-    w = gen()
+    w = gen(fresh())
     st = {}
     wait(lambda: st.update(state(w)) or (all(m["kid"] for m in st["meals"]) and not any(m["kid_busy"] for m in st["meals"])), 40)
     dal, sopp = st["meals"][0], st["meals"][1]
-    auto = [m for m in from_base(st) if BY[m["name"]]["kid_ok"] and m["name"] != "Linse-curry med sopp"]
+    auto = [m for m in from_base(st) if BY[m["name"]]["kid_ok"] and not any("sopp" in i["name"] for i in BY[m["name"]]["ingredients"]) and "sopp" not in m["name"].lower()]
     ok(dal["kid"]["mode"] == "same" and dal["kid"]["props"] == [] and not dal["kid"].get("error"),
        "danie z bazy dobre dla dziecka: „to samo” bez propozycji od modelu")
     ok(not any("Dorośli jedzą: " + KOK in p for p in prompts(KID)), "o to danie nikt nie pytał modelu")
@@ -335,8 +412,7 @@ def main():
     fp = sopp["kid"]["props"][0]
     src = BY["Hjemmelagde fiskepinner"]
     ok(fp["name"] == "Hjemmelagde fiskepinner" and fp["source"] == src["url"] and fp["is_fish"]
-       and [i["name"] for i in fp["ingredients"]] == [i["name"] for i in src["ingredients"]][:12],
-       "propozycja z bazy dziecięcej ma składniki i źródło z bazy")
+       and len(fp["ingredients"]) == min(12, len(src["ingredients"])), "propozycja z bazy dziecięcej ma składniki i źródło z bazy")
     torsk = next(i for i in fp["ingredients"] if i["name"] == "torskefilet")
     ok(torsk["qty"] == 75 and torsk["unit"] == "g", f"ilości na jedną porcję dziecka (600 g na 4 → {torsk['qty']} g)")
     n_kid = calls("kid")
@@ -344,8 +420,8 @@ def main():
     ok(len(next(m for m in st["meals"] if m["id"] == dal["id"])["kid"]["props"]) == 3 and calls("kid") == n_kid + 1,
        "„więcej pomysłów” przy daniu z bazy pyta model dopiero na życzenie")
 
-    print(f"INFO wywołania modelu na tydzień (dorośli): przed {before[0]} (pełne przepisy {before[2]}), "
-          f"po {after[0]} (pełne przepisy {after[2]}, same kroki {after[3]}); danie z bazy, które wraca: 0 pytań")
+    print(f"INFO sześć kolejnych tygodni, pytania do modelu (plan, pełne przepisy, same kroki): przed {old}, po {new}")
+    print(f"INFO dań domu po każdym z sześciu tygodni: {homes}")
 
 
 async def ui():
@@ -417,8 +493,9 @@ async def ui():
         ok(await until("!S.cravings.some(c=>!c.used&&c.text==='Baked feta pasta')"), "drugie dotknięcie zdejmuje danie z planu")
         await click("#gear")
         ok(await until("!!document.querySelector('[data-click=inspoOn]')"), "ustawienia: wyłącznik bazy")
-        await click("[data-click=inspoN][aria-label='+']")
-        ok(await until("S.inspo.n===2"), "ustawienia: liczba dań z bazy na tydzień")
+        ok("pytań do modelu na tydzień" in await txt("#panel .mixc"), "ustawienia: jedno zdanie o koszcie tygodnia")
+        await click("[data-click=mixNew][aria-label='+']")
+        ok(await until("S.inspo.new===3"), "ustawienia: liczba nowych dań w tygodniu")
         await shot("5_ustawienia")
         await click("[data-click=inspoOn]")
         ok(await until("S.inspo.on===false"), "ustawienia: wyłączenie bazy")
