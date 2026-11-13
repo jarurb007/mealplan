@@ -199,7 +199,8 @@ async def ui(A, wid, ids, herb, other_week):
     await asyncio.sleep(3)
     ok(not m6["draft"] and len(m6["steps"]) > 0, "po kliknięciu przepis zostaje napisany")
     ok(await A.ev("!document.querySelector('#panel [data-click=retryRec]') && document.querySelectorAll('#panel .steps li').length>0"), "otwarty podgląd sam przechodzi na gotowy przepis")
-    ok(await A.ev(f"!{card}.querySelector('.desc')"), "ostrzeżenie znika z wiersza")
+    # sam znak ostrzeżenia, nie cały dopisek: dzisiejszy wiersz zawsze ma dopisek (czas, porcje), a dzień 6 to w piątek „dziś”
+    ok(await A.ev(f"!{card}.querySelector('.desc .ic[data-i=warn]')"), "ostrzeżenie znika z wiersza")
     await A.ev("closeSheet()"); await asyncio.sleep(0.3)
 
     # ---- 9) „szukam zamienników” ma „Anuluj”

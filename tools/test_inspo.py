@@ -389,14 +389,16 @@ def main():
     w = gen(fresh())
     ok(state(w)["meals"][0]["name"] == left[0], "wybrane ręcznie wraca do planu mimo wcześniejszych zamian")
 
-    # --- plan dziecka
-    start(FAKE_KID_BASE="Hjemmelagde fiskepinner")
-    api("/api/kid/profile", body={"on": True, "name": "Luna", "likes": ["fisk"], "dislikes": ["sopp"]})
+    # --- plan dziecka, na małej bazie: serwer bierze z niej wszystko, więc tydzień i liczba pytań są za każdym razem te same
     KOK = "Linsegryte med kokosmelk, chili og ingefær"
+    kid_base = [BY[n] for n in (KOK, "Linse-curry med sopp", "Chili sin carne", "Baked feta pasta", "Vegetartaco med bønner", "Hjemmelagde fiskepinner")]
+    SMALL.write_text(json.dumps({"recipes": kid_base}, ensure_ascii=False))
+    start(FAKE_KID_BASE="Hjemmelagde fiskepinner", INSPO_PATH=str(SMALL))
+    api("/api/kid/profile", body={"on": True, "name": "Luna", "likes": ["fisk"], "dislikes": ["sopp"]})
     api("/api/cravings", body={"text": KOK})                            # dobre dla dziecka
     api("/api/cravings", body={"text": "Linse-curry med sopp"})         # ma coś z listy „nie lubi”
     # dzień po nim bez ryby: plan dziecka nie proponuje tego samego głównego białka dzień po dniu
-    api("/api/cravings", body={"text": next(x["name"] for x in BASE if x["pool"] != "kid" and not x["is_fish"] and "sopp" not in json.dumps(x).lower()
+    api("/api/cravings", body={"text": next(x["name"] for x in kid_base if x["pool"] != "kid" and not x["is_fish"] and "sopp" not in json.dumps(x).lower()
                                             and x["name"] not in (KOK, "Linse-curry med sopp") and "linse" not in x["name"].lower())})
     w = gen(fresh())
     st = {}
@@ -410,7 +412,7 @@ def main():
     # serwer je odrzuca (twardy zakaz „nie lubi”) i pyta model jeszcze raz, stąd jedno pytanie więcej
     ok([x["name"] for x in sopp["kid"]["props"]] == ["Hjemmelagde fiskepinner"] and any("Dorośli jedzą: Linse-curry med sopp" in p for p in prompts(KID)),
        "danie z bazy ze składnikiem z listy „nie lubi” idzie do modelu, a propozycje z tym składnikiem w nazwie odpadają")
-    ok(len(auto) >= 1 and calls("kid") == 7 - len(auto) + 1, f"plan dziecka: {calls('kid')} pytań zamiast 7 ({len(auto)} dań z bazy dobrych dla dziecka, jedno powtórzone)")
+    ok(len(from_base(st)) == 5 and len(auto) == 4 and calls("kid") == 7 - len(auto) + 1, f"plan dziecka: {calls('kid')} pytań zamiast 7 ({len(auto)} dań z bazy dobrych dla dziecka, jedno powtórzone)")
     kp = next(p for p in prompts(KID) if "Linse-curry med sopp" in p)
     ok("Sprawdzone przepisy dla dzieci z bazy" in kp and any(x["name"] in kp for x in BASE if x["pool"] == "kid"),
        "pytanie o plan dziecka podsuwa dania z listy dziecięcej")
@@ -425,6 +427,9 @@ def main():
     ok(len(next(m for m in st["meals"] if m["id"] == dal["id"])["kid"]["props"]) == 3 and calls("kid") == n_kid + 1,
        "„więcej pomysłów” przy daniu z bazy pyta model dopiero na życzenie")
 
+    if calls("tr") or calls("other"):
+        print(f"INFO w ostatniej części testu serwer dostał też pytania spoza testu (tłumaczenia: {calls('tr')}, inne: {calls('other')}); "
+              "zwykle to zapomniana karta przeglądarki na tym porcie")
     print(f"INFO sześć kolejnych tygodni, pytania do modelu (plan, pełne przepisy, same kroki): przed {old}, po {new}")
     print(f"INFO dań domu po każdym z sześciu tygodni: {homes}")
 

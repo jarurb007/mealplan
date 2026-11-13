@@ -2381,7 +2381,7 @@ def inspo_skips(c) -> dict:
     return {r["id"]: r["n"] for r in c.execute("SELECT id, n FROM inspo_skip")}
 
 
-def inspo_cands(c, skip: list, fish_ok: bool = True) -> list:
+def inspo_cands(c, skip: list, fish_ok: bool = True, site_cap: int | None = INSPO_SITE_CANDS) -> list:
     """Dania z bazy, które serwer może wstawić do planu: bez 👎, bez dań z listy skip i ich wariantów (jedzone ostatnio,
     już w tygodniu, dania domu, bo te wracają własną drogą) i bez dwukrotnie zamienionych. Kolejność losowa z wagą:
     lepiej oceniane dania są wyżej, dania bez oceny niżej; najwyżej trzy dania z jednego serwisu."""
@@ -2393,7 +2393,7 @@ def inspo_cands(c, skip: list, fish_ok: bool = True) -> list:
     pool.sort(key=lambda x: -(random.random() ** (1 / weight(x))))  # losowanie ważone bez zwracania
     out, sites = [], Counter()
     for x in pool:
-        if sites[x["site"]] < INSPO_SITE_CANDS:
+        if site_cap is None or sites[x["site"]] < site_cap:
             sites[x["site"]] += 1
             out.append(x)
     return out
@@ -2576,8 +2576,15 @@ def mix_pick(c, start, rest: int, known: list, fish_used: bool, pantry: list, ba
     home = [d for d in home_all if not taken(d["name"])]
     home.sort(key=lambda d: (not uses(d["ings"]), not d["star"], d["last"] or ""))
     ok_gap = lambda d: weeks_since(d["last"], start) >= (HOME_GAP_STAR if d["star"] else HOME_GAP)
-    base = inspo_cands(c, known + recent + [n for d in home_all for n in d["names"]]) if base_on else []
-    base.sort(key=lambda x: not uses([canon(i["name"]) for i in x["ingredients"]]))
+    # wszystkie dozwolone dania z bazy w losowej kolejności; limit dań z jednego serwisu działa dopiero przy wstawianiu,
+    # inaczej losowanie mogłoby wyciąć wszystkie taco, zanim serwer wybierze piątkowe
+    pool = inspo_cands(c, known + recent + [n for d in home_all for n in d["names"]], site_cap=None) if base_on else []
+    pool.sort(key=lambda x: not uses([canon(i["name"]) for i in x["ingredients"]]))
+    base, seen_sites = [], Counter()
+    for x in pool:
+        if x["taco"] or seen_sites[x["site"]] < INSPO_SITE_CANDS:
+            seen_sites[x["site"]] += not x["taco"]
+            base.append(x)
     out, fams, sites, fish = [], Counter(), Counter(), fish_used
 
     def add_home(d):
