@@ -58,6 +58,34 @@ ok(ing.get("gulrot") == (4.0, "stk") and ing.get("pastinakk") == (2.0, "stk") an
    and ing.get("hvitvin") == (1.5, "dl") and ing.get("smør") == (3.0, "ss"), "pozostałe ilości jak w oryginale; nazwy przetłumaczone przez model zostają")
 ok(not any(n in ing for n in ("salt", "nykvernet pepper", "olivenolje")) and len(data["steps"]) == 3, "bez soli, pieprzu i oleju; kroki z oryginału")
 
+# --- ponowny import tego samego przepisu zastępuje dane w książce i zachowuje id
+rid = r["id"]
+with A.db() as c:  # stan jak na produkcji: przepis zaimportowany starszą wersją (przeliczony na 3 porcje, ryż w gramach, bulion zamiast wody)
+    old = {**data, "servings_base": 3, "ingredients": [{"name": "risottoris", "qty": 150, "unit": "g", "aisle": "Tørrvarer og hermetikk", "from_pantry": False},
+                                                       {"name": "grønnsaksbuljong", "qty": 3.75, "unit": "dl", "aisle": "Krydder og basis", "from_pantry": False}]}
+    c.execute("UPDATE recipes SET data=?, tr=? WHERE id=?", (json.dumps(old, ensure_ascii=False), '{"pl": {"name": "stare"}}', rid))
+st = A.import_recipe_url(URL)
+with A.db() as c:
+    rows = c.execute("SELECT id, name, data, tr FROM recipes").fetchall()
+    crav = c.execute("SELECT COUNT(*) AS n FROM cravings WHERE recipe_id=? AND used=0", (rid,)).fetchone()["n"]
+again = {i["name"]: (i["qty"], i["unit"]) for i in json.loads(rows[0]["data"])["ingredients"]}
+ok(len(rows) == 1 and rows[0]["id"] == rid and again.get("risottoris") == (2.5, "dl") and again.get("vann") == (4.0, "dl")
+   and json.loads(rows[0]["data"])["servings_base"] == 4 and rows[0]["tr"] is None,
+   f"ponowny import zastępuje stare ilości (150 g → {again.get('risottoris')}), to samo id, stare tłumaczenie skasowane")
+ok(crav == 1, f"ponowny import nie dopisuje drugiego życzenia „do planu” ({crav})")
+A.fetch_page = lambda url: PAGE.replace("2.5 dl risottoris", "3 dl risottoris").replace('"name": "Risotto med bakte rotgrønnsaker"', '"name": "Risotto med ovnsbakte rotgrønnsaker"')
+st = A.import_recipe_url(URL + "/")
+with A.db() as c:
+    rows = c.execute("SELECT id, name, data FROM recipes").fetchall()
+changed = {i["name"]: (i["qty"], i["unit"]) for i in json.loads(rows[0]["data"])["ingredients"]}
+ok(len(rows) == 1 and rows[0]["id"] == rid and rows[0]["name"] == "Risotto med ovnsbakte rotgrønnsaker" and changed.get("risottoris") == (3.0, "dl"),
+   f"zmieniona strona pod tym samym adresem: nowa nazwa i nowe ilości, nadal jedno id ({rows[0]['name']}, {changed.get('risottoris')})")
+A.fetch_page = lambda url: PAGE
+A.import_recipe_url(URL)  # z powrotem wersja z próbki: dalsze sprawdzenia jej używają
+with A.db() as c:
+    ok([x["id"] for x in c.execute("SELECT id FROM recipes")] == [rid], "po trzech importach w książce jest jeden przepis")
+    data = json.loads(c.execute("SELECT data FROM recipes WHERE id=?", (rid,)).fetchone()["data"])
+
 # --- na porcje domu przelicza kod: zwykłe mnożenie i rozsądne zaokrąglenie
 f = 3 / 4
 ok([A.scale_qty(2.5, "dl", f), A.scale_qty(4, "dl", f), A.scale_qty(1.5, "dl", f)] == [1.9, 3.0, 1.1], "dl do 0,1: 2,5 → 1,9; 4 → 3; 1,5 → 1,1")
