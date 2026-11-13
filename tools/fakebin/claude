@@ -4,7 +4,8 @@ FAKE_LOG=plik -> dopisuje tam pełny prompt (do sprawdzania, co dostaje model).
 Dodatki, wyłączone, dopóki nie ustawi się zmiennej (stare testy ich nie widzą):
 FAKE_PLAN_FILE=plik -> jeśli plik istnieje, plan tygodnia ma nazwy dań z tego pliku (lista JSON) zamiast "Szkic 1..9".
 FAKE_TR=1 -> prompt tłumaczenia dostaje prawdziwą odpowiedź (każdy tekst z przedrostkiem "PL ").
-FAKE_TIMES=plik -> po każdym wywołaniu dopisuje wiersz "rodzaj początek koniec" (do liczenia równoległości).
+FAKE_TIMES=plik -> po każdym wywołaniu dopisuje wiersz "rodzaj początek koniec" (do liczenia równoległości i wywołań);
+rodzaj "plan" to tylko pytanie o plan tygodnia, tłumaczenie to "tr", nieznane polecenie "other".
 Prompt z "price_pick" (wybór produktu do ceny) dostaje drugi produkt z listy każdego składnika.
 FAKE_FAIL_FILE=plik -> jeśli plik istnieje, a prompt zawiera jego treść, atrapa kończy się błędem (model zawiódł).
 Bilans talerza: przepis na danie z "Soppstroganoff" lub "Uforbederlig" w nazwie nie ma białka, z "Risotto" ma go mało,
@@ -144,7 +145,11 @@ elif '"meal": {' in p:
                     "ingredients": [{"name": "gulrot", "qty": 2, "unit": "stk", "aisle": "Frukt og grønt", "from_pantry": False}],
                     "steps": ["krok 1", "krok 2"]}}
 else:
-    kind = "plan"
+    # plan tygodnia. Inne polecenie dostaje tę samą odpowiedź co dawniej, ale liczy się osobno, żeby nie zawyżało licznika
+    # pytań o plan: tłumaczenie bez FAKE_TR jako "tr" (prosi o nie każda otwarta karta przeglądarki z językiem PL/EN,
+    # także zapomniana karta po innym teście na tym samym porcie), nieznane polecenie jako "other"
+    kind = ("plan" if p.startswith("Jesteś planerem obiadów. Zasady użytkownika") else
+            "tr" if p.startswith("Przetłumacz poniższe dania") else "other")
     # 9 propozycji (serwer prosi o 7+2), w tym "Szkic 2" - jeśli jest na liście 👎, ma wypaść
     names = [f"Szkic {i+1}" for i in range(9)]
     if plan_file and os.path.exists(plan_file):
