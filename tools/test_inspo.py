@@ -317,9 +317,12 @@ def main():
     ok(any(m["name"] == "Ovnsbakt laks med couscous og grønnsaker" and m["draft"] for m in st["meals"]), "danie, o które ktoś prosił, nie jest podmieniane na znane")
     # ⭐ wariantu zastępuje przepis w książce
     a, b2 = (sql("SELECT id FROM meals WHERE json_extract(data,'$.name')=?", n)[0][0] for n in ("Linsebolognese med spagetti", "Linsebolognese med spaghetti"))
-    api(f"/api/meal/{a}/favorite")
+    st = api(f"/api/meal/{a}/favorite")
+    w_old = sql("SELECT week_id FROM meals WHERE id=?", b2)[0][0]
+    ok([r["name"] for r in st["recipes"]] == ["Linsebolognese med spagetti"] and next(m for m in state(w_old)["meals"] if m["id"] == b2)["fav"],
+       "⭐ jednej pisowni: danie pod drugą pisownią też pokazuje się jako zapisane w książce")
     st = api(f"/api/meal/{b2}/favorite")
-    ok([r["name"] for r in st["recipes"]] == ["Linsebolognese med spaghetti"], f"⭐ wariantu zastępuje przepis w książce, nie tworzy drugiego ({[r['name'] for r in st['recipes']]})")
+    ok(st["recipes"] == [], f"⭐ na drugiej pisowni zdejmuje ten sam przepis z książki, nie tworzy drugiego ({[r['name'] for r in st['recipes']]})")
 
     # --- „Do planu” z zakładki przepisów, nieudane kroki, danie z mniejszą ilością białka
     start()

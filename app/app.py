@@ -232,12 +232,14 @@ def scale_qty(q, unit, f):
     v, u = q * f, (unit or "").lower()
     if u in ("g", "ml"):
         return max(5, round(v / 5) * 5)
-    if u in ("dl", "ss", "ts"):
+    if u == "dl":
+        return max(0.1, round(v, 1))  # 2,5 dl na 4 porcje to 1,9 dl na 3, nie 2
+    if u in ("ss", "ts"):
         return max(0.5, round(v * 2) / 2)
     if u == "fedd":
         return math.ceil(v)
     if u in ("stk", "bunt"):
-        return math.ceil(v * 2) / 2 if v < 2 else math.ceil(v)
+        return max(0.5, math.floor(v * 2 + 0.5) / 2)  # do połówki
     return round(v, 1)
 
 
@@ -917,6 +919,8 @@ def shop_agg(c, week, meals=None, dflt=None):
         for i in m["ingredients"]:
             qty_i = scale_qty(i["qty"], i["unit"], f)
             cn = canon(i["name"], i["unit"], i["aisle"])
+            if cn == "vann":
+                continue  # woda z kranu: zostaje w przepisie (zaimportowany przepis ma ją na liście), nie na liście zakupów
             q, fam = shop_qty(cn, qty_i if isinstance(qty_i, (int, float)) else None, i["unit"])
             share = from_stock(stock, i.get("from_pantry"), cn, q, fam, m["id"])
             if share > 0:
@@ -2288,7 +2292,7 @@ def build_state(week=None, meals=None, shop=None):
         meals = load_meals(c, w["id"], bad) if meals is None else meals
         for m in meals:
             m["date"] = str(start + timedelta(days=m["day"]))
-            m["fav"] = m["name"].lower() in favnames
+            m["fav"] = m["name"].lower() in favnames or any(dish_equal(m["name"], x["name"]) for x in recipes)
             m["draft"] = bool(m.get("draft"))
             m["bal"] = balance(m)
             m["src"] = inspo_src(m)
@@ -2463,10 +2467,35 @@ def meal_pfam(m: dict) -> str:
     return best[1] or pfam(m.get("protein")) or pfam(" ".join(m.get("ingredient_names") or [])) or pfam(m.get("name"))
 
 
+def dish_equal(a: str, b: str) -> bool:
+    """Ta sama nazwa dania z dokładnością do pisowni i słów bez znaczenia („KIWI-risotto med …” = „Risotto med …”)."""
+    A, B = dish_tokens(str(a or "")), dish_tokens(str(b or ""))
+    left = list(B)
+    for w in A:
+        j = next((k for k, x in enumerate(left) if _tok_eq(w, x)), None)
+        if j is None:
+            return False
+        left.pop(j)
+    return bool(A) and not left
+
+
+def book_find(c, name: str, fam: str = "", loose: bool = True):
+    """Przepis z książki na to danie: dokładna nazwa, potem ta sama nazwa z dokładnością do pisowni, a przy loose także
+    wariant nazwy (jedna mieści się w drugiej, to samo główne białko). Książka to przepisy właściciela, więc wygrywa
+    z każdą wcześniejszą wersją dania napisaną przez model."""
+    rows = c.execute("SELECT id, name, data, tr FROM recipes ORDER BY id DESC").fetchall()
+    nn = norm_name(name)
+    return (next((r for r in rows if norm_name(r["name"]) == nn), None)
+            or next((r for r in rows if dish_equal(name, r["name"])), None)
+            or (next((r for r in rows if same_dish(name, r["name"], fam, meal_pfam(json.loads(r["data"])))), None) if loose else None))
+
+
 def same_dish(a: str, b: str, fam_a: str = "", fam_b: str = "") -> bool:
     A, B = dish_tokens(str(a or "")), dish_tokens(str(b or ""))
     if not A or not B:
         return False
+    if dish_equal(a, b):
+        return True  # ta sama nazwa to to samo danie, nawet gdy jedna wersja przepisu ma dołożone inne białko
     if fam_a and fam_b and fam_a != fam_b:
         return False
     small, large = (A, B) if len(A) <= len(B) else (B, A)
@@ -2998,16 +3027,20 @@ def run_generate(job, start, carried, fixed, crav_ids, n, pantry, cravings, avoi
 
 
 def known_recipe(c, d, pantry, mid=None):
-    """Przepis, który już mamy na danie o tej samej nazwie: z książki przepisów albo z wcześniejszego dania.
+    """Przepis, który już mamy na to danie: z książki przepisów (także pod inną nazwą tego samego dania) albo
+    z wcześniejszego dania o tej samej nazwie.
     Zwraca (dane, tr) albo None. Dzięki temu znane danie nie kosztuje pytania do modelu."""
     nn = norm_name(d.get("name"))
     if not nn:
         return None
 
     def sources():
-        for r in c.execute("SELECT name, data, tr FROM recipes ORDER BY id DESC"):
-            if norm_name(r["name"]) == nn:
-                yield json.loads(r["data"]), r["tr"]
+        # książka przepisów wygrywa także wtedy, gdy danie w planie nazywa się trochę inaczej („KIWI-risotto med bakte
+        # rotgrønnsaker” w planie, „Risotto med bakte rotgrønnsaker” w książce); danie, o które ktoś prosił, dostaje
+        # przepis z książki tylko przy tej samej nazwie, nie przy wariancie
+        b = book_find(c, d["name"], meal_pfam(d), loose=not d.get("asked"))
+        if b:
+            yield json.loads(b["data"]), b["tr"]
         for r in c.execute("SELECT data, tr, liked FROM meals WHERE id!=? ORDER BY id DESC", (mid or 0,)):
             x = json.loads(r["data"])
             # dawny przepis bez źródła białka nie wraca: model napisze go od nowa, już z regułą talerza
@@ -4359,25 +4392,117 @@ def extract_source(page):
     return re.sub(r"\s+", " ", t)[:12000]
 
 
-def import_prompt(src, url):
+IMPORT_SCHEMA = """{"name": "...", "servings": 4, "time_min": 30, "description": "1 setning", "is_fish": false,
+ "ingredients": [{"line": 1, "name": "risottoris", "qty": 2.5, "unit": "dl", "aisle": "Tørrvarer og hermetikk"}],
+ "steps": ["...", "..."]}
+Reguły pól: name, description, steps i nazwy składników po norwesku (bokmål; przetłumacz, jeśli oryginał jest w innym języku).
+Składniki przepisz DOSŁOWNIE z oryginału: ta sama liczba i ta sama jednostka (dl zostaje dl, ss zostaje ss, sztuki zostają
+sztukami). Nie zamieniaj objętości na gramy ani odwrotnie, nie przeliczaj na inną liczbę porcji i nie zamieniaj składnika
+na inny (woda zostaje wodą: 'vann'). Ilości przeliczy aplikacja. Tylko jednostki spoza systemu metrycznego (cup, oz, lb)
+przelicz na metryczne. "servings" to liczba porcji podana w oryginale (gdy jej nie ma: 4).
+Nazwa składnika jak w sklepie w Norwegii, bez ilości i bez dopisków o krojeniu; qty liczba lub null; unit np. g, kg, dl,
+l, ml, stk, ss, ts, fedd, bunt, boks, terning, neve. Soli, pieprzu i oleju nie dawaj do ingredients.
+aisle dokładnie jedna z: """ + ", ".join(AISLES) + "."
+IMPORT_UNITS = {"g", "kg", "dl", "l", "ml", "cl", "stk", "ss", "ts", "fedd", "bunt", "boks", "pakke", "pk", "terning", "neve",
+                "klype", "stilk", "skive", "glass", "pose", "beger", "hode", "kvast", "blad"}
+IMPORT_UNIT_ALIAS = {"stilker": "stilk", "skiver": "skive", "never": "neve", "poser": "pose", "pakker": "pakke", "blader": "blad"}
+LINE_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?(?:\s*/\s*\d+)?|[½¼¾])\s*([^\W\d_]+\.?)?\s*(.*)$")
+FRAC = {"½": 0.5, "¼": 0.25, "¾": 0.75}
+
+
+def parse_line(line: str):
+    """Wiersz składnika z oryginału -> (ilość, jednostka albo "", reszta). Ilość None, gdy wiersz nie zaczyna się liczbą."""
+    m = LINE_RE.match(str(line))
+    if not m:
+        return None, "", str(line).strip()
+    n = m[1]
+    if n in FRAC:
+        q = FRAC[n]
+    elif "/" in n:
+        a, b = n.split("/")
+        q = float(a) / float(b) if float(b) else None
+    else:
+        q = float(n.replace(",", "."))
+    u = (m[2] or "").lower().rstrip(".")
+    u = IMPORT_UNIT_ALIAS.get(u, unit_key(u))
+    if u in IMPORT_UNITS:
+        return q, u, m[3].strip()
+    return q, "", ((m[2] or "") + " " + m[3]).strip()
+
+
+def recipe_ld(page: str):
+    """Przepis w zapisie schema.org/Recipe ze strony (albo None): nazwa, liczba porcji, czas, wiersze składników, kroki."""
+    for m in re.finditer(r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>', page, re.S | re.I):
+        try:
+            data = json.loads(m.group(1))
+        except json.JSONDecodeError:
+            continue
+        for r in _walk(data):
+            lines = [htmllib.unescape(str(x)).strip() for x in (r.get("recipeIngredient") or []) if str(x).strip()]
+            if not lines:
+                continue
+            y = r.get("recipeYield")
+            y = re.search(r"\d+", " ".join(str(v) for v in (y if isinstance(y, list) else [y]) if v is not None))
+            return {"name": r.get("name"), "servings": int(y[0]) if y and 0 < int(y[0]) <= 24 else None, "time": r.get("totalTime"),
+                    "lines": lines[:60], "steps": [htmllib.unescape(x) for x in _flat(r.get("recipeInstructions")) if x],
+                    "norwegian": str(r.get("inLanguage") or "").lower()[:2] in ("nb", "no", "nn")}
+    return None
+
+
+def import_prompt(src, url, ld=None):
+    if ld:
+        src = (f"Nazwa: {ld['name']}\nLiczba porcji: {ld['servings'] or 'nie podano'}\nCzas: {ld['time'] or 'nie podano'}\n"
+               "Składniki oryginału (numer: wiersz):\n" + "\n".join(f"{n}: {x}" for n, x in enumerate(ld["lines"], 1))
+               + "\nKroki:\n" + "\n".join(f"- {x}" for x in ld["steps"]))[:12000]
+        how = ('Każdy składnik to jeden wiersz z listy „Składniki oryginału”: w "line" podaj jego numer, rozdziel wiersz na '
+               'ilość, jednostkę i nazwę i przetłumacz nazwę na norweski.')
+    else:
+        how = 'Pole "line" pomiń.'
     return f"""Zasady użytkownika:
 {prefs()}
 
-Poniżej dane ze strony z przepisem ({url}). Przekształć je w przepis w naszym formacie:
-po norwesku (przetłumacz, jeśli trzeba), metryczne jednostki, ilości przeliczone na {default_servings()} porcji.
+Poniżej dane ze strony z przepisem ({url}). Przepisz je do naszego formatu. {how}
 Jeśli dane NIE zawierają przepisu na danie, zwróć {{"error": "not_a_recipe"}}.
-Zwróć WYŁĄCZNIE JSON: {{"meal": {schema()} }}
+Zwróć WYŁĄCZNIE JSON: {{"meal": {IMPORT_SCHEMA} }}
 
 Dane:
 {src}"""
 
 
+def import_meal(res: dict, ld=None) -> dict:
+    """Odpowiedź modelu -> przepis. Ilości zostają takie, jak w oryginale, na tyle porcji, ile podaje oryginał
+    (servings_base); na porcje domu przelicza je aplikacja przy pokazywaniu i na liście zakupów. Gdy strona ma listę
+    składników w schema.org/Recipe, ilość i jednostka idą wprost z jej wiersza, a nazwa wraca do tej z wiersza, jeśli
+    model podmienił składnik na inny (strona po norwesku)."""
+    raw = res.get("meal") or {}
+    ings = []
+    for i in raw.get("ingredients") or []:
+        if not isinstance(i, dict):
+            continue
+        i = dict(i)
+        n = i.pop("line", None)
+        if ld and isinstance(n, int) and 1 <= n <= len(ld["lines"]):
+            q, u, rest = parse_line(ld["lines"][n - 1])
+            if q is not None:
+                i["qty"] = q
+                if u:
+                    i["unit"] = u
+            words = [w for w in fold(i.get("name", "")).split() if len(w) >= 3]
+            if ld["norwegian"] and rest and not any(_tok_eq(w, x) or w in x or x in w for w in words for x in fold(rest).split() if len(x) >= 3):
+                i["name"] = rest.lower()
+        ings.append(i)
+    srv = (ld or {}).get("servings") or raw.get("servings")
+    srv = int(srv) if isinstance(srv, (int, float)) and 0 < srv <= 24 else default_servings()
+    return clean_meal({**raw, "ingredients": ings, "servings_base": srv})
+
+
 def import_recipe_url(url):
     page = fetch_page(url)
-    res = llm.ask_json(import_prompt(extract_source(page), url))
+    ld = recipe_ld(page)
+    res = llm.ask_json(import_prompt(None if ld else extract_source(page), url, ld))
     if res.get("error") or not res.get("meal"):
         raise HTTPException(422, "to nie wygląda jak przepis")
-    meal = clean_meal(res["meal"])
+    meal = import_meal(res, ld)
     if not meal["ingredients"] or not meal["steps"]:
         raise HTTPException(422, "nie udało się odczytać składników lub kroków")
     meal["source"] = url
@@ -4408,11 +4533,10 @@ def custom_prompt(text: str, files: list) -> str:
 
 Użytkownik dodaje WŁASNY przepis do książki przepisów. Dane wejściowe: tekst użytkownika i/lub zdjęcia
 (strona z książki kucharskiej, notatka odręczna, zrzut ekranu, zdjęcie gotowego dania).
-Przekształć je w przepis w naszym formacie: po norwesku (przetłumacz, jeśli trzeba), jednostki metryczne,
-ilości przeliczone na {default_servings()} porcji. Przepisz to, co jest na zdjęciach/w tekście - nie wymyślaj innych składników.
-Jeśli na zdjęciu jest tylko gotowe danie bez przepisu, ułóż prosty, wiarygodny przepis na nie.
+Przepisz to, co jest na zdjęciach/w tekście, do naszego formatu - nie wymyślaj innych składników. Pole "line" pomiń.
+Jeśli na zdjęciu jest tylko gotowe danie bez przepisu, ułóż prosty, wiarygodny przepis na nie (na {default_servings()} porcje).
 Jeśli dane NIE dotyczą jedzenia albo są nieczytelne, zwróć {{"error": "not_a_recipe"}}.
-Zwróć WYŁĄCZNIE JSON: {{"meal": {schema()} }}
+Zwróć WYŁĄCZNIE JSON: {{"meal": {IMPORT_SCHEMA} }}
 
 TEKST UŻYTKOWNIKA:
 {text or "(brak)"}
@@ -4452,7 +4576,7 @@ def add_custom_recipe(req: CustomRecipeReq):
         shutil.rmtree(tmp, ignore_errors=True)
     if res.get("error") or not res.get("meal"):
         raise HTTPException(422, "to nie wygląda jak przepis albo zdjęcie jest nieczytelne")
-    meal = clean_meal(res["meal"])
+    meal = import_meal(res)
     if not meal["ingredients"] or not meal["steps"]:
         raise HTTPException(422, "nie udało się odczytać składników lub kroków")
     meal["source"] = None
@@ -4539,7 +4663,8 @@ def favorite_meal(mid: int):
         d = json.loads(r["data"])
         if d.get("draft"):
             raise HTTPException(409, "najpierw zatwierdź plan – danie nie ma jeszcze przepisu")
-        ex = c.execute("SELECT id FROM recipes WHERE lower(name)=?", (d["name"].lower(),)).fetchone()
+        # danie jest już w książce, także pod inną pisownią nazwy: ⭐ je stamtąd zdejmuje, a nie nadpisuje przepisu właściciela
+        ex = book_find(c, d["name"], loose=False)
         if ex:
             c.execute("DELETE FROM recipes WHERE id=?", (ex["id"],))
         else:

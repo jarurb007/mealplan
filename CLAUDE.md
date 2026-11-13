@@ -47,6 +47,9 @@ DB_PATH=/tmp/moja-kopia.db BACKUP_DIR=/tmp/moje-kopie \
   jedna pozycja na danie, warianty nazwy rozpoznaje `same_dish()`) i baza inspiracji. **Starsze testy uruchamiaj
   z `PLAN_MIX=0`**: wtedy cały plan pisze model jak dawniej, bez bazy. `tools/test_inspo.py` sam uruchamia serwer
   (tryb `ui` steruje Chromium) i liczy wywołania modelu przed i po przez sześć tygodni.
+- Import przepisu (link, zdjęcie, tekst) zapisuje składniki dosłownie z oryginału, na liczbę porcji oryginału; na porcje
+  domu przelicza je kod (`scale_qty`). `tools/test_import.py` (Pythonem aplikacji, bez sieci i serwera) sprawdza to na
+  zapisanej próbce strony w `tools/testdata/import` oraz to, że przepis z książki wygrywa z wersją modelu tego samego dania.
 - Port 8099 jest zarezerwowany dla wersji podglądowej. Nie zajmuj go w testach.
 - Gazetki (promocje na liście zakupów) w testach nie sięgają do sieci: `OFFERS_SRC_DIR=<repo>/tools/testdata/offers`
   każe czytać zapisane próbki zamiast `coop.no` i `kiwi.no`, a `OFFER_MATCH_WAIT=0` wyłącza zwłokę przed pytaniem modelu.
