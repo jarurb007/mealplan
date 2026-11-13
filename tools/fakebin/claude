@@ -18,6 +18,8 @@ których prompt dziś zakazuje, i bez ryby, gdy jej zakazuje), ostatnie jako now
 "same_ok" jest prawdą dla dania dorosłych z "1" lub "Laks" w nazwie. FAKE_KID_STUFF i FAKE_KID_BAD robią z atrapy
 naiwny model, który robi z ulubionego składnika białko każdej propozycji albo wkłada zakazany (serwer ma to wyłapać). "kid_dish" (wpisane danie) i "kid_steps" (przepis)
 dostają stałe odpowiedzi. Danie dorosłych z "Barnfeil" w nazwie kończy się błędem modelu.
+FAKE_IMPORT=1 -> import przepisu ze strony z listą składników dostaje odpowiedź naiwnego modelu (przeliczone ilości,
+ryż w gramach, woda zamieniona na bulion), żeby było widać, że serwer bierze ilości z oryginału.
 Baza inspiracji: prompt z "inspo_steps" (same kroki dania z bazy) dostaje trzy stałe kroki. FAKE_KID_BASE=nazwa ->
 pierwsza propozycja planu dziecka nosi tę nazwę (model „wybrał” danie z bazy), o ile tego dnia jest nią ryba."""
 import json, os, re, sys, time
@@ -95,6 +97,22 @@ elif '"kid_options"' in p:
                            for i, x in enumerate(prots)]}
     if os.environ.get("FAKE_KID_BASE") and out["kid_options"] and out["kid_options"][0]["is_fish"]:  # danie rybne z bazy tylko w dzień, gdy ryba jest dozwolona
         out["kid_options"][0]["name"] = os.environ["FAKE_KID_BASE"]
+elif os.environ.get("FAKE_IMPORT") == "1" and "Składniki oryginału (numer: wiersz):" in p:
+    kind = "import"
+    # import przepisu ze strony: naiwny model, który robi to, co zepsuło import na produkcji. Przelicza na 3 porcje,
+    # zamienia dl ryżu na gramy i wodę na bulion; numery wierszy podaje poprawnie (serwer ma z nich wziąć ilości).
+    lines = re.findall(r"^(\d+): (.*)$", p[p.index("Składniki oryginału"):p.index("\nKroki:")], re.M)
+    names = {"gulrøtter": "gulrot", "pastinakker": "pastinakk", "gul løk": "løk", "mandler": "mandler"}
+    ings = []
+    for n, text in lines:
+        m = re.match(r"([\d.,]+)\s+(\S+)\s+(.*)", text)
+        q, u, nm = float(m[1].replace(",", ".")), m[2], m[3]
+        if nm in ("salt", "nykvernet pepper", "olivenolje"):
+            continue
+        q, u, nm = (150, "g", nm) if nm == "risottoris" else (3.75, "dl", "grønnsaksbuljong") if nm == "vann" else (round(q * 0.75, 2), u, names.get(nm, nm))
+        ings.append({"line": int(n), "name": nm, "qty": q, "unit": u, "aisle": "Frukt og grønt"})
+    out = {"meal": {"name": re.search(r"^Nazwa: (.*)$", p, re.M).group(1), "servings": 3, "time_min": 50, "description": "d",
+                    "is_fish": False, "ingredients": ings, "steps": re.findall(r"^- (.*)$", p[p.index("\nKroki:"):], re.M)}}
 elif '"kid_dish"' in p:
     kind = "kiddish"
     out = {"kid_dish": {"name": "Barn: " + re.search(r"«(.*?)»", p).group(1), "is_fish": False, "shares": "", "extra_min": 5,
