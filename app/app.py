@@ -4507,10 +4507,20 @@ def import_recipe_url(url):
         raise HTTPException(422, "nie udało się odczytać składników lub kroków")
     meal["source"] = url
     with db() as c:
-        ex = c.execute("SELECT id FROM recipes WHERE lower(name)=?", (meal["name"].lower(),)).fetchone()
-        rid = ex["id"] if ex else c.execute("INSERT INTO recipes(name, data, tr) VALUES(?,?,NULL)",
-                                            (meal["name"], json.dumps(meal, ensure_ascii=False))).lastrowid
-        c.execute("INSERT INTO cravings(text, recipe_id) VALUES(?,?)", (meal["name"], rid))
+        # ponowny import tego samego przepisu (ten sam adres albo ta sama nazwa) zastępuje dane w książce i zachowuje id:
+        # tak poprawia się przepis zaimportowany starszą wersją aplikacji
+        rows = c.execute("SELECT id, name, data FROM recipes ORDER BY id").fetchall()
+        ex = (next((r for r in rows if (json.loads(r["data"]).get("source") or "").rstrip("/") == url.rstrip("/")), None)
+              or next((r for r in rows if r["name"].lower() == meal["name"].lower()), None))
+        if ex:
+            rid = ex["id"]
+            c.execute("UPDATE recipes SET name=?, data=?, tr=NULL WHERE id=?", (meal["name"], json.dumps(meal, ensure_ascii=False), rid))
+            c.execute("UPDATE cravings SET text=? WHERE recipe_id=? AND used=0", (meal["name"], rid))
+        else:
+            rid = c.execute("INSERT INTO recipes(name, data, tr) VALUES(?,?,NULL)",
+                            (meal["name"], json.dumps(meal, ensure_ascii=False))).lastrowid
+        if not c.execute("SELECT 1 FROM cravings WHERE recipe_id=? AND used=0", (rid,)).fetchone():
+            c.execute("INSERT INTO cravings(text, recipe_id) VALUES(?,?)", (meal["name"], rid))
     return state()
 
 
