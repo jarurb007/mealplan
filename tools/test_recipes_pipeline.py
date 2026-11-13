@@ -246,7 +246,7 @@ def main():
     ok(b["tr"].get("pl", {}).get("steps") == ["PL krok 1", "PL krok 2"] and len(b["steps"]) == 2,
        "przepis z wcześniejszego dania skopiowany razem z tłumaczeniem")
     ok((a["servings_base"], b["servings_base"], c["servings_base"], d["servings_base"]) == (3, 3, 3, 4)
-       and (a["qv"], d["qv"]) == (["3"], ["2"]),
+       and (a["qv"], d["qv"]) == (["2.5"], ["2"]),  # 2 stk na 3 porcje to 2,67 na 4: sztuki zaokrąglamy do połówki
        f"servings_base zostaje od źródła (3), nowe przepisy są na 4; ilości przeliczone: {a['qv']} / {d['qv']}")
     ok(not any(i["from_pantry"] for i in a["ingredients"]) and not a["owned"], "skopiowany przepis: bez flag lodówki i bez 'owned'")
 
@@ -345,7 +345,7 @@ def main():
     time.sleep(1.5)
     ok(st["pending"] == 0 and st["job"] is None and len(prompts()) == n, "zatwierdzenie: komplet przepisów bez pytań do modelu")
     tm = by_name(st, "Test")
-    ok(tm["servings_base"] == 3 and tm["qv"] == ["3"], f"stary przepis bez servings_base liczony jako pisany na 3 porcje (qv {tm['qv']})")
+    ok(tm["servings_base"] == 3 and tm["qv"] == ["2.5"], f"stary przepis bez servings_base liczony jako pisany na 3 porcje (qv {tm['qv']})")
     stop()
     tb = SRV_LOG.read_text().count("Traceback")
     ok(tb == 0, f"brak wyjątków w logu serwera ({tb})")
