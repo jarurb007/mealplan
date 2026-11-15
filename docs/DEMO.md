@@ -64,3 +64,9 @@ PREFS_PATH=$PWD/demo_preferences.md DB_PATH=/tmp/rec.db BACKUP_DIR=/tmp/rec-bk O
 Plan two or three weeks and swap a dish in the browser, then copy `/tmp/rec.db` to `app/demo_seed.db` (keep one
 confirmed week) and run `tools/test_demo.py`. Check the new files for personal data before committing. The video is
 re-recorded with `tools/record_demo_video.py`.
+
+## Railway (current live demo)
+
+The live demo runs on Railway: https://mealplan-production-32a7e369.up.railway.app
+
+`railway.json` in the repository root tells Railway to build `deploy/demo/Dockerfile` and health-check `/api/state`, so no service variables are needed. Point the service at the branch to deploy (Settings → Source) and expose it under Settings → Networking → Generate Domain. Never add `CLAUDE_CODE_OAUTH_TOKEN` or any other secret to this service.

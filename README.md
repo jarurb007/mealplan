@@ -21,7 +21,7 @@ next week, recorded in the public demo.*
 
 ## Live demo
 
-**Try it: _link coming soon_** <!-- replace with the Render URL after deploying, see docs/DEMO.md -->
+**Try it: [mealplan-production-32a7e369.up.railway.app](https://mealplan-production-32a7e369.up.railway.app)** — AI responses are pre-recorded and the data resets every 2 hours.
 
 The demo is the real app in demo mode: every AI answer you see is a real model response recorded once and replayed,
 so the demo costs nothing to run and can't be used to spend anyone's subscription. Features that need the network or
