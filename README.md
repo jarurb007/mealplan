@@ -5,9 +5,19 @@ Every week it proposes seven dinners that fit the family's preferences, writes t
 merged shopping list sorted by store aisle. It's built for everyday use on a phone, shared by the whole family, and it
 runs on a small home server.
 
-![A 60-second walkthrough: recipe, swapping a dish, shopping list, cooking mode, planning next week](docs/media/ukesmeny-demo.gif)
+<table>
+  <tr>
+    <td width="72%"><img src="docs/media/ukesmeny-demo.gif" alt="Desktop walkthrough: recipe, swapping a dish, shopping list, cooking mode, planning next week"></td>
+    <td width="28%"><img src="docs/media/ukesmeny-demo-mobile-dark.gif" alt="The same walkthrough on a phone in dark mode"></td>
+  </tr>
+  <tr>
+    <td align="center">Desktop (<a href="docs/media/ukesmeny-demo.mp4">MP4</a>)</td>
+    <td align="center">Phone, dark mode (<a href="docs/media/ukesmeny-demo-mobile-dark.mp4">MP4</a>)</td>
+  </tr>
+</table>
 
-*A 60-second walkthrough of the public demo ([MP4 version](docs/media/ukesmeny-demo.mp4)).*
+*About a minute each: a recipe written by the model, swapping a dish, the shopping list, cooking mode, and planning
+next week, recorded in the public demo.*
 
 ## Live demo
 
