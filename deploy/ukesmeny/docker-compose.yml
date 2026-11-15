@@ -4,9 +4,9 @@ services:
     container_name: ukesmeny
     restart: unless-stopped
     ports:
-      - "8099:8000"          # strona: http://IP_NUC:8099
+      - "8099:8000"          # app: http://<server-ip>:8099
     env_file: .env
     environment:
       - TZ=Europe/Oslo
     volumes:
-      - ./data:/data         # baza, preferencje, kopie, logowanie
+      - ./data:/data         # database, preferences, backups, login

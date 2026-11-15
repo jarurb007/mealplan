@@ -19,6 +19,8 @@ TMP = Path(tempfile.mkdtemp(prefix="ukes-inspo-"))
 DB, PLAN, TIMES, FAIL, SMALL = TMP / "test.db", TMP / "plan.json", TMP / "times.log", TMP / "fail.txt", TMP / "mala-baza.json"
 LOG = Path(os.getenv("FAKE_LOG", str(TMP / "prompts.log")))
 SRV_LOG = TMP / "server.log"
+if not (ROOT / "app" / "inspiracje.json").exists():
+    print("SKIP: needs the private app/inspiracje.json (not in the repository)"); sys.exit(0)
 BASE = json.loads((ROOT / "app" / "inspiracje.json").read_text())["recipes"]
 BY = {x["name"]: x for x in BASE}
 bad = False

@@ -1146,7 +1146,7 @@ OFFER_MATCH_FAIL = [0.0]  # czas ostatniego nieudanego dopasowania (model nie od
 # Stan wyjściowy, dopóki nikt nie zmienił ustawień: obie sieci włączone, KIWI z kodem pocztowym domu.
 # OFFER_DEFAULT_CHAINS="" (testy) wyłącza to i aplikacja niczego sama nie pobiera.
 OFFER_DEFAULT_CHAINS = [x for x in os.getenv("OFFER_DEFAULT_CHAINS", "extra,kiwi").split(",") if x]
-KIWI_POSTCODE_DEFAULT = os.getenv("KIWI_POSTCODE", "1930")
+KIWI_POSTCODE_DEFAULT = os.getenv("KIWI_POSTCODE", "0150")
 
 
 def kiwi_postcode(c) -> str:
@@ -2338,7 +2338,9 @@ JOBS: dict = {}
 # z tych serwisów nie pobiera. Serwer wybiera kandydatów, model wstawia kilku z nich do planu w tym samym pytaniu,
 # w którym układa tydzień. Składniki i ilości idą z pliku (bez modelu), model pisze tylko kroki, własnymi słowami,
 # raz na danie: potem przepis zostaje w aplikacji jak każdy inny.
-INSPO_PATH = Path(os.getenv("INSPO_PATH", str(BASE / "inspiracje.json")))
+# The full database is private (not in git); without it the app falls back to app/inspiracje.sample.json.
+INSPO_PATH = Path(os.getenv("INSPO_PATH") or next((str(p) for p in (BASE / "inspiracje.json", BASE / "inspiracje.sample.json")
+                                                    if p.exists()), str(BASE / "inspiracje.json")))
 PLAN_MIX = os.getenv("PLAN_MIX", "1") != "0"  # 0 = tydzień układany jak dawniej (cały plan od modelu, bez bazy): dla starszych testów
 NEW_DEFAULT = 2         # tyle nowych dań od modelu na tydzień, dopóki nikt nie zmieni
 INSPO_SITE_CANDS = 3    # najwyżej tylu kandydatów z jednego serwisu

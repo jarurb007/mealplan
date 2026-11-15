@@ -29,3 +29,13 @@ __pycache__/
 *.pyc
 deploy/*.tar.gz
 .claude/worktrees/
+
+# Private data kept locally, not in the repository
+app/inspiracje.json
+tools/inspiracje/przepisy.json
+tools/inspiracje/przepisy-dzieci.json
+tools/testdata/offers/
+preferences.md
+plans/
+ukesmeny*.html
+ukesmeny*.pdf

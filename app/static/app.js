@@ -305,7 +305,7 @@ function mealState(m){   // dopisek pod nazwą, tylko gdy z daniem coś się dzi
 const fmtR=r=>lang==='en'?r.toFixed(1):r.toFixed(1).replace('.',',');
 const srcRate=x=>x.rating?` · ★ ${fmtR(x.rating)} (${x.votes})`:'';
 function srcTag(m){return !m.src?'':(m.liked||m.fav)?t('inspoOurs'):m.src.site+srcRate(m.src)}
-function srcLine(x){return `<div class="desc isrc">${t('inspoBy')} <a class="lnk" href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.site)} ↗</a>${esc(srcRate(x))}</div>`}
+function srcLine(x){return `<div class="desc isrc">${t('inspoBy')} ${/^https?:\/\//.test(x.url||'')?`<a class="lnk" href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.site)} ↗</a>`:esc(x.site)}${esc(srcRate(x))}</div>`}
 function mealCard(m){const v=mv(m),id=m.id,isT=m.date===S.today,done=m.status==='done';
   const d=`<span class="d handle"><small>${esc(isT?t('today'):t('daysS')[m.day])}</small><b>${m.date.slice(8)}</b></span>`;
   const more=`<button class="mb" data-click="sheetMeal" data-id="${id}" aria-label="${esc(t('actions'))}">${ic('more')}</button>`;

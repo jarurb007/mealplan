@@ -1,7 +1,7 @@
 #!/bin/bash
-# Buduje katalog wdrożeniowy z app/: kopiuje app.py, llm.py, inspiracje.json i static/ do deploy/ukesmeny/
-# i pakuje deploy/ukesmeny.tar.gz (bez data/ i .env). Niczego nie wdraża i nie dotyka deploy/ukesmeny/data/.
-# Skopiowane pliki nie są w repozytorium (.gitignore): źródłem jest wyłącznie app/.
+# Builds the deploy directory from app/: copies app.py, llm.py, the inspiration database and static/ to
+# deploy/ukesmeny/ and packs deploy/ukesmeny.tar.gz (without data/ and .env). It deploys nothing and never touches
+# deploy/ukesmeny/data/. The copied files are not tracked (.gitignore): app/ is the only source.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/app"
@@ -11,9 +11,12 @@ for f in app.py llm.py; do
   python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read(), sys.argv[1])' "$SRC/$f"   # nie pakujemy pliku ze złą składnią
 done
 [ -f "$SRC/static/index.html" ] || { echo "brak $SRC/static/index.html" >&2; exit 1; }
-python3 -c 'import json, sys; assert json.load(open(sys.argv[1]))["recipes"]' "$SRC/inspiracje.json"   # baza inspiracji: poprawny JSON z przepisami
+# Inspiration database: the private app/inspiracje.json if present, otherwise the bundled sample.
+INSPO="$SRC/inspiracje.json"; [ -f "$INSPO" ] || INSPO="$SRC/inspiracje.sample.json"
+python3 -c 'import json, sys; assert json.load(open(sys.argv[1]))["recipes"]' "$INSPO"   # valid JSON with recipes
 
-cp "$SRC/app.py" "$SRC/llm.py" "$SRC/inspiracje.json" "$DST/"
+rm -f "$DST"/inspiracje*.json
+cp "$SRC/app.py" "$SRC/llm.py" "$INSPO" "$DST/"
 rm -rf "$DST/static"
 cp -r "$SRC/static" "$DST/static"
 

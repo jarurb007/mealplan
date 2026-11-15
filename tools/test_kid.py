@@ -394,6 +394,8 @@ async def ui():
     """Interfejs na telefonie (390×844): szkic w planerze, krok po zatwierdzeniu, wybór na dzień, tydzień, zakupy, profil."""
     import asyncio, base64
     import test_two_users as T
+    if not (ROOT / "app" / "inspiracje.json").exists():
+        print("SKIP ui: needs the private app/inspiracje.json (not in the repository)"); return
     shutil.copy(EMPTY_DB, DB)
     # Skład tygodnia jest włączony (ustawienie produkcyjne), a baza inspiracji to pięć ustalonych dań: serwer bierze
     # wszystkie (najwyżej dwa z jednego serwisu i dwa z tym samym białkiem), więc tydzień jest za każdym razem ten sam. Jedno z nich („Baked feta pasta”) ma makaron, tak jak danie

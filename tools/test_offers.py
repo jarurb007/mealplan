@@ -12,6 +12,8 @@ from datetime import date, datetime, timedelta
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 SAMPLES = os.path.join(TOOLS, "testdata", "offers")
+if not os.path.isdir(SAMPLES):
+    print("SKIP: needs saved flyer pages in tools/testdata/offers (not in the repository)"); sys.exit(0)
 UI = sys.argv[1:] == ["ui"]
 bad = False
 

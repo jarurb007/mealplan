@@ -1,0 +1,504 @@
+{
+ "version": 1,
+ "note": "Sample data written for this repository. The real inspiration database is not included.",
+ "recipes": [
+  {
+   "id": "linsegryte-med-stpotet",
+   "name": "Linsegryte med søtpotet",
+   "pool": "main",
+   "url": "",
+   "site": "sample-a",
+   "rating": null,
+   "votes": null,
+   "servings": 4,
+   "time_min": 35,
+   "protein": "linser",
+   "is_fish": false,
+   "kid_ok": true,
+   "taco": false,
+   "method": "Røde linser og søtpotet småkoker i tomat og kokosmelk med mild karri. Serveres med ris.",
+   "ingredients": [
+    {
+     "name": "løk",
+     "qty": 1,
+     "unit": "stk",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "hvitløk",
+     "qty": 2,
+     "unit": "fedd",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "søtpotet",
+     "qty": 500,
+     "unit": "g",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "røde linser",
+     "qty": 250,
+     "unit": "g",
+     "aisle": "Tørrvarer og hermetikk"
+    },
+    {
+     "name": "hakkede tomater",
+     "qty": 400,
+     "unit": "g",
+     "aisle": "Tørrvarer og hermetikk"
+    },
+    {
+     "name": "kokosmelk",
+     "qty": 4,
+     "unit": "dl",
+     "aisle": "Meieri og kjøl"
+    },
+    {
+     "name": "karri",
+     "qty": 1,
+     "unit": "ss",
+     "aisle": "Krydder og basis"
+    },
+    {
+     "name": "ris",
+     "qty": 3,
+     "unit": "dl",
+     "aisle": "Tørrvarer og hermetikk"
+    }
+   ]
+  },
+  {
+   "id": "kikertcurry-med-spinat",
+   "name": "Kikertcurry med spinat",
+   "pool": "main",
+   "url": "",
+   "site": "sample-b",
+   "rating": null,
+   "votes": null,
+   "servings": 4,
+   "time_min": 30,
+   "protein": "kikerter",
+   "is_fish": false,
+   "kid_ok": true,
+   "taco": false,
+   "method": "Kikerter freses med løk og krydder, kokes opp i tomat og vendes med spinat til slutt.",
+   "ingredients": [
+    {
+     "name": "løk",
+     "qty": 1,
+     "unit": "stk",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "ingefær",
+     "qty": 1,
+     "unit": "ts",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "kikerter",
+     "qty": 800,
+     "unit": "g",
+     "aisle": "Tørrvarer og hermetikk"
+    },
+    {
+     "name": "hakkede tomater",
+     "qty": 400,
+     "unit": "g",
+     "aisle": "Tørrvarer og hermetikk"
+    },
+    {
+     "name": "spinat",
+     "qty": 100,
+     "unit": "g",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "garam masala",
+     "qty": 2,
+     "unit": "ts",
+     "aisle": "Krydder og basis"
+    },
+    {
+     "name": "tyrkisk yoghurt",
+     "qty": 2,
+     "unit": "dl",
+     "aisle": "Meieri og kjøl"
+    },
+    {
+     "name": "naanbrød",
+     "qty": 4,
+     "unit": "stk",
+     "aisle": "Brød og deig"
+    }
+   ]
+  },
+  {
+   "id": "ovnsbakt-laks-med-poteter-og-brokkoli",
+   "name": "Ovnsbakt laks med poteter og brokkoli",
+   "pool": "main",
+   "url": "",
+   "site": "sample-c",
+   "rating": null,
+   "votes": null,
+   "servings": 4,
+   "time_min": 35,
+   "protein": "laks",
+   "is_fish": true,
+   "kid_ok": true,
+   "taco": false,
+   "method": "Laks, poteter og brokkoli bakes på samme brett med sitron og olivenolje.",
+   "ingredients": [
+    {
+     "name": "laks",
+     "qty": 500,
+     "unit": "g",
+     "aisle": "Kjøtt og fisk"
+    },
+    {
+     "name": "potet",
+     "qty": 800,
+     "unit": "g",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "brokkoli",
+     "qty": 1,
+     "unit": "stk",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "sitron",
+     "qty": 1,
+     "unit": "stk",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "olivenolje",
+     "qty": 2,
+     "unit": "ss",
+     "aisle": "Krydder og basis"
+    },
+    {
+     "name": "rømme",
+     "qty": 2,
+     "unit": "dl",
+     "aisle": "Meieri og kjøl"
+    }
+   ]
+  },
+  {
+   "id": "omelett-med-grnnsaker-og-fetaost",
+   "name": "Omelett med grønnsaker og fetaost",
+   "pool": "main",
+   "url": "",
+   "site": "sample-a",
+   "rating": null,
+   "votes": null,
+   "servings": 4,
+   "time_min": 20,
+   "protein": "egg og ost",
+   "is_fish": false,
+   "kid_ok": true,
+   "taco": false,
+   "method": "Egg piskes med melk og stekes i panne med paprika, løk og smuldret feta.",
+   "ingredients": [
+    {
+     "name": "egg",
+     "qty": 8,
+     "unit": "stk",
+     "aisle": "Meieri og kjøl"
+    },
+    {
+     "name": "melk",
+     "qty": 1,
+     "unit": "dl",
+     "aisle": "Meieri og kjøl"
+    },
+    {
+     "name": "paprika",
+     "qty": 1,
+     "unit": "stk",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "løk",
+     "qty": 1,
+     "unit": "stk",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "fetaost",
+     "qty": 150,
+     "unit": "g",
+     "aisle": "Meieri og kjøl"
+    },
+    {
+     "name": "brød",
+     "qty": 1,
+     "unit": "stk",
+     "aisle": "Brød og deig"
+    }
+   ]
+  },
+  {
+   "id": "bnnetaco",
+   "name": "Bønnetaco",
+   "pool": "main",
+   "url": "",
+   "site": "sample-b",
+   "rating": null,
+   "votes": null,
+   "servings": 4,
+   "time_min": 25,
+   "protein": "bønner og ost",
+   "is_fish": false,
+   "kid_ok": true,
+   "taco": true,
+   "method": "Svarte bønner varmes med tacokrydder og serveres i lefser med grønnsaker og ost.",
+   "ingredients": [
+    {
+     "name": "svarte bønner",
+     "qty": 800,
+     "unit": "g",
+     "aisle": "Tørrvarer og hermetikk"
+    },
+    {
+     "name": "tacokrydder",
+     "qty": 1,
+     "unit": "pose",
+     "aisle": "Krydder og basis"
+    },
+    {
+     "name": "tortillalefser",
+     "qty": 8,
+     "unit": "stk",
+     "aisle": "Brød og deig"
+    },
+    {
+     "name": "tomat",
+     "qty": 3,
+     "unit": "stk",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "agurk",
+     "qty": 1,
+     "unit": "stk",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "mais",
+     "qty": 1,
+     "unit": "boks",
+     "aisle": "Tørrvarer og hermetikk"
+    },
+    {
+     "name": "revet ost",
+     "qty": 150,
+     "unit": "g",
+     "aisle": "Meieri og kjøl"
+    },
+    {
+     "name": "rømme",
+     "qty": 2,
+     "unit": "dl",
+     "aisle": "Meieri og kjøl"
+    }
+   ]
+  },
+  {
+   "id": "pasta-med-cottage-cheese-og-erter",
+   "name": "Pasta med cottage cheese og erter",
+   "pool": "main",
+   "url": "",
+   "site": "sample-c",
+   "rating": null,
+   "votes": null,
+   "servings": 4,
+   "time_min": 20,
+   "protein": "cottage cheese",
+   "is_fish": false,
+   "kid_ok": true,
+   "taco": false,
+   "method": "Pasta vendes med cottage cheese, erter, sitron og parmesan til en lett, kremet saus.",
+   "ingredients": [
+    {
+     "name": "pasta",
+     "qty": 400,
+     "unit": "g",
+     "aisle": "Tørrvarer og hermetikk"
+    },
+    {
+     "name": "cottage cheese",
+     "qty": 400,
+     "unit": "g",
+     "aisle": "Meieri og kjøl"
+    },
+    {
+     "name": "erter",
+     "qty": 200,
+     "unit": "g",
+     "aisle": "Frys"
+    },
+    {
+     "name": "sitron",
+     "qty": 1,
+     "unit": "stk",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "parmesan",
+     "qty": 50,
+     "unit": "g",
+     "aisle": "Meieri og kjøl"
+    }
+   ]
+  },
+  {
+   "id": "tofuwok-med-nudler",
+   "name": "Tofuwok med nudler",
+   "pool": "main",
+   "url": "",
+   "site": "sample-a",
+   "rating": null,
+   "votes": null,
+   "servings": 4,
+   "time_min": 25,
+   "protein": "tofu",
+   "is_fish": false,
+   "kid_ok": false,
+   "taco": false,
+   "method": "Tofu stekes sprø og wokes med grønnsaker, soyasaus og nudler.",
+   "ingredients": [
+    {
+     "name": "tofu",
+     "qty": 400,
+     "unit": "g",
+     "aisle": "Meieri og kjøl"
+    },
+    {
+     "name": "nudler",
+     "qty": 250,
+     "unit": "g",
+     "aisle": "Tørrvarer og hermetikk"
+    },
+    {
+     "name": "wokgrønnsaker",
+     "qty": 500,
+     "unit": "g",
+     "aisle": "Frys"
+    },
+    {
+     "name": "soyasaus",
+     "qty": 3,
+     "unit": "ss",
+     "aisle": "Krydder og basis"
+    },
+    {
+     "name": "ingefær",
+     "qty": 1,
+     "unit": "ts",
+     "aisle": "Frukt og grønt"
+    }
+   ]
+  },
+  {
+   "id": "fiskekaker-med-potetmos",
+   "name": "Fiskekaker med potetmos",
+   "pool": "kid",
+   "url": "",
+   "site": "sample-b",
+   "rating": null,
+   "votes": null,
+   "servings": 4,
+   "time_min": 25,
+   "protein": "fisk",
+   "is_fish": true,
+   "kid_ok": true,
+   "taco": false,
+   "method": "Fiskekaker stekes og serveres med potetmos og revne gulrøtter.",
+   "ingredients": [
+    {
+     "name": "fiskekaker",
+     "qty": 600,
+     "unit": "g",
+     "aisle": "Kjøtt og fisk"
+    },
+    {
+     "name": "potet",
+     "qty": 800,
+     "unit": "g",
+     "aisle": "Frukt og grønt"
+    },
+    {
+     "name": "melk",
+     "qty": 1,
+     "unit": "dl",
+     "aisle": "Meieri og kjøl"
+    },
+    {
+     "name": "smør",
+     "qty": 2,
+     "unit": "ss",
+     "aisle": "Meieri og kjøl"
+    },
+    {
+     "name": "gulrot",
+     "qty": 3,
+     "unit": "stk",
+     "aisle": "Frukt og grønt"
+    }
+   ]
+  },
+  {
+   "id": "pannekaker-med-cottage-cheese-og-br",
+   "name": "Pannekaker med cottage cheese og bær",
+   "pool": "kid",
+   "url": "",
+   "site": "sample-c",
+   "rating": null,
+   "votes": null,
+   "servings": 4,
+   "time_min": 25,
+   "protein": "egg og cottage cheese",
+   "is_fish": false,
+   "kid_ok": true,
+   "taco": false,
+   "method": "Tynne pannekaker med cottage cheese i røra, servert med bær.",
+   "ingredients": [
+    {
+     "name": "hvetemel",
+     "qty": 3,
+     "unit": "dl",
+     "aisle": "Tørrvarer og hermetikk"
+    },
+    {
+     "name": "egg",
+     "qty": 3,
+     "unit": "stk",
+     "aisle": "Meieri og kjøl"
+    },
+    {
+     "name": "melk",
+     "qty": 5,
+     "unit": "dl",
+     "aisle": "Meieri og kjøl"
+    },
+    {
+     "name": "cottage cheese",
+     "qty": 200,
+     "unit": "g",
+     "aisle": "Meieri og kjøl"
+    },
+    {
+     "name": "bær",
+     "qty": 300,
+     "unit": "g",
+     "aisle": "Frys"
+    }
+   ]
+  }
+ ]
+}

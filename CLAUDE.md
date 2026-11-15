@@ -1,60 +1,67 @@
 # Ukesmeny
 
-Domowy planer obiadów i zakupów na tydzień. FastAPI + SQLite (`app/app.py`), frontend bez frameworka
-(`app/static/`), model językowy przez CLI `claude -p` (`app/llm.py`). Działa na NUC-u w Dockerze (`deploy/`).
+A household weekly dinner and shopping planner. FastAPI + SQLite (`app/app.py`), a framework-free frontend
+(`app/static/`), and a language model via the `claude -p` CLI (`app/llm.py`). Runs on a home server (NUC) in Docker
+(`deploy/`).
 
-## Zasady pracy
+## Working rules
 
-- Kod zmieniamy tylko w `app/`. Katalog `deploy/ukesmeny` jest budowany z `app/`, nie edytuj tam kopii.
-- **Nigdy nie dotykaj prawdziwych danych**: `app/data.db`, `app/backups/`, `deploy/ukesmeny/data/`. Do testów
-  kopiuj `/home/jar/mealplan/tools/testdb/nuc.db` (pusta baza) albo plik z `/home/jar/mealplan/app/backups/`
-  (prawdziwe tygodnie, tylko do odczytu) do katalogu tymczasowego i ustaw `DB_PATH` oraz `BACKUP_DIR`.
-- Nie wdrażaj na NUC. Wdrożenie robi właściciel po obejrzeniu wersji podglądowej.
-- Komentarze i komunikaty commitów po polsku, jak w istniejącym kodzie. Nazwy dań i składników w bazie są po norwesku.
+- Change code only in `app/`. The `deploy/ukesmeny` directory is built from `app/`; don't edit the copies there.
+- **Never touch real data**: `app/data.db`, `app/backups/`, `deploy/ukesmeny/data/`. For tests, copy
+  `tools/testdb/nuc.db` (an empty database) or a file from `app/backups/` (real weeks, read-only) to a temporary
+  directory and set `DB_PATH` and `BACKUP_DIR`. Any empty file also works as a fresh database.
+- Don't deploy to the NUC. The owner deploys after reviewing the preview version.
+- Commit messages in English. Existing code comments are in Polish; dish and ingredient names in the database are in
+  Norwegian.
 
-## Uruchamianie i testy
+## Running and testing
 
-Środowisko Pythona jest tylko w głównym katalogu (w worktree go nie ma, bo `.venv` jest poza gitem):
+The Python environment lives only in the main directory (worktrees don't have it, because `.venv` is not in git):
 
 ```bash
-cd <katalog repo lub worktree>/app
-PATH=/home/jar/mealplan/tools/fakebin:$PATH FAKE_DELAY=1 \
-DB_PATH=/tmp/moja-kopia.db BACKUP_DIR=/tmp/moje-kopie \
-  /home/jar/mealplan/app/.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port <PORT>
+cd <repo or worktree>/app
+PATH=<repo>/tools/fakebin:$PATH FAKE_DELAY=1 \
+DB_PATH=/tmp/my-copy.db BACKUP_DIR=/tmp/my-backups \
+  <repo>/app/.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port <PORT>
 ```
 
-- `tools/fakebin/claude` to atrapa modelu (deterministyczny JSON). Prawdziwego `claude -p` w testach nie wywołujemy.
-- Testy w `tools/test_*.py` sterują Chromium przez CDP. Uruchamiaj je przez
-  `/home/jar/.hermes/hermes-agent/venv/bin/python3` (ma `websockets`). Skrypty `tools/run_*.sh` mają wpisane na
-  sztywno ścieżki głównego katalogu i port 8088. W worktree uruchamiaj serwer ręcznie jak wyżej, na własnym porcie.
-- Testy czytają z otoczenia: `UKES_PORT` (port serwera, domyślnie 8088), `UKES_CDP_OFFSET` (przesunięcie portów
-  debugowania Chromium, żeby równoległe sesje się nie zderzały) i `FAKE_LOG` (plik, do którego atrapa zapisuje prompty;
-  ta sama wartość musi być ustawiona dla serwera i dla testu).
-- Ceny orientacyjne (Kassalapp) działają tylko z kluczem w `KASSAL_API_KEY` (lokalnie i na NUC-u w `.env`, nigdy w repo).
-  `tools/test_prices.py` nie dotyka sieci: `tools/fake_kassal.py` udaje Kassalapp (`KASSAL_BASE`, `KASSAL_GAP=0`), a tryb
-  `nokey` sprawdza aplikację bez klucza. `tools/probe_prices.py` to sonda na prawdziwym API (pyta naprawdę, używaj rzadko).
-- Plan dziecka (`tools/test_kid.py`, sam uruchamia serwer; tryb `ui` steruje Chromium) działa tylko z włączonym profilem
-  dziecka (ustawienia → „Plan dziecka”, klucz `kid` w tabeli `settings`). Bez profilu aplikacja nie pyta modelu o dania
-  dziecka i wygląda jak dawniej, więc pozostałe testy go nie widzą. Profil to dane prywatne: nie wpisuj go do repo.
-  Zasady propozycji (kolejność: danie dorosłych, zalecenia, „lubi” jako wskazówka, „nie lubi” jako zakaz) są w `kid_prompt`,
-  a po odpowiedzi modelu `kid_screen` odrzuca „nie lubi” i pilnuje głównego źródła białka (różne w propozycjach dnia, w planie
-  dziecka najwyżej 2 dni w tygodniu i nie dzień po dniu; warzywa i dodatki bez limitu). Po zmianie zasad podnieś `KID_VER`: propozycje zapisane
-  starszą wersją odświeżą się same, wybory domowników zostają.
-- Baza inspiracji (`app/inspiracje.json`, sprawdzone przepisy z norweskich serwisów jako fakty: składniki, ilości, ocena,
-  link) jest wczytywana przy starcie; aplikacja niczego z tych serwisów nie pobiera. Plik buduje
-  `tools/inspiracje/normalizuj.py` z `tools/inspiracje/przepisy*.json` (nie edytuj go ręcznie).
-- Skład tygodnia układa serwer: ustawiona liczba nowości od modelu (domyślnie 2), reszta to dania domu (ugotowane, 👍, ⭐;
-  jedna pozycja na danie, warianty nazwy rozpoznaje `same_dish()`) i baza inspiracji. **Starsze testy uruchamiaj
-  z `PLAN_MIX=0`**: wtedy cały plan pisze model jak dawniej, bez bazy. `tools/test_inspo.py` sam uruchamia serwer
-  (tryb `ui` steruje Chromium) i liczy wywołania modelu przed i po przez sześć tygodni.
-- Import przepisu (link, zdjęcie, tekst) zapisuje składniki dosłownie z oryginału, na liczbę porcji oryginału; na porcje
-  domu przelicza je kod (`scale_qty`). `tools/test_import.py` (Pythonem aplikacji, bez sieci i serwera) sprawdza to na
-  zapisanej próbce strony w `tools/testdata/import` oraz to, że przepis z książki wygrywa z wersją modelu tego samego dania.
-- Port 8099 jest zarezerwowany dla wersji podglądowej. Nie zajmuj go w testach.
-- Gazetki (promocje na liście zakupów) w testach nie sięgają do sieci: `OFFERS_SRC_DIR=<repo>/tools/testdata/offers`
-  każe czytać zapisane próbki zamiast `coop.no` i `kiwi.no`, a `OFFER_MATCH_WAIT=0` wyłącza zwłokę przed pytaniem modelu.
-  Prawdziwa gazetka KIWI to PDF: do jej odczytu potrzebny jest pakiet `pypdf` (jest w `deploy/ukesmeny/requirements.txt`,
-  w lokalnym `.venv` może go nie być; testy go nie potrzebują).
-  `tools/test_offers.py` (bez argumentów) ustawia to sam; tryb `ui` wymaga serwera uruchomionego z tymi zmiennymi.
-  Domyślnie włączone są Extra i KIWI (kod pocztowy z `KIWI_POSTCODE`, domyślnie 1930). Serwer do testów uruchamiaj
-  z `OFFER_DEFAULT_CHAINS=` (puste): wtedy żadna sieć nie jest włączona i aplikacja niczego sama nie pobiera.
+- `tools/fakebin/claude` is a fake model (deterministic JSON). Tests never call the real `claude -p`.
+- Tests in `tools/test_*.py` drive Chromium over CDP and need a Python with `websockets`. The `tools/run_*.sh` scripts
+  have the main directory paths and port 8088 hardcoded. In a worktree, start the server by hand as above, on its own
+  port.
+- Tests read from the environment: `UKES_PORT` (server port, default 8088), `UKES_CDP_OFFSET` (offset for Chromium
+  debugging ports so parallel sessions don't clash), `FAKE_LOG` (the file the fake model writes prompts to; the same
+  value must be set for the server and the test), `UKES_PY` and `UKES_EMPTY_DB`.
+- Approximate prices (Kassalapp) work only with a key in `KASSAL_API_KEY` (locally and on the NUC in `.env`, never in
+  the repo). `tools/test_prices.py` doesn't touch the network: `tools/fake_kassal.py` mimics Kassalapp (`KASSAL_BASE`,
+  `KASSAL_GAP=0`), and the `nokey` mode checks the app without a key. `tools/probe_prices.py` is a probe against the
+  real API (it really calls it, use rarely).
+- The child plan (`tools/test_kid.py`, starts the server itself; `ui` mode drives Chromium) works only with the child
+  profile enabled (settings → "Child plan", key `kid` in the `settings` table). Without a profile the app doesn't ask
+  the model about child dishes and looks as before, so the other tests don't see it. The profile is private data:
+  don't put it in the repo. The suggestion rules (order: the adult dish, guidelines, "likes" as a hint, "dislikes" as a
+  ban) are in `kid_prompt`, and after the model answers, `kid_screen` rejects "dislikes" and enforces the main protein
+  source (different within a day's suggestions, at most 2 days a week in the child plan and not on consecutive days;
+  vegetables and sides unlimited). After changing the rules, bump `KID_VER`: suggestions saved under an older version
+  refresh themselves, household choices stay.
+- The inspiration database (`app/inspiracje.json`, proven recipes from Norwegian sites stored as facts: ingredients,
+  quantities, rating, link) is loaded on start; the app fetches nothing from those sites. It is built by
+  `tools/inspiracje/normalizuj.py` from `tools/inspiracje/przepisy*.json` (don't edit it by hand). These files are
+  private and gitignored; without them the app uses `app/inspiracje.sample.json`, and `tools/test_inspo.py` and the
+  `ui` mode of `tools/test_kid.py` skip.
+- The server builds the week composition: the configured number of new dishes from the model (default 2), the rest are
+  home dishes (cooked, 👍, ⭐; one entry per dish, name variants recognised by `same_dish()`) and the inspiration
+  database. **Run older tests with `PLAN_MIX=0`**: then the model writes the whole plan as before, without the
+  database. `tools/test_inspo.py` starts the server itself (`ui` mode drives Chromium) and counts model calls before
+  and after over six weeks.
+- Recipe import (link, photo, text) stores ingredients verbatim from the original, for the original's servings; code
+  scales them to the household's servings (`scale_qty`). `tools/test_import.py` (with the app's Python, no network or
+  server) checks this on a saved page sample in `tools/testdata/import`, and that a recipe-book recipe wins over the
+  model's version of the same dish.
+- Port 8099 is reserved for the preview version. Don't use it in tests.
+- Flyer deals (offers on the shopping list) don't reach the network in tests: `OFFERS_SRC_DIR=<repo>/tools/testdata/offers`
+  makes the app read saved samples instead of `coop.no` and `kiwi.no`, and `OFFER_MATCH_WAIT=0` disables the delay
+  before asking the model. The saved samples are private and gitignored; without them `tools/test_offers.py` skips.
+  The real KIWI flyer is a PDF and needs `pypdf` (in `deploy/ukesmeny/requirements.txt`; tests don't need it).
+  Extra and KIWI are enabled by default (postcode from `KIWI_POSTCODE`). Start test servers with
+  `OFFER_DEFAULT_CHAINS=` (empty): then no chain is enabled and the app fetches nothing on its own.
