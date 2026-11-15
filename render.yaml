@@ -1,0 +1,14 @@
+# Render Blueprint for the public demo (free plan). See docs/DEMO.md.
+services:
+  - type: web
+    name: ukesmeny-demo
+    runtime: docker
+    plan: free
+    dockerfilePath: ./deploy/demo/Dockerfile
+    dockerContext: .
+    branch: main
+    healthCheckPath: /api/state
+    autoDeploy: true
+    envVars:
+      - key: DEMO_RESET_HOURS
+        value: "2"

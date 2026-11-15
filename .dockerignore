@@ -1,0 +1,12 @@
+# context for deploy/demo/Dockerfile (built from the repository root)
+**/.venv
+**/__pycache__
+app/data.db
+app/backups
+app/inspiracje.json
+deploy/ukesmeny/data
+deploy/ukesmeny/.env
+tools
+docs
+plans
+*.pdf
