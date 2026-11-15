@@ -5,6 +5,19 @@ Every week it proposes seven dinners that fit the family's preferences, writes t
 merged shopping list sorted by store aisle. It's built for everyday use on a phone, shared by the whole family, and it
 runs on a small home server.
 
+![A 60-second walkthrough: recipe, swapping a dish, shopping list, cooking mode, planning next week](docs/media/ukesmeny-demo.gif)
+
+*A 60-second walkthrough of the public demo ([MP4 version](docs/media/ukesmeny-demo.mp4)).*
+
+## Live demo
+
+**Try it: _link coming soon_** <!-- replace with the Render URL after deploying, see docs/DEMO.md -->
+
+The demo is the real app in demo mode: every AI answer you see is a real model response recorded once and replayed,
+so the demo costs nothing to run and can't be used to spend anyone's subscription. Features that need the network or
+API keys (store deals, prices, recipe import, photo reading) are switched off, and the shared demo data resets every
+two hours. See [docs/DEMO.md](docs/DEMO.md) for how it works and how to deploy it.
+
 <p align="center">
   <img src="docs/screenshot-week.png" alt="Week view on a phone" width="300">
 </p>
@@ -31,6 +44,8 @@ runs on a small home server.
   scaled in code.
 - **Store deals and prices.** Weekly flyer deals from Coop Extra and KIWI (including PDF parsing) matched to list items
   by the model with server-side guards, and approximate dish prices from the Kassalapp API.
+- **Public demo mode.** `LLM_BACKEND=demo` replays recorded model answers, blocks every outgoing HTTP call and resets a
+  shared demo database on a timer, so the app can be shown publicly without a model, keys or costs.
 - **More:** a cooking mode with large step-by-step text and Wake Lock, shared to-do lists, three UI languages
   (Norwegian, Polish, English), dark mode, and daily database backups with rotation.
 
@@ -52,13 +67,17 @@ week composition, child-plan rules) live in code, not in the prompt alone.
 ```
 app/
   app.py                    FastAPI app: API, planning logic, shopping list, background jobs
-  llm.py                    Swappable LLM backend (Claude Code CLI or Gemini CLI)
+  llm.py                    Swappable LLM backend (Claude Code CLI, Gemini CLI, or demo replay)
+  demo_fixtures/            Real model answers recorded for the demo
+  demo_seed.db              Demo database with one planned week
   static/                   Frontend: index.html, app.js, app.css, i18n.js, fonts
   inspiracje.sample.json    Sample inspiration database
 deploy/ukesmeny/            Dockerfile, docker-compose.yml, .env.example
+deploy/demo/Dockerfile      Image for the public demo (no CLI, no secrets); render.yaml deploys it
 tools/
   fakebin/claude            Deterministic fake model used by all tests
-  test_*.py                 Tests (API, shopping list, import, backups, browser UI)
+  test_*.py                 Tests (API, shopping list, import, backups, browser UI, demo mode)
+  record_demo_video.py      Records the walkthrough above with Playwright
   inspiracje/               Scripts that build the inspiration database
 ```
 
@@ -72,7 +91,10 @@ python3 -m venv .venv
 # With the real model (needs the Claude Code CLI, logged in):
 DB_PATH=./data.db BACKUP_DIR=./backups .venv/bin/python -m uvicorn app:app --port 8000
 
-# Or with the fake model, no account needed:
+# Or the demo (recorded answers, no account needed):
+: > /tmp/demo.db && LLM_BACKEND=demo DB_PATH=/tmp/demo.db .venv/bin/python -m uvicorn app:app --port 8000
+
+# Or with the fake model used by the tests:
 PATH=$PWD/../tools/fakebin:$PATH DB_PATH=/tmp/ukes.db BACKUP_DIR=/tmp/ukes-bk \
   .venv/bin/python -m uvicorn app:app --port 8000
 ```
@@ -88,6 +110,7 @@ Optional environment variables: `KASSAL_API_KEY` (prices), `KIWI_POSTCODE` (regi
 python3 tools/test_static.py                      # frontend: asset hashes, JS syntax, translation keys
 PATH=$PWD/tools/fakebin:$PATH app/.venv/bin/python tools/test_shopping_merge.py
 PATH=$PWD/tools/fakebin:$PATH app/.venv/bin/python tools/test_import.py
+app/.venv/bin/python tools/test_demo.py           # demo mode: replay, no subprocess, no network, reset
 ```
 
 Server-based tests start the app themselves on a temporary database (`UKES_PY`, `UKES_EMPTY_DB`, and `PLAN_MIX=0` for

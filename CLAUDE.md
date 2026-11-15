@@ -65,3 +65,8 @@ DB_PATH=/tmp/my-copy.db BACKUP_DIR=/tmp/my-backups \
   The real KIWI flyer is a PDF and needs `pypdf` (in `deploy/ukesmeny/requirements.txt`; tests don't need it).
   Extra and KIWI are enabled by default (postcode from `KIWI_POSTCODE`). Start test servers with
   `OFFER_DEFAULT_CHAINS=` (empty): then no chain is enabled and the app fetches nothing on its own.
+- Demo mode (`LLM_BACKEND=demo`, docs/DEMO.md): `llm.py` replays the recordings in `app/demo_fixtures/` and never
+  starts a process; `app.py` blocks outgoing HTTP, the network routes and backups, and restores `app/demo_seed.db` on
+  start and every `DEMO_RESET_HOURS`. `tools/test_demo.py` checks this. New recordings: run with the real backend and
+  `LLM_RECORD_DIR=app/demo_fixtures` (capped by `LLM_RECORD_MAX`), and only with `PREFS_PATH=app/demo_preferences.md`
+  so no private preferences end up in the repo.
