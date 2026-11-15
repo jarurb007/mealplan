@@ -2319,9 +2319,11 @@ def index():
 DEMO_BANNER = ('<style>#demoBar{{position:fixed;top:0;left:0;right:0;z-index:20;height:22px;box-sizing:border-box;'
                'overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font:12px/22px system-ui,sans-serif;'
                'text-align:center;padding:0 8px;background:#fff4d6;color:#5a4500;border-bottom:1px solid #e8d9a8}}'
+               ':root[data-theme=dark] #demoBar{{background:#3a3218;color:#f3e2b0;border-color:#4d4322}}'
+               '@media (max-width:640px){{#demoBar .long{{display:none}}}}'
                'body{{padding-top:22px}}header{{top:22px}}@media (min-width:900px){{nav{{top:22px}}}}</style>'
-               '<div id="demoBar">Demo · KI-svarene er forhåndsinnspilt (AI responses are pre-recorded) · '
-               'data nullstilles hver {h}. time</div>')
+               '<div id="demoBar">Demo · KI-svarene er forhåndsinnspilt<span class="long"> (AI responses are '
+               'pre-recorded)</span> · nullstilles hver {h}. time</div>')
 
 
 @app.get("/api/state")
