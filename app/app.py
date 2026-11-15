@@ -23,7 +23,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -33,6 +33,22 @@ import llm
 BASE = Path(__file__).parent
 DB_PATH = os.getenv("DB_PATH", str(BASE / "data.db"))
 PREFS_PATH = Path(os.getenv("PREFS_PATH", str(BASE.parent / "preferences.md")))
+
+# ---------- public demo (LLM_BACKEND=demo) ----------
+# The demo replays recorded model answers (llm.py) and must never reach the network or spend money: every outgoing
+# HTTP call is blocked here, features that need a key or the network are switched off, and one shared database is
+# restored from a seed on start and every DEMO_RESET_HOURS.
+DEMO = llm.DEMO
+DEMO_SEED_DB = Path(os.getenv("DEMO_SEED_DB", str(BASE / "demo_seed.db")))
+DEMO_RESET_HOURS = float(os.getenv("DEMO_RESET_HOURS", "2"))
+DEMO_BLOCKED = ("/api/offers/", "/api/prices/", "/api/recipes/custom", "/api/kid/profile")
+if DEMO:
+    PREFS_PATH = Path(os.getenv("DEMO_PREFS_PATH", str(BASE / "demo_preferences.md")))
+
+    def _no_network(*_a, **_k):
+        raise httpx.HTTPError("network access is disabled in the demo")
+
+    httpx.get = httpx.post = httpx.request = httpx.Client = _no_network
 
 AISLES = ["Frukt og grønt", "Kjøtt og fisk", "Meieri og kjøl", "Tørrvarer og hermetikk",
           "Brød og deig", "Frys", "Krydder og basis", "Snacks og godteri"]
@@ -51,15 +67,62 @@ MINE = "Moje produkty"
 async def lifespan(_app):
     # kopia dzienna: od razu przy starcie, potem raz na dobę (wątek w tle)
     stop = threading.Event()
-    threading.Thread(target=backup_loop, args=(stop,), daemon=True, name="kopia-dzienna").start()
-    threading.Thread(target=offers_loop, args=(stop,), daemon=True, name="gazetki").start()
-    threading.Thread(target=price_loop, args=(stop,), daemon=True, name="ceny-piatek").start()
+    if DEMO:  # no backups, flyers or prices in the demo: only the periodic reset of the shared database
+        threading.Thread(target=demo_reset_loop, args=(stop,), daemon=True, name="demo-reset").start()
+    else:
+        threading.Thread(target=backup_loop, args=(stop,), daemon=True, name="kopia-dzienna").start()
+        threading.Thread(target=offers_loop, args=(stop,), daemon=True, name="gazetki").start()
+        threading.Thread(target=price_loop, args=(stop,), daemon=True, name="ceny-piatek").start()
     resume_recipes()  # przy lifespan FastAPI pomija @app.on_event("startup"), więc wznawianie przepisów wołamy tutaj
     yield
     stop.set()
 
 
 app = FastAPI(title="Ukesmeny", lifespan=lifespan)
+
+
+def demo_reset():
+    """Restores the shared demo database from the seed (SQLite backup API, safe while the app has it open)."""
+    if not DEMO_SEED_DB.exists():
+        return
+    src = sqlite3.connect(DEMO_SEED_DB)
+    dst = sqlite3.connect(DB_PATH, timeout=30)
+    try:
+        src.backup(dst)
+        # the seed was recorded on a fixed date: move its weeks so the newest one is this week
+        weeks = dst.execute("SELECT id, start FROM weeks").fetchall()
+        if weeks:
+            shift = saturday_on_or_before(date.today()) - max(date.fromisoformat(s) for _, s in weeks)
+            with dst:
+                dst.execute("UPDATE weeks SET start = 'x' || id")  # start is UNIQUE: two steps avoid clashes
+                dst.executemany("UPDATE weeks SET start=? WHERE id=?",
+                                [(str(date.fromisoformat(s) + shift), i) for i, s in weeks])
+                # days of this week that are already over count as cooked, so the demo doesn't nag about them
+                wid, wstart = max(((i, date.fromisoformat(s) + shift) for i, s in weeks), key=lambda x: x[1])
+                dst.execute("UPDATE meals SET status='done' WHERE week_id=? AND day<? AND status='planned'",
+                            (wid, (date.today() - wstart).days))
+    finally:
+        src.close()
+        dst.close()
+
+
+def demo_reset_loop(stop: threading.Event):
+    while not stop.wait(DEMO_RESET_HOURS * 3600):
+        try:
+            demo_reset()
+        except Exception as e:
+            print("demo reset failed:", e)
+
+
+if DEMO:
+    from fastapi import Request
+    from fastapi.responses import JSONResponse
+
+    @app.middleware("http")
+    async def demo_guard(request: Request, call_next):
+        if request.method != "GET" and request.url.path.startswith(DEMO_BLOCKED):
+            return JSONResponse({"detail": "ikke tilgjengelig i demoen"}, status_code=403)
+        return await call_next(request)
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # stan to kilkadziesiąt kB JSON-u, przez Wi-Fi w kuchni robi różnicę
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")  # css/js obok index.html
 
@@ -1145,7 +1208,7 @@ OFFER_MATCH_FAIL = [0.0]  # czas ostatniego nieudanego dopasowania (model nie od
 
 # Stan wyjściowy, dopóki nikt nie zmienił ustawień: obie sieci włączone, KIWI z kodem pocztowym domu.
 # OFFER_DEFAULT_CHAINS="" (testy) wyłącza to i aplikacja niczego sama nie pobiera.
-OFFER_DEFAULT_CHAINS = [x for x in os.getenv("OFFER_DEFAULT_CHAINS", "extra,kiwi").split(",") if x]
+OFFER_DEFAULT_CHAINS = [] if DEMO else [x for x in os.getenv("OFFER_DEFAULT_CHAINS", "extra,kiwi").split(",") if x]
 KIWI_POSTCODE_DEFAULT = os.getenv("KIWI_POSTCODE", "0150")
 
 
@@ -1886,7 +1949,7 @@ def offers_verdict(req: OfferVerdictReq):
 # Coop, dlatego bierzemy najniższą świeżą cenę produktu w sieciach, które je mają (Oda, Meny, Spar, Joker, Bunnpris),
 # i pokazujemy ją jako orientacyjną. Sama Oda nie wystarcza: wyszukiwarka zwraca z niej za mało podstawowych produktów.
 # Bez klucza KASSAL_API_KEY nic tutaj nie działa i aplikacja wygląda jak przed tą funkcją.
-KASSAL_KEY = os.getenv("KASSAL_API_KEY", "").strip()
+KASSAL_KEY = "" if DEMO else os.getenv("KASSAL_API_KEY", "").strip()
 KASSAL_BASE = os.getenv("KASSAL_BASE", "https://kassal.app/api/v1").rstrip("/")
 KASSAL_UA = "Ukesmeny-hjemmebruk/1.0 (privat husholdningsverktoy)"
 PRICE_CHAINS = {"ODA_NO": "Oda", "MENY_NO": "Meny", "SPAR_NO": "Spar", "JOKER_NO": "Joker", "BUNNPRIS": "Bunnpris"}
@@ -2238,6 +2301,8 @@ def price_loop(stop: threading.Event):
             print(f"ceny: odświeżanie nieudane: {type(e).__name__}", flush=True)
 
 
+if DEMO:
+    demo_reset()  # every start begins from the seed
 init_db()  # tutaj, bo migracja odhaczeń korzysta z canon() i shop_qty()
 
 
@@ -2245,7 +2310,18 @@ init_db()  # tutaj, bo migracja odhaczeń korzysta z canon() i shop_qty()
 @app.get("/")
 def index():
     # no-cache: przeglądarka zawsze pyta, czy index.html się zmienił (ETag), więc po wdrożeniu dostaje nowe ?v= plików
+    if DEMO:  # thin banner so visitors know the AI answers are replayed
+        page = (BASE / "static" / "index.html").read_text().replace("<body>", "<body>" + DEMO_BANNER.format(h=f"{DEMO_RESET_HOURS:g}"), 1)
+        return HTMLResponse(page, headers={"Cache-Control": "no-cache"})
     return FileResponse(BASE / "static" / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+DEMO_BANNER = ('<style>#demoBar{{position:fixed;top:0;left:0;right:0;z-index:20;height:22px;box-sizing:border-box;'
+               'overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font:12px/22px system-ui,sans-serif;'
+               'text-align:center;padding:0 8px;background:#fff4d6;color:#5a4500;border-bottom:1px solid #e8d9a8}}'
+               'body{{padding-top:22px}}header{{top:22px}}@media (min-width:900px){{nav{{top:22px}}}}</style>'
+               '<div id="demoBar">Demo · KI-svarene er forhåndsinnspilt (AI responses are pre-recorded) · '
+               'data nullstilles hver {h}. time</div>')
 
 
 @app.get("/api/state")
@@ -2806,6 +2882,8 @@ PREFETCH = os.getenv("PREFETCH", "1") != "0"  # przepisy piszą się na zapas, g
 RECIPE_LOCK = threading.Lock()  # sprawdzenie i zapis przepisu/zapasu dania w jednym kroku (kolejka, zatwierdzenie, zamiana)
 RECENT_WEEKS = 4  # tyle tygodni wstecz model widzi jako "jedzone ostatnio"
 RECENT_HARD = 2   # dań z tylu tygodni wstecz serwer nie przyjmuje w nowym planie (dopóki starcza innych propozycji)
+if DEMO:  # the demo has only a couple of dozen recorded dishes: allow repeats instead of running out after 3 weeks
+    RECENT_WEEKS, RECENT_HARD = 1, 0
 
 
 def recent_meals(c, start, weeks: int) -> list:
